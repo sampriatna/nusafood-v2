@@ -81,22 +81,23 @@ export default async function DashboardPage() {
           ) : (
             <ul className="divide-y divide-border">
               {tasks.data.map((task) => (
-                <li key={task.task_id} className="py-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="space-y-1">
-                      <Link
-                        href={`/tasks/${task.task_id}`}
-                        className="font-medium hover:underline"
-                      >
+                <li key={task.task_id}>
+                  <Link
+                    href={`/tasks/${task.task_id}`}
+                    className="flex flex-wrap items-start justify-between gap-2 rounded-lg py-3 transition-colors hover:bg-muted/40 -mx-2 px-2"
+                  >
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <p className="font-medium text-primary underline-offset-2 hover:underline">
                         {task.task_title}
-                      </Link>
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         {task.task_id} · {task.outlet} · {task.area} ·{" "}
                         {task.pic_name}
                       </p>
+                      <p className="text-xs text-primary/80">Klik untuk verifikasi →</p>
                     </div>
                     <StatusBadge status={task.status} />
-                  </div>
+                  </Link>
                 </li>
               ))}
             </ul>
