@@ -404,15 +404,47 @@ export interface NormalizedRecurringTemplateRow {
   updatedAt: Date | null;
 }
 
-function normalizeRepeatDays(value: unknown): string[] {
+function normalizeRepeatDays(value: unknown, repeatType?: string): string[] {
+  const allDays = [
+    "senin",
+    "selasa",
+    "rabu",
+    "kamis",
+    "jumat",
+    "sabtu",
+    "minggu",
+  ];
+  const numToDay: Record<string, string> = {
+    "1": "senin",
+    "2": "selasa",
+    "3": "rabu",
+    "4": "kamis",
+    "5": "jumat",
+    "6": "sabtu",
+    "7": "minggu",
+  };
+
   if (Array.isArray(value)) {
-    return value.map((v) => asString(v).toLowerCase()).filter(Boolean);
+    return value
+      .map((v) => {
+        const raw = asString(v).toLowerCase();
+        return numToDay[raw] ?? raw;
+      })
+      .filter(Boolean);
   }
+
   const raw = asString(value);
-  if (!raw) return [];
+  if (!raw || raw.includes("[Ljava.lang.Object")) {
+    const type = asString(repeatType, "daily").toLowerCase();
+    return type === "daily" || type === "weekdays" ? allDays : [];
+  }
+
   return raw
     .split(/[,;|]/)
-    .map((v) => v.trim().toLowerCase())
+    .map((v) => {
+      const token = v.trim().toLowerCase();
+      return numToDay[token] ?? token;
+    })
     .filter(Boolean);
 }
 
@@ -454,6 +486,7 @@ export function normalizeRecurringTemplateRow(
     repeatType: normalizeRepeatType(pickField(row, ["repeat_type", "repeatType"])),
     repeatDays: normalizeRepeatDays(
       pickField(row, ["repeat_days", "repeatDays"]),
+      pickField(row, ["repeat_type", "repeatType"]),
     ),
     repeatTime: parseTimeOfDay(
       pickField(row, ["repeat_time", "repeatTime"]),

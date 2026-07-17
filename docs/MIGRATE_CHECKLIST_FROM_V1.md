@@ -24,13 +24,13 @@ ADMIN_API_KEY="..." \
 pnpm migrate:checklist-from-v1 -- --gas
 ```
 
-Script memanggil:
+Script memanggil (via GET + `admin_secret`):
 
 | GAS action | v2 tabel |
 |------------|----------|
-| `getChecklistTemplates` | `checklist_templates` |
-| `getChecklistItems` (per template) | `checklist_items` |
-| `getRecurringTemplates` | `recurring_templates` |
+| `getRecurringTemplates` | `recurring_templates` + `checklist_templates` |
+| `getChecklistItems` (per `TPL-*`) | `checklist_items` |
+| `getChecklistTemplates` (opsional, legacy) | `checklist_templates` |
 
 ### 2. Dari export JSON (manual / dev)
 
