@@ -25,13 +25,24 @@ export default async function DashboardPage() {
   return (
     <main className="min-h-screen bg-background px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-3xl space-y-8">
-        <header className="space-y-2">
+        <header className="space-y-3">
           <p className="text-sm text-muted-foreground">TaskNF3 v2 · staging</p>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Data dari PostgreSQL (read-only). Sync Sheets/GAS via{" "}
+            Data dari PostgreSQL. Sync via{" "}
             <code className="text-xs">pnpm sync:from-gas</code>.
           </p>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <Link href="/tasks/new" className="text-primary hover:underline">
+              + Buat tugas
+            </Link>
+            <Link
+              href="/settings/sync-logs"
+              className="text-muted-foreground hover:underline"
+            >
+              Sync logs
+            </Link>
+          </div>
         </header>
 
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-3">

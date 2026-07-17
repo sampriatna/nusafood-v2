@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { getTaskById } from "@/lib/services/task.service";
+import { TaskActions } from "./task-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,14 @@ export default async function TaskDetailPage({ params }: Props) {
               <dd>{task.staff_note}</dd>
             </div>
           ) : null}
+          {task.report_link ? (
+            <div>
+              <dt className="text-muted-foreground">Link laporan</dt>
+              <dd className="break-all font-mono text-xs">{task.report_link}</dd>
+            </div>
+          ) : null}
         </dl>
+        <TaskActions taskId={task.task_id} status={task.status} />
       </div>
     </main>
   );

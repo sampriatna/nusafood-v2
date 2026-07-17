@@ -51,8 +51,10 @@ Health check: [http://localhost:3000/api/health](http://localhost:3000/api/healt
 | Read API (tasks/staff/areas/categories/dashboard) | ✅ Sprint 2 |
 | Sync fixture / GAS script | ✅ Sprint 2 |
 | Dashboard UI (data DB) | ✅ Sprint 2 |
+| Write API + dual-write + buat tugas | ✅ Sprint 3 |
+| Sync logs monitoring | ✅ Sprint 3 |
 | Staging Supabase + Vercel | ⬜ butuh credentials |
-| Dual-write | ⬜ Sprint 3 |
+| Staff submit + photo upload | ⬜ Sprint 4 |
 
 ## Catatan
 

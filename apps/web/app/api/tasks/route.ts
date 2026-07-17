@@ -1,5 +1,10 @@
+import type { CreateTaskPayload } from "@nusafood/types";
 import { fail, ok } from "@/lib/api/response";
 import { listTasks } from "@/lib/services/task.service";
+import {
+  TaskWriteError,
+  createTask,
+} from "@/lib/services/task-write.service";
 
 export const dynamic = "force-dynamic";
 
@@ -33,3 +38,21 @@ export async function GET(request: Request) {
     });
   }
 }
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as CreateTaskPayload;
+    const task = await createTask(body);
+    return ok(task, undefined, { status: 201 });
+  } catch (error) {
+    if (error instanceof TaskWriteError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
+    console.error("[POST /api/tasks]", error);
+    return fail("Gagal membuat tugas", {
+      code: "TASK_CREATE_FAILED",
+      status: 500,
+    });
+  }
+}
+

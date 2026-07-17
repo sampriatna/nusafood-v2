@@ -1,5 +1,6 @@
 import type {
   ApiResponse,
+  CreateTaskPayload,
   FullDashboardSummary,
   HealthStatus,
   Staff,
@@ -9,6 +10,7 @@ import type {
 
 export type {
   ApiResponse,
+  CreateTaskPayload,
   FullDashboardSummary,
   HealthStatus,
   Staff,
@@ -89,6 +91,31 @@ export function createApiClient(options: ApiClientOptions = {}) {
       getPublic: (taskId: string, token: string) =>
         request<Task>(
           `/api/tasks/${taskId}/public?token=${encodeURIComponent(token)}`,
+        ),
+      create: (payload: CreateTaskPayload) =>
+        request<Task>("/api/tasks", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }),
+      open: (taskId: string, token: string) =>
+        request<Task>(`/api/tasks/${taskId}/open`, {
+          method: "POST",
+          body: JSON.stringify({ token }),
+        }),
+      verify: (taskId: string, note?: string) =>
+        request<Task>(`/api/tasks/${taskId}/verify`, {
+          method: "POST",
+          body: JSON.stringify({ note }),
+        }),
+      revision: (taskId: string, revision_note: string) =>
+        request<Task>(`/api/tasks/${taskId}/revision`, {
+          method: "POST",
+          body: JSON.stringify({ revision_note }),
+        }),
+      resendWa: (taskId: string) =>
+        request<{ task_id: string; resent: boolean }>(
+          `/api/tasks/${taskId}/resend-wa`,
+          { method: "POST" },
         ),
     },
     staff: {
