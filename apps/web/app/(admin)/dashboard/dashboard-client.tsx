@@ -41,6 +41,13 @@ import type {
   TaskStatus,
 } from "@nusafood/types";
 
+import {
+  dateKeyInAppTz,
+  isDateKeyInRange,
+  todayKeyInAppTz,
+  weekRangeKeysInAppTz,
+} from "@/lib/format-datetime";
+
 const statusOptions: { value: TaskStatus | "ALL"; label: string }[] = [
   { value: "ALL", label: "Semua Status" },
   { value: "OPEN", label: "Belum Dikerjakan" },
@@ -53,57 +60,28 @@ const statusOptions: { value: TaskStatus | "ALL"; label: string }[] = [
 type TimePeriod = "today" | "week" | "month";
 
 function getTaskDate(deadline: string): string {
-  const date = new Date(deadline);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().split("T")[0];
+  return dateKeyInAppTz(deadline);
 }
 
 function getTodayDate(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return todayKeyInAppTz();
 }
 
 function isWithinTimePeriod(deadline: string, period: TimePeriod): boolean {
-  const today = new Date();
   const todayDate = getTodayDate();
   const taskDate = getTaskDate(deadline);
 
   if (!taskDate) return false;
 
-  const taskDateObj = new Date(taskDate);
-
   switch (period) {
     case "today":
       return taskDate === todayDate;
     case "week": {
-      const currentDay = today.getDay();
-      const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
-      const weekStart = new Date(today);
-      weekStart.setDate(diff);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 6);
-
-      const start = new Date(
-        weekStart.getFullYear(),
-        weekStart.getMonth(),
-        weekStart.getDate(),
-      );
-      const end = new Date(
-        weekEnd.getFullYear(),
-        weekEnd.getMonth(),
-        weekEnd.getDate(),
-      );
-
-      return taskDateObj >= start && taskDateObj <= end;
+      const { start, end } = weekRangeKeysInAppTz();
+      return isDateKeyInRange(taskDate, start, end);
     }
     case "month":
-      return (
-        taskDateObj.getFullYear() === today.getFullYear() &&
-        taskDateObj.getMonth() === today.getMonth()
-      );
+      return taskDate.slice(0, 7) === todayDate.slice(0, 7);
     default:
       return false;
   }

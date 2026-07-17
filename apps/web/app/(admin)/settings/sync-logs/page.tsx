@@ -1,6 +1,7 @@
 import { AdminPage } from "@/components/admin-page";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { formatDateTimeId } from "@/lib/format-datetime";
 import { listSyncLogs } from "@/lib/services/sync.service";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export default async function SyncLogsPage() {
                     </p>
                   </div>
                   <time className="text-xs text-muted-foreground">
-                    {log.createdAt.toLocaleString("id-ID")}
+                    {formatDateTimeId(log.createdAt)} WIB
                   </time>
                 </div>
                 <div className="flex flex-wrap gap-2">

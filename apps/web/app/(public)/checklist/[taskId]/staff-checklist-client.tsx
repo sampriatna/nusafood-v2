@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { formatDateTimeId } from "@/lib/format-datetime";
 import { compressImageFile } from "@/lib/image-utils";
 import type { ChecklistReport } from "@nusafood/types";
 
@@ -261,7 +262,7 @@ export function StaffChecklistClient({ taskId, token }: Props) {
         <span className="font-semibold">
           {isLate
             ? "TERLAMBAT!"
-            : `Deadline ${deadline.toLocaleString("id-ID")}`}
+            : `Deadline ${formatDateTimeId(deadline)} WIB`}
         </span>
       </div>
 
