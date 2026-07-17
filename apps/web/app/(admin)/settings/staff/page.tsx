@@ -1,55 +1,46 @@
 import { AdminPage } from "@/components/admin-page";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { authRequired, getSession } from "@/lib/auth";
+import {
+  listAreas,
+  listOutlets,
+} from "@/lib/services/master-data.service";
 import { listStaff } from "@/lib/services/staff.service";
+import { StaffManager } from "./staff-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function StaffSettingsPage() {
-  const staff = await listStaff();
+  const [staff, outlets, areas, session] = await Promise.all([
+    listStaff(),
+    listOutlets(),
+    listAreas(),
+    getSession(),
+  ]);
+
+  const canManage =
+    !authRequired() ||
+    session?.userRole === "ADMIN" ||
+    session?.userId === "env-admin";
 
   return (
     <AdminPage title="Master Staff" backHref="/settings">
       <p className="text-sm text-muted-foreground">
-        {staff.length} staf · sync dari v1 via{" "}
-        <code className="text-xs">pnpm sync:from-gas</code>
+        {staff.length} staf · {staff.filter((s) => s.status === "ACTIVE").length}{" "}
+        aktif
       </p>
-
-      {staff.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Belum ada data staff.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {staff.map((member) => (
-            <Card key={member.staff_id}>
-              <CardContent className="space-y-2 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold">{member.name}</p>
-                  <Badge variant="outline">{member.role}</Badge>
-                  <Badge
-                    variant={
-                      member.status === "ACTIVE" ? "default" : "secondary"
-                    }
-                  >
-                    {member.status === "ACTIVE" ? "Aktif" : "Nonaktif"}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {member.outlet}
-                  {member.area ? ` · ${member.area}` : ""}
-                  {member.position ? ` · ${member.position}` : ""}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {member.wa_number}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      <StaffManager
+        staff={staff}
+        outlets={outlets.map((o) => ({
+          value: o.code,
+          label: o.name || o.code,
+        }))}
+        areas={areas.map((a) => ({
+          value: a.name,
+          label: a.name,
+          outlet: a.outlet,
+        }))}
+        canManage={canManage}
+      />
     </AdminPage>
   );
 }

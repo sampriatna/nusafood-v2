@@ -169,6 +169,16 @@ export async function updateUser(
   return toPublic(row)
 }
 
+export async function deleteUser(id: string): Promise<boolean> {
+  const existing = await prisma.userAccount.findFirst({
+    where: isUuid(id) ? { id } : { userId: id },
+  })
+  if (!existing) return false
+
+  await prisma.userAccount.delete({ where: { id: existing.id } })
+  return true
+}
+
 /** Buat admin default jika tabel user masih kosong. */
 export async function ensureBootstrapAdmin() {
   const count = await prisma.userAccount.count()

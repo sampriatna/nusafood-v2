@@ -38,7 +38,10 @@ async function callGas(action: string): Promise<unknown> {
 
   const url = new URL(base);
   url.searchParams.set("action", action);
-  if (key) url.searchParams.set("api_key", key);
+  if (key && !key.includes("your-gas")) {
+    // v1 GAS validates `admin_secret` on GET (not `api_key`)
+    url.searchParams.set("admin_secret", key);
+  }
 
   const res = await fetch(url.toString(), {
     method: "GET",

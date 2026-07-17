@@ -12,17 +12,25 @@ import {
 import { AdminPage } from "@/components/admin-page";
 import { SettingsLinkCard } from "@/components/settings-link-card";
 import { SettingsLogoutCard } from "@/components/settings-logout-card";
+import { V1FullSyncButton } from "@/components/v1-full-sync-button";
 import { Card } from "@/components/ui/card";
+import { authRequired, getSession } from "@/lib/auth";
 import { listRecurringTemplates } from "@/lib/services/recurring.service";
 import { listStaff } from "@/lib/services/staff.service";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [recurring, staff] = await Promise.all([
+  const [recurring, staff, session] = await Promise.all([
     listRecurringTemplates(),
     listStaff({ status: "ACTIVE" }),
+    getSession(),
   ]);
+
+  const canManage =
+    !authRequired() ||
+    session?.userRole === "ADMIN" ||
+    session?.userId === "env-admin";
 
   const staffPreview = staff
     .slice(0, 3)
@@ -31,6 +39,8 @@ export default async function SettingsPage() {
 
   return (
     <AdminPage title="Pengaturan" backHref="/dashboard">
+      <V1FullSyncButton canManage={canManage} />
+
       <Card className="space-y-4 p-4">
         <div className="flex items-start gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -53,8 +63,9 @@ export default async function SettingsPage() {
         <div className="flex items-start gap-2 rounded-lg bg-blue-50 p-3 text-sm">
           <Info className="mt-0.5 size-4 shrink-0 text-blue-600" />
           <p className="text-blue-800">
-            Data tugas & checklist disimpan di Supabase. Sync dari v1 via{" "}
-            <code className="text-xs">pnpm sync:from-gas</code>.
+            Untuk fase transisi: gunakan <strong>Sync Semua dari v1</strong> di
+            atas agar data 1:1 dengan production v1. UI sudah mobile-friendly
+            dan baca dari PostgreSQL (reload cepat).
           </p>
         </div>
       </Card>
@@ -70,7 +81,7 @@ export default async function SettingsPage() {
         href="/settings/staff"
         icon={Users}
         title="Master Staff"
-        description="Daftar staf operasional per outlet"
+        description="Kelola staf operasional per outlet — tambah, edit, sync v1"
         meta={
           staffPreview
             ? `${staff.length} aktif · ${staffPreview}${staff.length > 3 ? "…" : ""}`
