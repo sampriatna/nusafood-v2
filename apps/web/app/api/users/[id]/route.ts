@@ -1,7 +1,7 @@
 import type { StaffRole } from "@nusafood/types"
 import { ok, fail } from "@/lib/api/response"
 import { requireAuth } from "@/lib/require-auth"
-import { getUserById, updateUser } from "@/lib/users.service"
+import { getUserById, updateUser, deleteUser } from "@/lib/users.service"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -66,4 +66,19 @@ export async function PATCH(
       status: 400,
     })
   }
+}
+
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAuth(["ADMIN"])
+  if (!auth.ok) return auth.response
+
+  const { id } = await context.params
+  const deleted = await deleteUser(id)
+  if (!deleted) {
+    return fail("User tidak ditemukan", { code: "NOT_FOUND", status: 404 })
+  }
+  return ok({ deleted: true })
 }

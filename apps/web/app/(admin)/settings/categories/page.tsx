@@ -1,26 +1,29 @@
 import { AdminPage } from "@/components/admin-page";
-import { Card, CardContent } from "@/components/ui/card";
+import { MasterDataSyncButton } from "@/components/master-data-sync-button";
+import { authRequired, getSession } from "@/lib/auth";
 import { listCategories } from "@/lib/services/master-data.service";
+import { CategoriesManager } from "./categories-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function CategoriesSettingsPage() {
-  const categories = await listCategories();
+  const [categories, session] = await Promise.all([
+    listCategories(),
+    getSession(),
+  ]);
+
+  const canManage =
+    !authRequired() ||
+    session?.userRole === "ADMIN" ||
+    session?.userId === "env-admin";
 
   return (
     <AdminPage title="Master Kategori" backHref="/settings">
+      <MasterDataSyncButton canManage={canManage} />
       <p className="text-sm text-muted-foreground">
         {categories.length} kategori terdaftar
       </p>
-      <Card>
-        <CardContent className="divide-y divide-border p-0">
-          {categories.map((category) => (
-            <div key={category.name} className="px-4 py-3 text-sm font-medium">
-              {category.name}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      <CategoriesManager categories={categories} canManage={canManage} />
     </AdminPage>
   );
 }

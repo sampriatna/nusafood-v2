@@ -70,7 +70,7 @@ export default async function SettingsPage() {
         href="/settings/staff"
         icon={Users}
         title="Master Staff"
-        description="Daftar staf operasional per outlet"
+        description="Kelola staf operasional per outlet — tambah, edit, sync v1"
         meta={
           staffPreview
             ? `${staff.length} aktif · ${staffPreview}${staff.length > 3 ? "…" : ""}`

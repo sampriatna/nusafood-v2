@@ -70,7 +70,8 @@ export async function callGasAction<T = unknown>(
         }
       }
       if (adminKey && !adminKey.includes("your-gas")) {
-        params.set("api_key", adminKey);
+        // v1 GAS validates `admin_secret` on GET (not `api_key`)
+        params.set("admin_secret", adminKey);
       }
       response = await fetch(`${base}?${params.toString()}`, {
         method: "GET",
