@@ -1,0 +1,375 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  STAFF
+  LEADER
+  ADMIN
+}
+
+enum StaffStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum TaskStatus {
+  CREATED
+  SENT
+  WA_FAILED
+  OPEN
+  OPENED
+  SUBMITTED
+  RESUBMITTED
+  WAITING_VERIFICATION
+  DONE
+  VERIFIED
+  REVISI
+  REVISION
+  REVISION_REQUESTED
+  LATE
+}
+
+enum TaskPriority {
+  Low
+  Medium
+  High
+  Urgent
+}
+
+enum RepeatType {
+  daily
+  weekdays
+  weekly
+  monthly
+  custom
+}
+
+enum ChecklistReportStatus {
+  OPEN
+  SUBMITTED
+  DONE
+  REVISI
+  LATE
+}
+
+enum SyncStatus {
+  success
+  partial
+  failed
+}
+
+model Outlet {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(50)
+  name      String   @db.VarChar(100)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  areas              Area[]
+  staff              Staff[]
+  tasks              Task[]
+  recurringTemplates RecurringTemplate[]
+  checklistTemplates ChecklistTemplate[]
+  checklistReports   ChecklistReport[]
+
+  @@map("outlets")
+}
+
+model Area {
+  id        String   @id @default(uuid()) @db.Uuid
+  outletId  String?  @map("outlet_id") @db.Uuid
+  name      String   @db.VarChar(100)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  outlet             Outlet?             @relation(fields: [outletId], references: [id])
+  staff              Staff[]
+  tasks              Task[]
+  recurringTemplates RecurringTemplate[]
+  checklistTemplates ChecklistTemplate[]
+  checklistReports   ChecklistReport[]
+
+  @@unique([outletId, name])
+  @@map("areas")
+}
+
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(100)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tasks              Task[]
+  recurringTemplates RecurringTemplate[]
+
+  @@map("categories")
+}
+
+model Staff {
+  id           String      @id @default(uuid()) @db.Uuid
+  staffId      String      @unique @map("staff_id") @db.VarChar(50)
+  name         String      @db.VarChar(200)
+  position     String?     @db.VarChar(100)
+  outletId     String      @map("outlet_id") @db.Uuid
+  areaId       String?     @map("area_id") @db.Uuid
+  waNumber     String      @map("wa_number") @db.VarChar(20)
+  role         StaffRole   @default(STAFF)
+  status       StaffStatus @default(ACTIVE)
+  loginEnabled Boolean     @default(false) @map("login_enabled")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  outlet             Outlet              @relation(fields: [outletId], references: [id])
+  area               Area?               @relation(fields: [areaId], references: [id])
+  userAccount        UserAccount?
+  tasks              Task[]
+  recurringTemplates RecurringTemplate[]
+
+  @@index([outletId], map: "idx_staff_outlet")
+  @@index([status], map: "idx_staff_status")
+  @@index([waNumber], map: "idx_staff_wa")
+  @@map("staff")
+}
+
+model UserAccount {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @unique @map("user_id") @db.VarChar(50)
+  staffId      String?   @unique @map("staff_id") @db.VarChar(50)
+  username     String    @unique @db.VarChar(100)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  role         StaffRole
+  loginEnabled Boolean   @default(true) @map("login_enabled")
+  lastLogin    DateTime? @map("last_login") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  staff Staff? @relation(fields: [staffId], references: [staffId])
+
+  @@map("user_accounts")
+}
+
+model Task {
+  id                  String       @id @default(uuid()) @db.Uuid
+  taskId              String       @unique @map("task_id") @db.VarChar(50)
+  token               String       @db.VarChar(64)
+  createdBy           String?      @map("created_by") @db.VarChar(200)
+  outletId            String       @map("outlet_id") @db.Uuid
+  areaId              String?      @map("area_id") @db.Uuid
+  categoryId          String?      @map("category_id") @db.Uuid
+  outletName          String?      @map("outlet_name") @db.VarChar(100)
+  areaName            String?      @map("area_name") @db.VarChar(100)
+  categoryName        String?      @map("category_name") @db.VarChar(100)
+  taskTitle           String       @map("task_title") @db.VarChar(500)
+  taskDescription     String?      @map("task_description")
+  priority            TaskPriority @default(Medium)
+  picName             String       @map("pic_name") @db.VarChar(200)
+  picWa               String       @map("pic_wa") @db.VarChar(20)
+  staffId             String?      @map("staff_id") @db.VarChar(50)
+  deadline            DateTime     @db.Timestamptz(6)
+  beforePhotoUrl      String?      @map("before_photo_url")
+  status              TaskStatus   @default(CREATED)
+  reportLink          String?      @map("report_link")
+  waSentAt            DateTime?    @map("wa_sent_at") @db.Timestamptz(6)
+  openedAt            DateTime?    @map("opened_at") @db.Timestamptz(6)
+  submittedAt         DateTime?    @map("submitted_at") @db.Timestamptz(6)
+  afterPhotoUrl       String?      @map("after_photo_url")
+  staffNote           String?      @map("staff_note")
+  leaderVerification  String?      @map("leader_verification")
+  verifiedBy          String?      @map("verified_by") @db.VarChar(200)
+  verifiedAt          DateTime?    @map("verified_at") @db.Timestamptz(6)
+  finalStatus         String?      @map("final_status") @db.VarChar(50)
+  isLate              Boolean      @default(false) @map("is_late")
+  durationMinutes     Int?         @map("duration_minutes")
+  checklistMode       Boolean      @default(false) @map("checklist_mode")
+  recurringTemplateId String?      @map("recurring_template_id") @db.VarChar(50)
+  sourceVersion       String       @default("v2") @map("source_version") @db.VarChar(10)
+  gasSyncedAt         DateTime?    @map("gas_synced_at") @db.Timestamptz(6)
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  outlet           Outlet            @relation(fields: [outletId], references: [id])
+  area             Area?             @relation(fields: [areaId], references: [id])
+  category         Category?         @relation(fields: [categoryId], references: [id])
+  staff            Staff?            @relation(fields: [staffId], references: [staffId])
+  checklistReports ChecklistReport[]
+
+  @@index([status], map: "idx_tasks_status")
+  @@index([deadline], map: "idx_tasks_deadline")
+  @@index([outletId], map: "idx_tasks_outlet")
+  @@index([taskId, token], map: "idx_tasks_token")
+  @@index([picWa], map: "idx_tasks_pic")
+  @@index([createdAt(sort: Desc)], map: "idx_tasks_created")
+  @@map("tasks")
+}
+
+model RecurringTemplate {
+  id               String     @id @default(uuid()) @db.Uuid
+  templateId       String     @unique @map("template_id") @db.VarChar(50)
+  templateName     String     @map("template_name") @db.VarChar(200)
+  outletId         String     @map("outlet_id") @db.Uuid
+  areaId           String?    @map("area_id") @db.Uuid
+  categoryId       String?    @map("category_id") @db.Uuid
+  picName          String     @map("pic_name") @db.VarChar(200)
+  picWa            String     @map("pic_wa") @db.VarChar(20)
+  staffId          String?    @map("staff_id") @db.VarChar(50)
+  taskTitle        String     @map("task_title") @db.VarChar(500)
+  taskDescription  String?    @map("task_description")
+  repeatType       RepeatType @default(daily) @map("repeat_type")
+  repeatDays       String[]   @map("repeat_days")
+  repeatTime       DateTime   @map("repeat_time") @db.Time(6)
+  deadlineTime     DateTime   @map("deadline_time") @db.Time(6)
+  requiresPhoto    Boolean    @default(true) @map("requires_photo")
+  activeStatus     Boolean    @default(true) @map("active_status")
+  templateVersion  Int        @default(1) @map("template_version")
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  outlet   Outlet    @relation(fields: [outletId], references: [id])
+  area     Area?     @relation(fields: [areaId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id])
+  staff    Staff?    @relation(fields: [staffId], references: [staffId])
+
+  @@map("recurring_templates")
+}
+
+model ChecklistTemplate {
+  id             String   @id @default(uuid()) @db.Uuid
+  templateId     String   @unique @map("template_id") @db.VarChar(50)
+  templateName   String   @map("template_name") @db.VarChar(200)
+  outletId       String   @map("outlet_id") @db.Uuid
+  areaId         String?  @map("area_id") @db.Uuid
+  taskTitle      String?  @map("task_title") @db.VarChar(500)
+  checklistTitle String   @map("checklist_title") @db.VarChar(500)
+  picName        String?  @map("pic_name") @db.VarChar(200)
+  picWa          String?  @map("pic_wa") @db.VarChar(20)
+  requiresPhoto  Boolean  @default(false) @map("requires_photo")
+  activeStatus   Boolean  @default(true) @map("active_status")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  outlet  Outlet           @relation(fields: [outletId], references: [id])
+  area    Area?            @relation(fields: [areaId], references: [id])
+  items   ChecklistItem[]
+  reports ChecklistReport[]
+
+  @@map("checklist_templates")
+}
+
+model ChecklistItem {
+  id              String   @id @default(uuid()) @db.Uuid
+  checklistItemId String   @unique @map("checklist_item_id") @db.VarChar(50)
+  templateId      String   @map("template_id") @db.VarChar(50)
+  itemOrder       Int      @map("item_order")
+  itemText        String   @map("item_text")
+  requiresPhoto   Boolean  @default(false) @map("requires_photo")
+  isRequired      Boolean  @default(true) @map("is_required")
+  activeStatus    Boolean  @default(true) @map("active_status")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  template    ChecklistTemplate     @relation(fields: [templateId], references: [templateId])
+  reportItems ChecklistReportItem[]
+
+  @@unique([templateId, itemOrder])
+  @@map("checklist_items")
+}
+
+model ChecklistReport {
+  id             String                @id @default(uuid()) @db.Uuid
+  reportId       String                @unique @map("report_id") @db.VarChar(50)
+  taskId         String?               @map("task_id") @db.VarChar(50)
+  templateId     String                @map("template_id") @db.VarChar(50)
+  token          String                @db.VarChar(64)
+  picName        String                @map("pic_name") @db.VarChar(200)
+  picWa          String                @map("pic_wa") @db.VarChar(20)
+  outletId       String?               @map("outlet_id") @db.Uuid
+  areaId         String?               @map("area_id") @db.Uuid
+  reportDate     DateTime              @map("report_date") @db.Date
+  deadline       DateTime              @db.Timestamptz(6)
+  checklistTitle String?               @map("checklist_title") @db.VarChar(500)
+  status         ChecklistReportStatus @default(OPEN)
+  submittedAt    DateTime?             @map("submitted_at") @db.Timestamptz(6)
+  staffNote      String?               @map("staff_note")
+  afterPhotoUrl  String?               @map("after_photo_url")
+  verifiedBy     String?               @map("verified_by") @db.VarChar(200)
+  verifiedAt     DateTime?             @map("verified_at") @db.Timestamptz(6)
+  revisionNote   String?               @map("revision_note")
+  revisionCount  Int                   @default(0) @map("revision_count")
+  isLate         Boolean               @default(false) @map("is_late")
+  sourceVersion  String                @default("v2") @map("source_version") @db.VarChar(10)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  task     Task?                 @relation(fields: [taskId], references: [taskId])
+  template ChecklistTemplate     @relation(fields: [templateId], references: [templateId])
+  outlet   Outlet?               @relation(fields: [outletId], references: [id])
+  area     Area?                 @relation(fields: [areaId], references: [id])
+  items    ChecklistReportItem[]
+
+  @@index([taskId, token], map: "idx_checklist_reports_token")
+  @@index([status], map: "idx_checklist_reports_status")
+  @@map("checklist_reports")
+}
+
+model ChecklistReportItem {
+  id              String    @id @default(uuid()) @db.Uuid
+  reportItemId    String    @unique @map("report_item_id") @db.VarChar(50)
+  reportId        String    @map("report_id") @db.VarChar(50)
+  checklistItemId String    @map("checklist_item_id") @db.VarChar(50)
+  isChecked       Boolean   @default(false) @map("is_checked")
+  photoUrl        String?   @map("photo_url")
+  checkedAt       DateTime? @map("checked_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  report ChecklistReport @relation(fields: [reportId], references: [reportId])
+  item   ChecklistItem   @relation(fields: [checklistItemId], references: [checklistItemId])
+
+  @@unique([reportId, checklistItemId])
+  @@map("checklist_report_items")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  entityType String   @map("entity_type") @db.VarChar(50)
+  entityId   String   @map("entity_id") @db.VarChar(50)
+  action     String   @db.VarChar(100)
+  actorType  String   @map("actor_type") @db.VarChar(20)
+  actorId    String?  @map("actor_id") @db.VarChar(100)
+  actorName  String?  @map("actor_name") @db.VarChar(200)
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  metadata   Json?
+  ipAddress  String?  @map("ip_address") @db.Inet
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityType, entityId], map: "idx_audit_entity")
+  @@index([createdAt(sort: Desc)], map: "idx_audit_created")
+  @@map("audit_logs")
+}
+
+model SyncLog {
+  id           String      @id @default(uuid()) @db.Uuid
+  operation    String      @db.VarChar(100)
+  entityType   String      @map("entity_type") @db.VarChar(50)
+  entityId     String?     @map("entity_id") @db.VarChar(50)
+  v1Status     SyncStatus? @map("v1_status")
+  v2Status     SyncStatus? @map("v2_status")
+  v1Response   Json?       @map("v1_response")
+  v2Response   Json?       @map("v2_response")
+  errorMessage String?     @map("error_message")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityType, entityId], map: "idx_sync_logs_entity")
+  @@map("sync_logs")
+}
