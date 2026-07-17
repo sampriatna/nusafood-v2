@@ -53,9 +53,15 @@ export async function listUsers(): Promise<PublicUser[]> {
   return rows.map(toPublic)
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  )
+}
+
 export async function getUserById(id: string): Promise<PublicUser | null> {
   const row = await prisma.userAccount.findFirst({
-    where: { OR: [{ id }, { userId: id }] },
+    where: isUuid(id) ? { id } : { userId: id },
     include: withStaff,
   })
   return row ? toPublic(row) : null
@@ -133,7 +139,7 @@ export async function updateUser(
   }
 ) {
   const existing = await prisma.userAccount.findFirst({
-    where: { OR: [{ id }, { userId: id }] },
+    where: isUuid(id) ? { id } : { userId: id },
   })
   if (!existing) return null
 
