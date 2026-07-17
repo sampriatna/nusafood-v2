@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 interface DashboardSummaryCardsProps {
   summary: DashboardSummary;
   isLoading?: boolean;
+  activeKey?: string;
   onStatusClick?: (status: string) => void;
 }
 
@@ -75,6 +76,7 @@ const cards: SummaryCard[] = [
 export function DashboardSummaryCards({
   summary,
   isLoading = false,
+  activeKey,
   onStatusClick,
 }: DashboardSummaryCardsProps) {
   if (isLoading) {
@@ -97,20 +99,16 @@ export function DashboardSummaryCards({
       {cards.map((card) => (
         <div
           key={card.key}
-          onClick={() => {
-            if (card.key !== "total") {
-              onStatusClick?.(card.key as string);
-            }
-          }}
+          onClick={() => onStatusClick?.(card.key)}
           className={cn(
-            "cursor-pointer rounded-lg transition-all hover:shadow-md",
-            card.key !== "total" && "hover:border-slate-400",
+            "cursor-pointer rounded-lg transition-all hover:shadow-md hover:border-slate-400",
+            activeKey === card.key && "ring-2 ring-primary ring-offset-2",
           )}
           role="button"
-          tabIndex={card.key !== "total" ? 0 : -1}
+          tabIndex={0}
           onKeyDown={(e) => {
-            if (card.key !== "total" && (e.key === "Enter" || e.key === " ")) {
-              onStatusClick?.(card.key as string);
+            if (e.key === "Enter" || e.key === " ") {
+              onStatusClick?.(card.key);
             }
           }}
         >
@@ -134,6 +132,7 @@ export function DashboardSummaryCards({
 interface ChecklistSummaryCardsProps {
   summary: ChecklistSummary;
   isLoading?: boolean;
+  activeKey?: string;
   onStatusClick?: (status: string) => void;
 }
 
@@ -185,6 +184,7 @@ const checklistCards: SummaryCard[] = [
 export function ChecklistSummaryCards({
   summary,
   isLoading = false,
+  activeKey,
   onStatusClick,
 }: ChecklistSummaryCardsProps) {
   if (isLoading) {
@@ -207,20 +207,16 @@ export function ChecklistSummaryCards({
       {checklistCards.map((card) => (
         <div
           key={card.key}
-          onClick={() => {
-            if (card.key !== "total") {
-              onStatusClick?.(card.key as string);
-            }
-          }}
+          onClick={() => onStatusClick?.(card.key)}
           className={cn(
-            "cursor-pointer rounded-lg transition-all hover:shadow-md",
-            card.key !== "total" && "hover:border-slate-400",
+            "cursor-pointer rounded-lg transition-all hover:shadow-md hover:border-slate-400",
+            activeKey === card.key && "ring-2 ring-primary ring-offset-2",
           )}
           role="button"
-          tabIndex={card.key !== "total" ? 0 : -1}
+          tabIndex={0}
           onKeyDown={(e) => {
-            if (card.key !== "total" && (e.key === "Enter" || e.key === " ")) {
-              onStatusClick?.(card.key as string);
+            if (e.key === "Enter" || e.key === " ") {
+              onStatusClick?.(card.key);
             }
           }}
         >

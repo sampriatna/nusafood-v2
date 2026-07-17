@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -213,24 +213,9 @@ function calculateTaskSummary(taskList: Task[]): DashboardSummary {
 }
 
 export function DashboardClient() {
+  const listRef = useRef<HTMLDivElement>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [outlets, setOutlets] = useState<string[]>([]);
-  const [summary, setSummary] = useState<DashboardSummary>({
-    total: 0,
-    open: 0,
-    submitted: 0,
-    done: 0,
-    late: 0,
-    revisi: 0,
-  });
-  const [checklistSummary, setChecklistSummary] = useState<ChecklistSummary>({
-    total: 0,
-    open: 0,
-    submitted: 0,
-    done: 0,
-    late: 0,
-    revisi: 0,
-  });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -242,7 +227,7 @@ export function DashboardClient() {
   const [selectedStatus, setSelectedStatus] = useState<TaskStatus | "ALL">(
     "ALL",
   );
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>("today");
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("month");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -258,8 +243,6 @@ export function DashboardClient() {
 
       if (tasksResult.success && tasksResult.data) {
         setTasks(tasksResult.data);
-        setSummary(calculateTaskSummary(tasksResult.data));
-        setChecklistSummary(calculateChecklistSummary(tasksResult.data));
       } else {
         setTasks([]);
         setLoadError(tasksResult.error || "Gagal memuat tugas");
@@ -286,6 +269,39 @@ export function DashboardClient() {
 
   const manualTasks = tasks.filter((t) => !isChecklistTask(t));
   const checklistTasks = tasks.filter(isChecklistTask);
+
+  const tasksInPeriod = useMemo(
+    () =>
+      manualTasks.filter(
+        (task) =>
+          isWithinTimePeriod(task.deadline, timePeriod) &&
+          matchesOutlet(task.outlet, selectedOutlet),
+      ),
+    [manualTasks, timePeriod, selectedOutlet],
+  );
+
+  const checklistsInPeriod = useMemo(
+    () =>
+      checklistTasks.filter(
+        (task) =>
+          isWithinTimePeriod(task.deadline, timePeriod) &&
+          matchesOutlet(task.outlet, selectedOutlet),
+      ),
+    [checklistTasks, timePeriod, selectedOutlet],
+  );
+
+  const summary = useMemo(
+    () => calculateTaskSummary(tasksInPeriod),
+    [tasksInPeriod],
+  );
+
+  const checklistSummary = useMemo(
+    () => calculateChecklistSummary(checklistsInPeriod),
+    [checklistsInPeriod],
+  );
+
+  const activeSummaryKey =
+    selectedStatus === "ALL" ? "total" : selectedStatus.toLowerCase();
 
   const filteredTasks = manualTasks
     .filter((task) => {
@@ -341,7 +357,7 @@ export function DashboardClient() {
     selectedOutlet !== "ALL" ||
     selectedStatus !== "ALL" ||
     searchQuery !== "" ||
-    timePeriod !== "today";
+    timePeriod !== "month";
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -356,16 +372,26 @@ export function DashboardClient() {
     setSelectedOutlet("ALL");
     setSelectedStatus("ALL");
     setSearchQuery("");
-    setTimePeriod("today");
+    setTimePeriod("month");
   };
 
+  function scrollToList() {
+    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   const handleStatusClick = (status: string) => {
-    const next = status as TaskStatus | "ALL";
-    if (selectedStatus === next) {
+    const mapped =
+      status === "total"
+        ? "ALL"
+        : (status.toUpperCase() as TaskStatus | "ALL");
+
+    if (selectedStatus === mapped) {
       setSelectedStatus("ALL");
     } else {
-      setSelectedStatus(next);
+      setSelectedStatus(mapped);
     }
+
+    scrollToList();
   };
 
   const filterPanel = (
@@ -523,6 +549,7 @@ export function DashboardClient() {
             <DashboardSummaryCards
               summary={summary}
               isLoading={isLoading}
+              activeKey={activeSummaryKey}
               onStatusClick={handleStatusClick}
             />
 
@@ -565,7 +592,7 @@ export function DashboardClient() {
 
             {showFilters && filterPanel}
 
-            <div className="space-y-3">
+            <div ref={listRef} className="space-y-3 scroll-mt-24">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold text-foreground">
                   Daftar Tugas
@@ -645,6 +672,7 @@ export function DashboardClient() {
             <ChecklistSummaryCards
               summary={checklistSummary}
               isLoading={isLoading}
+              activeKey={activeSummaryKey}
               onStatusClick={handleStatusClick}
             />
 
@@ -670,10 +698,10 @@ export function DashboardClient() {
 
             {showFilters && filterPanel}
 
-            <div className="space-y-3">
+            <div ref={listRef} className="space-y-3 scroll-mt-24">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold text-foreground">
-                  Daftar Checklist Hari Ini
+                  Daftar Checklist
                   {hasActiveFilters && (
                     <span className="ml-2 text-sm font-normal text-muted-foreground">
                       ({filteredChecklists.length} hasil)
