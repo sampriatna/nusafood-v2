@@ -1,5 +1,8 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
+import { jwtVerify } from "jose"
+
+const SESSION_COOKIE = "nusa_session"
 
 const PUBLIC_PATHS = [
   "/login",
@@ -7,15 +10,16 @@ const PUBLIC_PATHS = [
   "/checklist",
   "/api/health",
   "/api/auth/login",
+  "/api/auth/logout",
   "/api/uploads/photo",
   "/uploads",
-];
+]
 
 function isPublicPath(pathname: string) {
-  if (pathname === "/") return true;
+  if (pathname === "/") return true
   return PUBLIC_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`),
-  );
+    (path) => pathname === path || pathname.startsWith(`${path}/`)
+  )
 }
 
 function isPublicTaskApi(pathname: string) {
@@ -25,41 +29,79 @@ function isPublicTaskApi(pathname: string) {
     Boolean(pathname.match(/^\/api\/tasks\/[^/]+\/submit/)) ||
     Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/public/)) ||
     Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/submit/))
-  );
+  )
 }
 
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+function authRequired() {
+  return process.env.AUTH_REQUIRED !== "false"
+}
+
+function getSecretKey(): Uint8Array | null {
+  const secret = process.env.SESSION_SECRET
+  if (!secret || secret.includes("generate-random")) return null
+  return new TextEncoder().encode(secret)
+}
+
+async function hasValidSession(request: NextRequest): Promise<boolean> {
+  const token = request.cookies.get(SESSION_COOKIE)?.value
+  if (!token) return false
+  const key = getSecretKey()
+  if (!key) return Boolean(token)
+  try {
+    const { payload } = await jwtVerify(token, key)
+    if (typeof payload.expiresAt === "number" && payload.expiresAt < Date.now()) {
+      return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
 
   if (isPublicPath(pathname) || isPublicTaskApi(pathname)) {
-    return NextResponse.next();
+    return NextResponse.next()
   }
 
-  // Sprint 2–4: admin UI/API terbuka tanpa session untuk uji staging.
-  // Set AUTH_REQUIRED=true mulai Sprint 6.
-  if (process.env.AUTH_REQUIRED !== "true") {
-    return NextResponse.next();
+  // /api/auth/me selalu boleh dipanggil (balik 401 jika belum login)
+  if (pathname === "/api/auth/me") {
+    return NextResponse.next()
   }
 
-  const session = request.cookies.get("nusa_session");
+  if (!authRequired()) {
+    return NextResponse.next()
+  }
+
+  const valid = await hasValidSession(request)
+
   const protectedUi =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/tasks") ||
     pathname.startsWith("/settings") ||
     pathname.startsWith("/recurring") ||
-    pathname.startsWith("/checklist-template");
+    pathname.startsWith("/checklist-template") ||
+    pathname.startsWith("/admin")
 
-  if (protectedUi && !session?.value) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+  if (protectedUi && !valid) {
+    const loginUrl = new URL("/login", request.url)
+    loginUrl.searchParams.set("next", pathname)
+    return NextResponse.redirect(loginUrl)
   }
 
-  return NextResponse.next();
+  if (pathname.startsWith("/api/") && !valid) {
+    return NextResponse.json(
+      { success: false, data: null, error: "Unauthorized", code: "UNAUTHORIZED" },
+      { status: 401 }
+    )
+  }
+
+  return NextResponse.next()
 }
 
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
-};
+}

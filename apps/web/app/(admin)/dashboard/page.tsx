@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LogoutButton } from "@/components/logout-button";
 import { StatusBadge } from "@/components/status-badge";
 import { getDashboardSummary } from "@/lib/services/dashboard.service";
 import { listTasks } from "@/lib/services/task.service";
@@ -26,8 +27,13 @@ export default async function DashboardPage() {
     <main className="min-h-screen bg-background px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-3xl space-y-8">
         <header className="space-y-3">
-          <p className="text-sm text-muted-foreground">TaskNF3 v2 · staging</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">TaskNF3 v2 · staging</p>
+              <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+            </div>
+            <LogoutButton />
+          </div>
           <p className="text-sm text-muted-foreground">
             Data dari PostgreSQL. Sync via{" "}
             <code className="text-xs">pnpm sync:from-gas</code>.

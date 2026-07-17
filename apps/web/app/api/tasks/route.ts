@@ -1,6 +1,7 @@
 import type { CreateTaskPayload } from "@nusafood/types";
 import { fail, ok } from "@/lib/api/response";
 import { listTasks } from "@/lib/services/task.service";
+import { requireAuth } from "@/lib/require-auth";
 import {
   TaskWriteError,
   createTask,
@@ -16,6 +17,9 @@ function parseBool(value: string | null): boolean | undefined {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const result = await listTasks({
@@ -40,6 +44,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const body = (await request.json()) as CreateTaskPayload;
     const task = await createTask(body);

@@ -1,4 +1,5 @@
 import { fail, ok } from "@/lib/api/response";
+import { requireAuth } from "@/lib/require-auth";
 import {
   ChecklistError,
   generateChecklistReport,
@@ -7,6 +8,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const body = (await request.json()) as {
       template_id?: string;

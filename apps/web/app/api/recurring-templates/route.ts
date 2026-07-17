@@ -1,5 +1,6 @@
 import { fail, ok } from "@/lib/api/response";
 import { ChecklistError } from "@/lib/services/checklist.service";
+import { requireAuth } from "@/lib/require-auth";
 import {
   createRecurringTemplate,
   listRecurringTemplates,
@@ -8,6 +9,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const data = await listRecurringTemplates();
     return ok(data, { total: data.length });
@@ -18,6 +22,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
     const data = await createRecurringTemplate(body);

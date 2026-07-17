@@ -1,9 +1,13 @@
 import { fail, ok } from "@/lib/api/response";
 import { getDashboardSummary } from "@/lib/services/dashboard.service";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const data = await getDashboardSummary({

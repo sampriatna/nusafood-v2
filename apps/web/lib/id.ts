@@ -12,6 +12,11 @@ export function generateTaskId(seq = Math.floor(Math.random() * 999) + 1) {
   return `TASK-${yyyymmdd()}-${String(seq).padStart(3, "0")}`;
 }
 
+/** Format: USR-YYYYMMDD-XXX */
+export function generateUserId(seq = Math.floor(Math.random() * 999) + 1) {
+  return `USR-${yyyymmdd()}-${String(seq).padStart(3, "0")}`;
+}
+
 /** 32-char alphanumeric token (v1 compatible) */
 export function generateToken(length = 32) {
   return randomBytes(Math.ceil(length / 2))

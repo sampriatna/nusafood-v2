@@ -70,8 +70,72 @@ async function main() {
     });
   }
 
+  const kbu = outlets.find((o) => o.code === "KBU");
+  if (kbu) {
+    await prisma.staff.upsert({
+      where: { staffId: "STF-SEED-LEADER-KBU" },
+      create: {
+        staffId: "STF-SEED-LEADER-KBU",
+        name: "Budi Leader KBU",
+        position: "Leader",
+        outletId: kbu.id,
+        waNumber: "6281234567890",
+        role: "LEADER",
+        status: "ACTIVE",
+        loginEnabled: true,
+      },
+      update: {
+        name: "Budi Leader KBU",
+        role: "LEADER",
+        status: "ACTIVE",
+        loginEnabled: true,
+      },
+    });
+
+    // bcrypt hashes for admin123 / leader123 (cost 10)
+    const adminHash =
+      "$2b$10$/NsDP.W.fql71OYoYVZIF.IW.yY4AW1qlbbdZgFOc1Kh1Adtn.NP.";
+    const leaderHash =
+      "$2b$10$dKoLVjZN/J7BIc5qviG8U./1tIWjWwi9DOrmnwU3RJ6WoAb4HZ4Uq";
+
+    await prisma.userAccount.upsert({
+      where: { username: "admin" },
+      create: {
+        userId: "USR-SEED-ADMIN-001",
+        username: "admin",
+        passwordHash: adminHash,
+        role: "ADMIN",
+        loginEnabled: true,
+      },
+      update: {
+        passwordHash: adminHash,
+        role: "ADMIN",
+        loginEnabled: true,
+      },
+    });
+
+    await prisma.userAccount.upsert({
+      where: { username: "leader.kbu" },
+      create: {
+        userId: "USR-SEED-LEADER-001",
+        staffId: "STF-SEED-LEADER-KBU",
+        username: "leader.kbu",
+        passwordHash: leaderHash,
+        role: "LEADER",
+        loginEnabled: true,
+      },
+      update: {
+        staffId: "STF-SEED-LEADER-KBU",
+        passwordHash: leaderHash,
+        role: "LEADER",
+        loginEnabled: true,
+      },
+    });
+  }
+
   console.log(
-    `Seed complete: ${outlets.length} outlets, ${AREA_NAMES.length} areas each, ${CATEGORIES.length} categories`,
+    `Seed complete: ${outlets.length} outlets, ${AREA_NAMES.length} areas each, ${CATEGORIES.length} categories` +
+      (kbu ? ", demo users admin/leader.kbu" : ""),
   );
 }
 

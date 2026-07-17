@@ -1,4 +1,5 @@
 import { fail, ok } from "@/lib/api/response";
+import { requireAuth } from "@/lib/require-auth";
 import {
   ChecklistError,
   verifyChecklistReport,
@@ -9,6 +10,9 @@ export const dynamic = "force-dynamic";
 type Params = { params: Promise<{ taskId: string }> };
 
 export async function POST(request: Request, { params }: Params) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const { taskId } = await params;
     const body = (await request.json().catch(() => ({}))) as {

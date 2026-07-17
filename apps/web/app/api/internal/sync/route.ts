@@ -1,6 +1,7 @@
 import { fail, ok } from "@/lib/api/response";
 import { runSyncPayload } from "@/lib/services/sync.service";
 import type { SyncPayload } from "@nusafood/database/sync";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ export const dynamic = "force-dynamic";
  * Proteksi: header x-internal-key === ADMIN_API_KEY (jika di-set).
  */
 export async function POST(request: Request) {
+  const auth = await requireAuth(["ADMIN"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const expected = process.env.ADMIN_API_KEY;
     if (expected && !expected.includes("your-gas")) {

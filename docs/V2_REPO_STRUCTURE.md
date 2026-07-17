@@ -357,9 +357,9 @@ Deploy: hanya bugfix, freeze fitur
 - [ ] Settings pages
 
 ### Sprint 6 — Auth + Users
-- [ ] Login multi-user proper
-- [ ] User management
-- [ ] Role-based access
+- [x] Login multi-user proper
+- [x] User management
+- [x] Role-based access
 
 ### Sprint 7 — Cutover Prep
 - [ ] Load testing

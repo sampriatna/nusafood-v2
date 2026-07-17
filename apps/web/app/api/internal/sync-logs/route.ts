@@ -1,9 +1,13 @@
 import { fail, ok } from "@/lib/api/response";
 import { listSyncLogs } from "@/lib/services/sync.service";
+import { requireAuth } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const auth = await requireAuth(["ADMIN"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const expected = process.env.ADMIN_API_KEY;
     if (expected && !expected.includes("your-gas")) {

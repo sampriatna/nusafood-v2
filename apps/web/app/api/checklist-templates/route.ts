@@ -1,4 +1,5 @@
 import { fail, ok } from "@/lib/api/response";
+import { requireAuth } from "@/lib/require-auth";
 import {
   ChecklistError,
   createChecklistTemplate,
@@ -8,6 +9,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const outlet = new URL(request.url).searchParams.get("outlet") ?? undefined;
     const data = await listChecklistTemplates(outlet);
@@ -22,6 +26,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
     const data = await createChecklistTemplate(body);

@@ -69,6 +69,11 @@ export default async function SettingsPage() {
 
         <ul className="space-y-2 text-sm">
           <li>
+            <Link href="/settings/users" className="hover:underline">
+              Users
+            </Link>
+          </li>
+          <li>
             <Link href="/settings/sync-logs" className="hover:underline">
               Sync logs
             </Link>
