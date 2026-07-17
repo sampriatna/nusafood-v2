@@ -66,6 +66,7 @@ V2_ROLLBACK_PLAN.md         ← safety net sebelum cutover
 | Staging deploy | ⬜ Belum setup (butuh Vercel + Supabase project) |
 | Dual-write | ✅ Sprint 3 (env-gated; lokal default DB-only) |
 | Staff report + upload foto | ✅ Sprint 4 |
+| Checklist + recurring | ✅ Sprint 5 |
 | Cutover produksi | ⬜ Belum dilakukan |
 
 ## Referensi Kode v1

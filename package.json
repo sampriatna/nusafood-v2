@@ -14,6 +14,8 @@
     "db:studio": "pnpm --filter @nusafood/database studio",
     "sync:from-gas": "tsx --env-file=.env scripts/sync-from-gas.ts",
     "migrate:from-sheets": "tsx --env-file=.env scripts/migrate-from-sheets.ts",
+    "seed:checklist": "tsx --env-file=.env scripts/seed-checklist.ts",
+
     "test": "vitest run",
     "test:api": "vitest run",
     "typecheck": "turbo typecheck"

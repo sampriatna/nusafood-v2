@@ -55,7 +55,8 @@ Health check: [http://localhost:3000/api/health](http://localhost:3000/api/healt
 | Sync logs monitoring | ✅ Sprint 3 |
 | Staging Supabase + Vercel | ⬜ butuh credentials |
 | Staff report + photo upload + submit | ✅ Sprint 4 |
-| Checklist staff page | ⬜ Sprint 5 |
+| Checklist + recurring APIs & staff page | ✅ Sprint 5 |
+| Auth multi-user | ⬜ Sprint 6 |
 
 ## Catatan
 

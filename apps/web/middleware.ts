@@ -23,7 +23,8 @@ function isPublicTaskApi(pathname: string) {
     Boolean(pathname.match(/^\/api\/tasks\/[^/]+\/public/)) ||
     Boolean(pathname.match(/^\/api\/tasks\/[^/]+\/open/)) ||
     Boolean(pathname.match(/^\/api\/tasks\/[^/]+\/submit/)) ||
-    Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/public/))
+    Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/public/)) ||
+    Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/submit/))
   );
 }
 
