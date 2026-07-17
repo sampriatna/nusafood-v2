@@ -5,8 +5,12 @@
   "main": "./src/client.ts",
   "types": "./src/client.ts",
   "exports": {
-    ".": "./src/client.ts"
+    ".": "./src/client.ts",
+    "./normalizers": "./src/normalizers.ts",
+    "./sync": "./src/sync.ts"
   },
+
+
   "scripts": {
     "generate": "prisma generate",
     "migrate:dev": "prisma migrate dev",

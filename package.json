@@ -12,8 +12,9 @@
     "db:migrate:deploy": "pnpm --filter @nusafood/database migrate:deploy",
     "db:seed": "pnpm --filter @nusafood/database seed",
     "db:studio": "pnpm --filter @nusafood/database studio",
-    "sync:from-gas": "tsx scripts/sync-from-gas.ts",
-    "migrate:from-sheets": "tsx scripts/migrate-from-sheets.ts",
+    "sync:from-gas": "tsx --env-file=.env scripts/sync-from-gas.ts",
+    "migrate:from-sheets": "tsx --env-file=.env scripts/migrate-from-sheets.ts",
+    "test": "vitest run",
     "test:api": "vitest run",
     "typecheck": "turbo typecheck"
   },

@@ -61,8 +61,9 @@ V2_ROLLBACK_PLAN.md         ← safety net sebelum cutover
 |------|--------|
 | Dokumentasi perencanaan | ✅ Draft (disalin ke `nusafood-v2/docs`) |
 | Repo v2 | ✅ Scaffold monorepo (Sprint 1) |
-| Schema DB | ✅ Prisma schema + migration `init` (belum di-apply ke staging) |
-| Staging deploy | ⬜ Belum setup |
+| Schema DB | ✅ Prisma schema + migration `init` (teruji lokal; staging Supabase ⬜) |
+| Read API + sync fixture | ✅ Sprint 2 |
+| Staging deploy | ⬜ Belum setup (butuh Vercel + Supabase project) |
 | Dual-write | ⬜ Belum implement |
 | Cutover produksi | ⬜ Belum dilakukan |
 

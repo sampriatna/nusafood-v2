@@ -39,7 +39,7 @@ pnpm dev
 
 Health check: [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
-## Sprint status (fondasi)
+## Sprint status
 
 | Item | Status |
 |------|--------|
@@ -48,10 +48,11 @@ Health check: [http://localhost:3000/api/health](http://localhost:3000/api/healt
 | Prisma schema + migration init | ✅ |
 | Seed outlets / areas / categories | ✅ |
 | `GET /api/health` | ✅ |
-| Route stubs (staff + admin URL) | ✅ |
-| Copy UI inti dari v1 | ✅ (subset) |
-| Staging deploy | ⬜ |
-| Read API / sync Sheets | ⬜ Sprint 2 |
+| Read API (tasks/staff/areas/categories/dashboard) | ✅ Sprint 2 |
+| Sync fixture / GAS script | ✅ Sprint 2 |
+| Dashboard UI (data DB) | ✅ Sprint 2 |
+| Staging Supabase + Vercel | ⬜ butuh credentials |
+| Dual-write | ⬜ Sprint 3 |
 
 ## Catatan
 

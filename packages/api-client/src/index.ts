@@ -1,11 +1,20 @@
 import type {
   ApiResponse,
+  FullDashboardSummary,
   HealthStatus,
+  Staff,
   Task,
   TaskFilters,
 } from "@nusafood/types";
 
-export type { ApiResponse, HealthStatus, Task, TaskFilters };
+export type {
+  ApiResponse,
+  FullDashboardSummary,
+  HealthStatus,
+  Staff,
+  Task,
+  TaskFilters,
+};
 
 export interface ApiClientOptions {
   baseUrl?: string;
@@ -44,6 +53,22 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
   return {
     health: () => request<HealthStatus>("/api/health"),
+    dashboard: {
+      summary: (filters?: {
+        outlet?: string;
+        date_from?: string;
+        date_to?: string;
+      }) => {
+        const params = new URLSearchParams();
+        if (filters?.outlet) params.set("outlet", filters.outlet);
+        if (filters?.date_from) params.set("date_from", filters.date_from);
+        if (filters?.date_to) params.set("date_to", filters.date_to);
+        const qs = params.toString();
+        return request<FullDashboardSummary>(
+          `/api/dashboard/summary${qs ? `?${qs}` : ""}`,
+        );
+      },
+    },
     tasks: {
       list: (filters: TaskFilters = {}) => {
         const params = new URLSearchParams();
@@ -65,6 +90,27 @@ export function createApiClient(options: ApiClientOptions = {}) {
         request<Task>(
           `/api/tasks/${taskId}/public?token=${encodeURIComponent(token)}`,
         ),
+    },
+    staff: {
+      list: (filters?: { outlet?: string; status?: string }) => {
+        const params = new URLSearchParams();
+        if (filters?.outlet) params.set("outlet", filters.outlet);
+        if (filters?.status) params.set("status", filters.status);
+        const qs = params.toString();
+        return request<Staff[]>(`/api/staff${qs ? `?${qs}` : ""}`);
+      },
+    },
+    areas: {
+      list: (outlet?: string) => {
+        const qs = outlet ? `?outlet=${encodeURIComponent(outlet)}` : "";
+        return request(`/api/areas${qs}`);
+      },
+    },
+    categories: {
+      list: () => request("/api/categories"),
+    },
+    outlets: {
+      list: () => request("/api/outlets"),
     },
   };
 }

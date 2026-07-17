@@ -1,15 +1,67 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { StatusBadge } from "@/components/status-badge";
+import { getTaskById } from "@/lib/services/task.service";
+
+export const dynamic = "force-dynamic";
+
 type Props = {
   params: Promise<{ taskId: string }>;
 };
 
 export default async function TaskDetailPage({ params }: Props) {
   const { taskId } = await params;
+  const task = await getTaskById(taskId);
+  if (!task) notFound();
 
   return (
-    <main className="min-h-screen bg-background px-6 py-12">
-      <div className="mx-auto max-w-xl space-y-3">
-        <h1 className="text-2xl font-semibold">Detail tugas</h1>
-        <p className="font-mono text-sm text-muted-foreground">{taskId}</p>
+    <main className="min-h-screen bg-background px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-xl space-y-6">
+        <Link
+          href="/dashboard"
+          className="text-sm text-muted-foreground hover:underline"
+        >
+          ← Dashboard
+        </Link>
+        <header className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold">{task.task_title}</h1>
+            <StatusBadge status={task.status} />
+          </div>
+          <p className="font-mono text-xs text-muted-foreground">
+            {task.task_id}
+          </p>
+        </header>
+        <dl className="space-y-3 text-sm">
+          <div>
+            <dt className="text-muted-foreground">Outlet / Area / Kategori</dt>
+            <dd>
+              {task.outlet} · {task.area} · {task.category}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">PIC</dt>
+            <dd>
+              {task.pic_name} ({task.pic_wa})
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Deadline</dt>
+            <dd>{new Date(task.deadline).toLocaleString("id-ID")}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Deskripsi</dt>
+            <dd className="whitespace-pre-wrap">
+              {task.task_description || "—"}
+            </dd>
+          </div>
+          {task.staff_note ? (
+            <div>
+              <dt className="text-muted-foreground">Catatan staff</dt>
+              <dd>{task.staff_note}</dd>
+            </div>
+          ) : null}
+        </dl>
       </div>
     </main>
   );

@@ -19,12 +19,10 @@ function isPublicPath(pathname: string) {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Public staff/auth/health routes — no session required
   if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
 
-  // API public task token routes
   if (
     pathname.match(/^\/api\/tasks\/[^/]+\/public/) ||
     pathname.match(/^\/api\/checklist-reports\/[^/]+\/public/)
@@ -32,15 +30,24 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const session = request.cookies.get("nusa_session");
+  // Sprint 2: read UI/API dibuka tanpa session agar staging bisa diuji.
+  // Set AUTH_REQUIRED=true untuk enforce cookie nusa_session (Sprint 6).
+  if (process.env.AUTH_REQUIRED !== "true") {
+    return NextResponse.next();
+  }
 
-  // Admin UI routes require session cookie (auth implementation in Sprint 6)
-  if (pathname.startsWith("/dashboard") || pathname.startsWith("/tasks") || pathname.startsWith("/settings") || pathname.startsWith("/recurring") || pathname.startsWith("/checklist-template")) {
-    if (!session?.value) {
-      const loginUrl = new URL("/login", request.url);
-      loginUrl.searchParams.set("next", pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+  const session = request.cookies.get("nusa_session");
+  const protectedUi =
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/tasks") ||
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/recurring") ||
+    pathname.startsWith("/checklist-template");
+
+  if (protectedUi && !session?.value) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
