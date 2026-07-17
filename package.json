@@ -1,0 +1,43 @@
+{
+  "name": "nusafood-v2",
+  "version": "2.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.3",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "db:generate": "pnpm --filter @nusafood/database generate",
+    "db:migrate": "pnpm --filter @nusafood/database migrate:dev",
+    "db:migrate:deploy": "pnpm --filter @nusafood/database migrate:deploy",
+    "db:seed": "pnpm --filter @nusafood/database seed",
+    "db:studio": "pnpm --filter @nusafood/database studio",
+    "sync:from-gas": "tsx --env-file=.env scripts/sync-from-gas.ts",
+    "migrate:from-sheets": "tsx --env-file=.env scripts/migrate-from-sheets.ts",
+    "seed:checklist": "tsx --env-file=.env scripts/seed-checklist.ts",
+    "smoke:cutover": "tsx --env-file=.env scripts/smoke-cutover.ts",
+    "load:test": "tsx --env-file=.env scripts/load-test.ts",
+    "rollback:drill": "bash scripts/rollback-drill.sh",
+
+    "test": "vitest run",
+    "test:api": "vitest run",
+    "typecheck": "turbo typecheck"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3",
+    "turbo": "^2.5.4",
+    "typescript": "5.7.3",
+    "vitest": "^3.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
+}
+

@@ -1,0 +1,73 @@
+{
+  "categories": ["Cleaning", "Maintenance", "Stock", "Kitchen", "Bar", "Floor", "Waste", "General"],
+  "areas": [
+    { "name": "Bar", "outlet": "KBU" },
+    { "name": "Dapur", "outlet": "KBU" },
+    { "name": "Floor", "outlet": "KISAMEN" }
+  ],
+  "staff": [
+    {
+      "staff_id": "STF-20260717-001",
+      "staff_name": "Andi Barista",
+      "position": "Barista",
+      "outlet": "KBU",
+      "area": "Bar",
+      "wa_number": "628123456789",
+      "role": "STAFF",
+      "is_active": "TRUE"
+    },
+    {
+      "staff_id": "STF-20260717-002",
+      "name": "Budi Leader",
+      "position": "Leader",
+      "outlet": "Kopi Buri Umah",
+      "area": "Bar",
+      "wa_number": "628987654321",
+      "role": "LEADER",
+      "status": "ACTIVE",
+      "login_enabled": true
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "TASK-20260717-0001",
+      "token": "sampletoken0001abcdefghijklmnop",
+      "created_by": "Budi Leader",
+      "outlet": "KBU",
+      "area": "Bar",
+      "category": "Cleaning",
+      "task_title": "DAILY CLOSING BAR",
+      "task_description": "• buang sampah\n• clear area bar",
+      "priority": "Medium",
+      "pic_name": "Andi Barista",
+      "pic_wa": "628123456789",
+      "staff_id": "STF-20260717-001",
+      "deadline": "2026-07-17T23:00:00+07:00",
+      "status": "OPEN",
+      "is_late": "NO",
+      "checklist_mode": "",
+      "report_link": "/report/TASK-20260717-0001?token=sampletoken0001abcdefghijklmnop",
+      "created_at": "2026-07-17T12:40:00+07:00"
+    },
+    {
+      "task_id": "TASK-20260717-0002",
+      "token": "sampletoken0002abcdefghijklmnop",
+      "created_by": "Budi Leader",
+      "outlet": "Kisamen",
+      "area": "Floor",
+      "category": "Cleaning",
+      "task_title": "SWEEP FLOOR AREA",
+      "task_description": "Sapu lantai ruang makan",
+      "priority": "High",
+      "pic_name": "Andi Barista",
+      "pic_wa": "628123456789",
+      "deadline": "2026-07-16T22:00:00+07:00",
+      "status": "SUBMITTED",
+      "is_late": "YES",
+      "checklist_mode": "YES",
+      "after_photo_url": "https://example.com/after.jpg",
+      "staff_note": "Sudah selesai",
+      "created_at": "2026-07-16T10:00:00+07:00"
+    }
+  ]
+}

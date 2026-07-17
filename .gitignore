@@ -1,0 +1,41 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# build
+.next
+out
+dist
+.turbo
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# prisma
+packages/database/prisma/*.db
+packages/database/prisma/*.db-journal
+
+# ide / os
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# logs / coverage
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+coverage
+.vercel
+
+# sentry
+.sentryclirc
+
+# local photo uploads (dev fallback storage)
+apps/web/public/uploads/**
+!apps/web/public/uploads/.gitkeep
