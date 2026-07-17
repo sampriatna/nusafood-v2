@@ -1,4 +1,6 @@
-import Link from "next/link";
+import { AdminPage } from "@/components/admin-page";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { listSyncLogs } from "@/lib/services/sync.service";
 
 export const dynamic = "force-dynamic";
@@ -10,51 +12,46 @@ export default async function SyncLogsPage() {
   );
 
   return (
-    <main className="min-h-screen bg-background px-4 py-8 sm:px-6">
-      <div className="mx-auto max-w-3xl space-y-6">
-        <div className="space-y-2">
-          <Link
-            href="/dashboard"
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            ← Dashboard
-          </Link>
-          <h1 className="text-2xl font-semibold">Sync logs</h1>
-          <p className="text-sm text-muted-foreground">
-            Monitoring dual-write / sync. {failed.length} gagal dari{" "}
-            {logs.length} entri terbaru.
-          </p>
-        </div>
+    <AdminPage title="Sync Logs" backHref="/settings" maxWidth="3xl">
+      <p className="text-sm text-muted-foreground">
+        {failed.length} gagal dari {logs.length} entri terbaru
+      </p>
 
-        {logs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Belum ada log.</p>
-        ) : (
-          <ul className="divide-y divide-border text-sm">
-            {logs.map((log) => (
-              <li key={log.id} className="space-y-1 py-3">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-medium">
-                    {log.operation}{" "}
-                    <span className="font-normal text-muted-foreground">
-                      · {log.entityType}
+      {logs.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Belum ada log.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {logs.map((log) => (
+            <Card key={log.id}>
+              <CardContent className="space-y-2 p-4 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">{log.operation}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {log.entityType}
                       {log.entityId ? ` · ${log.entityId}` : ""}
-                    </span>
-                  </p>
+                    </p>
+                  </div>
                   <time className="text-xs text-muted-foreground">
                     {log.createdAt.toLocaleString("id-ID")}
                   </time>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  v1: {log.v1Status ?? "—"} · v2: {log.v2Status ?? "—"}
-                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">v1: {log.v1Status ?? "—"}</Badge>
+                  <Badge variant="outline">v2: {log.v2Status ?? "—"}</Badge>
+                </div>
                 {log.errorMessage ? (
                   <p className="text-xs text-destructive">{log.errorMessage}</p>
                 ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </main>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </AdminPage>
   );
 }

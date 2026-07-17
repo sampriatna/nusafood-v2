@@ -1,6 +1,10 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
+import { AdminPage } from "@/components/admin-page";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { getChecklistTemplate } from "@/lib/services/checklist.service";
+import { getRecurringTemplate } from "@/lib/services/recurring.service";
+import { notFound } from "next/navigation";
+import { ChecklistEditor } from "./checklist-editor";
 import { GenerateChecklistButton } from "./generate-button";
 
 export const dynamic = "force-dynamic";
@@ -9,42 +13,47 @@ type Props = { params: Promise<{ templateId: string }> };
 
 export default async function ChecklistTemplatePage({ params }: Props) {
   const { templateId } = await params;
-  const template = await getChecklistTemplate(templateId);
+  const [template, recurring] = await Promise.all([
+    getChecklistTemplate(templateId),
+    getRecurringTemplate(templateId),
+  ]);
   if (!template) notFound();
 
   return (
-    <main className="min-h-screen bg-background px-4 py-8 sm:px-6">
-      <div className="mx-auto max-w-xl space-y-6">
-        <Link
-          href="/settings"
-          className="text-sm text-muted-foreground hover:underline"
-        >
-          ← Pengaturan
-        </Link>
-        <header className="space-y-2">
-          <h1 className="text-2xl font-semibold">{template.template_name}</h1>
+    <AdminPage title="Item Checklist" backHref="/settings/recurring-tasks">
+      <Card>
+        <CardContent className="space-y-2 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold">{template.template_name}</h2>
+            {recurring && !recurring.active_status ? (
+              <Badge variant="secondary">Nonaktif</Badge>
+            ) : null}
+          </div>
           <p className="text-sm text-muted-foreground">
-            {template.template_id} · {template.outlet} · {template.area}
+            {template.outlet}
+            {template.area ? ` · ${template.area}` : ""}
           </p>
-          <p className="text-sm">{template.items.length} item</p>
-        </header>
+          {recurring ? (
+            <p className="text-xs text-muted-foreground">
+              {recurring.pic_name} · {recurring.repeat_time} –{" "}
+              {recurring.deadline_time}
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
 
-        <ul className="divide-y divide-border text-sm">
-          {template.items.map((item) => (
-            <li key={item.checklist_item_id} className="py-2">
-              <p className="font-medium">
-                {item.item_order}. {item.item_text}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {item.is_required ? "wajib" : "opsional"}
-                {item.requires_photo ? " · foto" : ""}
-              </p>
-            </li>
-          ))}
-        </ul>
+      <ChecklistEditor
+        templateId={template.template_id}
+        initialItems={template.items}
+      />
 
-        <GenerateChecklistButton templateId={template.template_id} />
-      </div>
-    </main>
+      <GenerateChecklistButton
+        templateId={template.template_id}
+        picName={recurring?.pic_name ?? ""}
+        picWa={recurring?.pic_wa ?? ""}
+      />
+
+      <div className="h-16" />
+    </AdminPage>
   );
 }

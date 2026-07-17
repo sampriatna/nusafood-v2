@@ -1,0 +1,785 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import {
+  AlertTriangle,
+  ChevronRight,
+  ClipboardList,
+  Filter,
+  ListChecks,
+  Plus,
+  RefreshCw,
+  Search,
+  X,
+} from "lucide-react";
+import {
+  ChecklistSummaryCards,
+  DashboardSummaryCards,
+} from "@/components/dashboard-summary";
+import { MobileHeader } from "@/components/mobile-header";
+import { StatusBadge } from "@/components/status-badge";
+import { TaskCard, TaskCardSkeleton } from "@/components/task-card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  fetchChecklistReports,
+  fetchOutlets,
+  fetchTasks,
+} from "@/lib/api/client";
+import type {
+  ChecklistReport,
+  ChecklistSummary,
+  DashboardSummary,
+  Task,
+  TaskStatus,
+} from "@nusafood/types";
+
+const statusOptions: { value: TaskStatus | "ALL"; label: string }[] = [
+  { value: "ALL", label: "Semua Status" },
+  { value: "OPEN", label: "Belum Dikerjakan" },
+  { value: "SUBMITTED", label: "Terkirim" },
+  { value: "DONE", label: "Selesai" },
+  { value: "LATE", label: "Terlambat" },
+  { value: "REVISI", label: "Perlu Revisi" },
+];
+
+type TimePeriod = "today" | "week" | "month";
+
+function getTaskDate(deadline: string): string {
+  const date = new Date(deadline);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().split("T")[0];
+}
+
+function getTodayDate(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isWithinTimePeriod(deadline: string, period: TimePeriod): boolean {
+  const today = new Date();
+  const todayDate = getTodayDate();
+  const taskDate = getTaskDate(deadline);
+
+  if (!taskDate) return false;
+
+  const taskDateObj = new Date(taskDate);
+
+  switch (period) {
+    case "today":
+      return taskDate === todayDate;
+    case "week": {
+      const currentDay = today.getDay();
+      const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+      const weekStart = new Date(today);
+      weekStart.setDate(diff);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+
+      const start = new Date(
+        weekStart.getFullYear(),
+        weekStart.getMonth(),
+        weekStart.getDate(),
+      );
+      const end = new Date(
+        weekEnd.getFullYear(),
+        weekEnd.getMonth(),
+        weekEnd.getDate(),
+      );
+
+      return taskDateObj >= start && taskDateObj <= end;
+    }
+    case "month":
+      return (
+        taskDateObj.getFullYear() === today.getFullYear() &&
+        taskDateObj.getMonth() === today.getMonth()
+      );
+    default:
+      return false;
+  }
+}
+
+function matchesOutlet(value: string, selected: string): boolean {
+  if (selected === "ALL") return true;
+  return value.toLowerCase() === selected.toLowerCase();
+}
+
+function matchesStatusFilter(
+  task: Task,
+  selectedStatus: TaskStatus | "ALL",
+): boolean {
+  if (selectedStatus === "ALL") return true;
+
+  const openStatuses = ["CREATED", "SENT", "WA_FAILED", "OPEN", "OPENED"];
+  const submittedStatuses = [
+    "SUBMITTED",
+    "RESUBMITTED",
+    "WAITING_VERIFICATION",
+  ];
+  const doneStatuses = ["DONE", "VERIFIED"];
+  const revisiStatuses = ["REVISI", "REVISION", "REVISION_REQUESTED"];
+
+  switch (selectedStatus) {
+    case "OPEN":
+      return (
+        openStatuses.includes(task.status) &&
+        !(
+          task.is_late === true ||
+          task.status === "LATE"
+        )
+      );
+    case "SUBMITTED":
+      return submittedStatuses.includes(task.status);
+    case "DONE":
+      return doneStatuses.includes(task.status);
+    case "LATE":
+      return task.status === "LATE" || task.is_late === true;
+    case "REVISI":
+      return revisiStatuses.includes(task.status);
+    default:
+      return true;
+  }
+}
+
+function matchesChecklistStatusFilter(
+  report: ChecklistReport,
+  selectedStatus: TaskStatus | "ALL",
+): boolean {
+  if (selectedStatus === "ALL") return true;
+
+  switch (selectedStatus) {
+    case "OPEN":
+      return report.status === "OPEN" && !report.is_late;
+    case "SUBMITTED":
+      return report.status === "SUBMITTED";
+    case "DONE":
+      return report.status === "DONE";
+    case "LATE":
+      return report.status === "LATE" || report.is_late;
+    case "REVISI":
+      return report.status === "REVISI";
+    default:
+      return true;
+  }
+}
+
+function calculateTaskSummary(taskList: Task[]): DashboardSummary {
+  const manualTasks = taskList.filter((t) => !t.checklist_mode);
+
+  const openStatuses = ["CREATED", "SENT", "WA_FAILED", "OPEN", "OPENED"];
+  const submittedStatuses = [
+    "SUBMITTED",
+    "RESUBMITTED",
+    "WAITING_VERIFICATION",
+  ];
+  const doneStatuses = ["DONE", "VERIFIED"];
+  const revisiStatuses = ["REVISI", "REVISION", "REVISION_REQUESTED"];
+
+  return {
+    total: manualTasks.length,
+    open: manualTasks.filter((t) => openStatuses.includes(t.status)).length,
+    submitted: manualTasks.filter((t) =>
+      submittedStatuses.includes(t.status),
+    ).length,
+    done: manualTasks.filter((t) => doneStatuses.includes(t.status)).length,
+    late: manualTasks.filter(
+      (t) => t.status === "LATE" || t.is_late === true,
+    ).length,
+    revisi: manualTasks.filter((t) => revisiStatuses.includes(t.status))
+      .length,
+  };
+}
+
+function calculateChecklistSummary(reports: ChecklistReport[]): ChecklistSummary {
+  return {
+    total: reports.length,
+    open: reports.filter((r) => r.status === "OPEN" && !r.is_late).length,
+    submitted: reports.filter((r) => r.status === "SUBMITTED").length,
+    done: reports.filter((r) => r.status === "DONE").length,
+    late: reports.filter((r) => r.status === "LATE" || r.is_late).length,
+    revisi: reports.filter((r) => r.status === "REVISI").length,
+  };
+}
+
+export function DashboardClient() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [checklists, setChecklists] = useState<ChecklistReport[]>([]);
+  const [outlets, setOutlets] = useState<string[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary>({
+    total: 0,
+    open: 0,
+    submitted: 0,
+    done: 0,
+    late: 0,
+    revisi: 0,
+  });
+  const [checklistSummary, setChecklistSummary] = useState<ChecklistSummary>({
+    total: 0,
+    open: 0,
+    submitted: 0,
+    done: 0,
+    late: 0,
+    revisi: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [activeTab, setActiveTab] = useState<"tasks" | "checklists">("tasks");
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedOutlet, setSelectedOutlet] = useState<string>("ALL");
+  const [selectedStatus, setSelectedStatus] = useState<TaskStatus | "ALL">(
+    "ALL",
+  );
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("today");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const [tasksResult, checklistsResult, outletsResult] = await Promise.all([
+        fetchTasks({ limit: 200 }),
+        fetchChecklistReports(),
+        fetchOutlets(),
+      ]);
+
+      if (tasksResult.success && tasksResult.data) {
+        setTasks(tasksResult.data);
+        setSummary(calculateTaskSummary(tasksResult.data));
+      } else {
+        setTasks([]);
+        setLoadError(tasksResult.error || "Gagal memuat tugas");
+      }
+
+      if (checklistsResult.success && checklistsResult.data) {
+        setChecklists(checklistsResult.data);
+        setChecklistSummary(
+          calculateChecklistSummary(checklistsResult.data),
+        );
+      } else {
+        setChecklists([]);
+      }
+
+      if (outletsResult.success && outletsResult.data) {
+        setOutlets(outletsResult.data.map((o) => o.name || o.code));
+      }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Gagal memuat data");
+      setTasks([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedOutlet, selectedStatus, searchQuery, timePeriod]);
+
+  const manualTasks = tasks.filter((t) => !t.checklist_mode);
+
+  const filteredTasks = manualTasks
+    .filter((task) => {
+      if (!isWithinTimePeriod(task.deadline, timePeriod)) return false;
+
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch =
+          task.task_title.toLowerCase().includes(query) ||
+          task.task_id.toLowerCase().includes(query) ||
+          task.pic_name.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+
+      if (!matchesOutlet(task.outlet, selectedOutlet)) return false;
+      if (!matchesStatusFilter(task, selectedStatus)) return false;
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.deadline).getTime() - new Date(b.deadline).getTime(),
+    );
+
+  const filteredChecklists = checklists
+    .filter((checklist) => {
+      if (!isWithinTimePeriod(checklist.deadline, timePeriod)) return false;
+
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const title = checklist.checklist_title || "";
+        const matchesSearch =
+          title.toLowerCase().includes(query) ||
+          checklist.task_id.toLowerCase().includes(query) ||
+          checklist.pic_name.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+
+      if (!matchesOutlet(checklist.outlet, selectedOutlet)) return false;
+      if (!matchesChecklistStatusFilter(checklist, selectedStatus)) {
+        return false;
+      }
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.deadline).getTime() - new Date(b.deadline).getTime(),
+    );
+
+  const totalPages = Math.ceil(filteredTasks.length / itemsPerPage);
+  const paginatedTasks = filteredTasks.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage,
+  );
+
+  const hasActiveFilters =
+    selectedOutlet !== "ALL" ||
+    selectedStatus !== "ALL" ||
+    searchQuery !== "" ||
+    timePeriod !== "today";
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await loadData();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setSelectedOutlet("ALL");
+    setSelectedStatus("ALL");
+    setSearchQuery("");
+    setTimePeriod("today");
+  };
+
+  const handleStatusClick = (status: string) => {
+    const next = status as TaskStatus | "ALL";
+    if (selectedStatus === next) {
+      setSelectedStatus("ALL");
+    } else {
+      setSelectedStatus(next);
+    }
+  };
+
+  const filterPanel = (
+    <div className="flex flex-wrap gap-2 rounded-lg bg-muted/50 p-3">
+      <div className="flex gap-1 rounded bg-card p-1">
+        <Button
+          variant={timePeriod === "today" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setTimePeriod("today")}
+          className="text-xs"
+        >
+          Hari Ini
+        </Button>
+        <Button
+          variant={timePeriod === "week" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setTimePeriod("week")}
+          className="text-xs"
+        >
+          Minggu Ini
+        </Button>
+        <Button
+          variant={timePeriod === "month" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setTimePeriod("month")}
+          className="text-xs"
+        >
+          Bulan Ini
+        </Button>
+      </div>
+
+      <Select value={selectedOutlet} onValueChange={setSelectedOutlet}>
+        <SelectTrigger className="w-[140px] bg-card">
+          <SelectValue placeholder="Outlet" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="ALL">Semua Outlet</SelectItem>
+          {outlets.map((outlet) => (
+            <SelectItem key={outlet} value={outlet}>
+              {outlet}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={selectedStatus}
+        onValueChange={(v) => setSelectedStatus(v as TaskStatus | "ALL")}
+      >
+        <SelectTrigger className="w-[140px] bg-card">
+          <SelectValue placeholder="Status" />
+        </SelectTrigger>
+        <SelectContent>
+          {statusOptions.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {hasActiveFilters && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={clearFilters}
+          className="text-muted-foreground"
+        >
+          <X className="mr-1 size-4" />
+          Reset
+        </Button>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-background">
+      <MobileHeader title="Dashboard" showSettings />
+
+      <div className="mx-auto max-w-5xl space-y-4 p-4 pb-24">
+        {loadError && tasks.length > 0 && (
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="flex items-start gap-3 p-4">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-red-600" />
+              <div className="flex-1">
+                <p className="text-sm text-red-800">{loadError}</p>
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => loadData()}
+                  className="h-auto p-0 text-red-600"
+                >
+                  Coba muat ulang
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <Link href="/settings/recurring-tasks">
+            <Card className="cursor-pointer transition-colors hover:border-primary/50">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="rounded-lg bg-primary/10 p-2">
+                  <RefreshCw className="size-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Tugas Berulang
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Template & jadwal
+                  </p>
+                </div>
+                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/tasks/new">
+            <Card className="cursor-pointer transition-colors hover:border-primary/50">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="rounded-lg bg-primary/10 p-2">
+                  <Plus className="size-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Tugas Baru
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Buat tugas manual
+                  </p>
+                </div>
+                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
+
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as "tasks" | "checklists")}
+        >
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="tasks" className="flex items-center gap-2">
+              <ClipboardList className="size-4" />
+              Tugas ({manualTasks.length})
+            </TabsTrigger>
+            <TabsTrigger value="checklists" className="flex items-center gap-2">
+              <ListChecks className="size-4" />
+              Checklist ({checklists.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="tasks" className="mt-4 space-y-4">
+            <DashboardSummaryCards
+              summary={summary}
+              isLoading={isLoading}
+              onStatusClick={handleStatusClick}
+            />
+
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Cari tugas, ID, atau PIC..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Button
+                variant={showFilters ? "secondary" : "outline"}
+                size="icon"
+                onClick={() => setShowFilters(!showFilters)}
+                className="shrink-0"
+              >
+                <Filter className="size-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleRefresh}
+                disabled={isRefreshing || isLoading}
+                className="shrink-0"
+                title="Refresh data"
+              >
+                <RefreshCw
+                  className={`size-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+              </Button>
+              <Button size="icon" className="shrink-0" asChild>
+                <Link href="/tasks/new">
+                  <Plus className="size-4" />
+                </Link>
+              </Button>
+            </div>
+
+            {showFilters && filterPanel}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-foreground">
+                  Daftar Tugas
+                  {filteredTasks.length > 0 && (
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      ({paginatedTasks.length}/{filteredTasks.length})
+                    </span>
+                  )}
+                </h2>
+              </div>
+
+              {isLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <TaskCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : filteredTasks.length === 0 ? (
+                <div className="py-12 text-center">
+                  <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-muted">
+                    <Search className="size-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="mb-1 font-medium text-foreground">
+                    Tidak ada tugas ditemukan
+                  </h3>
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    {hasActiveFilters
+                      ? "Coba ubah filter pencarian Anda"
+                      : "Belum ada tugas yang dibuat"}
+                  </p>
+                  {hasActiveFilters ? (
+                    <Button variant="outline" onClick={clearFilters}>
+                      Reset Filter
+                    </Button>
+                  ) : (
+                    <Button asChild>
+                      <Link href="/tasks/new">
+                        <Plus className="mr-2 size-4" />
+                        Buat Tugas Baru
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    {paginatedTasks.map((task) => (
+                      <TaskCard key={task.task_id} task={task} />
+                    ))}
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="mt-6 flex items-center justify-center gap-1 pb-4">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                        (page) => (
+                          <Button
+                            key={page}
+                            variant={
+                              currentPage === page ? "default" : "outline"
+                            }
+                            size="sm"
+                            onClick={() => setCurrentPage(page)}
+                            className="size-8 p-0"
+                          >
+                            {page}
+                          </Button>
+                        ),
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="checklists" className="mt-4 space-y-4">
+            <ChecklistSummaryCards
+              summary={checklistSummary}
+              isLoading={isLoading}
+              onStatusClick={handleStatusClick}
+            />
+
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Cari checklist, ID, atau PIC..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Button
+                variant={showFilters ? "secondary" : "outline"}
+                size="icon"
+                onClick={() => setShowFilters(!showFilters)}
+                className="shrink-0"
+              >
+                <Filter className="size-4" />
+              </Button>
+            </div>
+
+            {showFilters && filterPanel}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-foreground">
+                  Daftar Checklist Hari Ini
+                  {hasActiveFilters && (
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      ({filteredChecklists.length} hasil)
+                    </span>
+                  )}
+                </h2>
+              </div>
+
+              {isLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <TaskCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : filteredChecklists.length === 0 ? (
+                <div className="py-12 text-center">
+                  <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-muted">
+                    <ListChecks className="size-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="mb-1 font-medium text-foreground">
+                    Tidak ada checklist ditemukan
+                  </h3>
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    {hasActiveFilters
+                      ? "Coba ubah filter pencarian Anda"
+                      : "Belum ada checklist"}
+                  </p>
+                  {hasActiveFilters ? (
+                    <Button variant="outline" onClick={clearFilters}>
+                      Reset Filter
+                    </Button>
+                  ) : (
+                    <Button asChild>
+                      <Link href="/settings/recurring-tasks">
+                        <RefreshCw className="mr-2 size-4" />
+                        Buat Template Recurring
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredChecklists.map((checklist) => (
+                    <Link
+                      key={checklist.task_id}
+                      href={`/tasks/${checklist.task_id}`}
+                    >
+                      <Card className="cursor-pointer transition-colors hover:border-primary/50">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="mb-1 flex items-center gap-2">
+                                <StatusBadge status={checklist.status} />
+                                <span className="text-xs text-muted-foreground">
+                                  {checklist.task_id}
+                                </span>
+                              </div>
+                              <h3 className="truncate font-medium text-foreground">
+                                {checklist.checklist_title}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {checklist.outlet} - {checklist.area} | PIC:{" "}
+                                {checklist.pic_name}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Deadline:{" "}
+                                {new Date(checklist.deadline).toLocaleString(
+                                  "id-ID",
+                                )}
+                              </p>
+                            </div>
+                            <ChevronRight className="size-5 text-muted-foreground" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <Link
+        href="/tasks/new"
+        className="fixed bottom-6 right-6 lg:hidden"
+      >
+        <Button size="lg" className="size-14 rounded-full shadow-lg">
+          <Plus className="size-6" />
+        </Button>
+      </Link>
+    </div>
+  );
+}

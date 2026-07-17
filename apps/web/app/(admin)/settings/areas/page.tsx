@@ -1,12 +1,32 @@
-export default function AreasSettingsPage() {
+import { AdminPage } from "@/components/admin-page";
+import { Card, CardContent } from "@/components/ui/card";
+import { listAreas } from "@/lib/services/master-data.service";
+
+export const dynamic = "force-dynamic";
+
+export default async function AreasSettingsPage() {
+  const areas = await listAreas();
+
   return (
-    <main className="min-h-screen bg-background px-6 py-12">
-      <div className="mx-auto max-w-xl space-y-3">
-        <h1 className="text-2xl font-semibold">Areas</h1>
-        <p className="text-sm text-muted-foreground">
-          Placeholder — master data area di Sprint 2.
-        </p>
-      </div>
-    </main>
+    <AdminPage title="Master Area" backHref="/settings">
+      <p className="text-sm text-muted-foreground">
+        {areas.length} area terdaftar
+      </p>
+      <Card>
+        <CardContent className="divide-y divide-border p-0">
+          {areas.map((area) => (
+            <div
+              key={`${area.outlet ?? "all"}-${area.name}`}
+              className="flex items-center justify-between px-4 py-3 text-sm"
+            >
+              <span className="font-medium">{area.name}</span>
+              <span className="text-muted-foreground">
+                {area.outlet ?? area.outlet_name ?? "—"}
+              </span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </AdminPage>
   );
 }

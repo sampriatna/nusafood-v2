@@ -4,6 +4,7 @@
  */
 
 import type {
+  RepeatType,
   StaffRole,
   StaffStatus,
   TaskPriority,
@@ -26,19 +27,20 @@ export function asString(value: unknown, fallback = ""): string {
   return String(value).trim();
 }
 
-export function coerceBoolean(value: unknown): boolean {
+export function coerceBoolean(value: unknown, defaultValue = false): boolean {
+  if (value === undefined || value === null || value === "") return defaultValue;
   if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
   if (typeof value === "string") {
     const v = value.trim().toUpperCase();
-    return (
-      v === "TRUE" ||
-      v === "YES" ||
-      v === "Y" ||
-      v === "1" ||
-      v === "ACTIVE"
-    );
+    if (v === "TRUE" || v === "YES" || v === "Y" || v === "1" || v === "ACTIVE") {
+      return true;
+    }
+    if (v === "FALSE" || v === "NO" || v === "N" || v === "0" || v === "INACTIVE") {
+      return false;
+    }
   }
-  return false;
+  return defaultValue;
 }
 
 const TASK_STATUSES = new Set<string>([
@@ -254,6 +256,261 @@ export interface NormalizedStaffRow {
   role: StaffRole;
   status: StaffStatus;
   loginEnabled: boolean;
+}
+
+const REPEAT_TYPES = new Set<string>([
+  "daily",
+  "weekdays",
+  "weekly",
+  "monthly",
+  "custom",
+]);
+
+export function normalizeRepeatType(value: unknown): RepeatType {
+  const raw = asString(value, "daily").toLowerCase();
+  if (REPEAT_TYPES.has(raw)) return raw as RepeatType;
+  return "daily";
+}
+
+export function parseTimeOfDay(value: unknown, fallback = "08:00"): Date {
+  const raw = asString(value, fallback);
+  const match = raw.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) {
+    const [h = "8", m = "0"] = fallback.split(":");
+    return new Date(Date.UTC(1970, 0, 1, Number(h), Number(m), 0));
+  }
+  return new Date(
+    Date.UTC(1970, 0, 1, Number(match[1]), Number(match[2]), 0),
+  );
+}
+
+export interface NormalizedChecklistTemplateRow {
+  templateId: string;
+  templateName: string;
+  outletCode: string;
+  areaName: string | null;
+  taskTitle: string | null;
+  checklistTitle: string;
+  picName: string | null;
+  picWa: string | null;
+  requiresPhoto: boolean;
+  activeStatus: boolean;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
+export function normalizeChecklistTemplateRow(
+  row: Record<string, unknown>,
+): NormalizedChecklistTemplateRow | null {
+  const templateId = asString(pickField(row, ["template_id", "templateId"]));
+  const templateName = asString(
+    pickField(row, ["template_name", "templateName", "name"]),
+  );
+  const checklistTitle = asString(
+    pickField(row, ["checklist_title", "checklistTitle", "task_title", "taskTitle"]),
+  );
+
+  if (!templateId || !templateName) return null;
+
+  return {
+    templateId,
+    templateName,
+    outletCode: normalizeOutletCode(pickField(row, ["outlet", "outlet_code"])),
+    areaName: asString(pickField(row, ["area", "area_name"])) || null,
+    taskTitle:
+      asString(pickField(row, ["task_title", "taskTitle"])) || null,
+    checklistTitle: checklistTitle || templateName,
+    picName: asString(pickField(row, ["pic_name", "picName"])) || null,
+    picWa: asString(pickField(row, ["pic_wa", "picWa"])) || null,
+    requiresPhoto: coerceBoolean(
+      pickField(row, ["requires_photo", "requiresPhoto"]),
+    ),
+    activeStatus: coerceBoolean(
+      pickField(row, ["active_status", "activeStatus", "is_active"]),
+      true,
+    ),
+    createdAt: parseDate(pickField(row, ["created_at", "createdAt"])),
+    updatedAt: parseDate(pickField(row, ["updated_at", "updatedAt"])),
+  };
+}
+
+export interface NormalizedChecklistItemRow {
+  checklistItemId: string;
+  templateId: string;
+  itemOrder: number;
+  itemText: string;
+  requiresPhoto: boolean;
+  isRequired: boolean;
+  activeStatus: boolean;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
+export function normalizeChecklistItemRow(
+  row: Record<string, unknown>,
+): NormalizedChecklistItemRow | null {
+  const checklistItemId = asString(
+    pickField(row, ["checklist_item_id", "checklistItemId", "item_id"]),
+  );
+  const templateId = asString(pickField(row, ["template_id", "templateId"]));
+  const itemText = asString(pickField(row, ["item_text", "itemText", "text"]));
+  const orderRaw = pickField(row, ["item_order", "itemOrder", "order"]);
+
+  if (!checklistItemId || !templateId || !itemText) return null;
+
+  const itemOrder = Number(orderRaw);
+  if (!Number.isFinite(itemOrder) || itemOrder < 1) return null;
+
+  return {
+    checklistItemId,
+    templateId,
+    itemOrder,
+    itemText,
+    requiresPhoto: coerceBoolean(
+      pickField(row, ["requires_photo", "requiresPhoto"]),
+    ),
+    isRequired: coerceBoolean(
+      pickField(row, ["is_required", "isRequired"]),
+      true,
+    ),
+    activeStatus: coerceBoolean(
+      pickField(row, ["active_status", "activeStatus", "is_active"]),
+      true,
+    ),
+    createdAt: parseDate(pickField(row, ["created_at", "createdAt"])),
+    updatedAt: parseDate(pickField(row, ["updated_at", "updatedAt"])),
+  };
+}
+
+export interface NormalizedRecurringTemplateRow {
+  templateId: string;
+  templateName: string;
+  outletCode: string;
+  areaName: string | null;
+  categoryName: string | null;
+  picName: string;
+  picWa: string;
+  staffId: string | null;
+  taskTitle: string;
+  taskDescription: string | null;
+  repeatType: RepeatType;
+  repeatDays: string[];
+  repeatTime: Date;
+  deadlineTime: Date;
+  requiresPhoto: boolean;
+  activeStatus: boolean;
+  templateVersion: number;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
+function normalizeRepeatDays(value: unknown, repeatType?: unknown): string[] {
+  const allDays = [
+    "senin",
+    "selasa",
+    "rabu",
+    "kamis",
+    "jumat",
+    "sabtu",
+    "minggu",
+  ];
+  const numToDay: Record<string, string> = {
+    "1": "senin",
+    "2": "selasa",
+    "3": "rabu",
+    "4": "kamis",
+    "5": "jumat",
+    "6": "sabtu",
+    "7": "minggu",
+  };
+  const type = asString(repeatType, "daily").toLowerCase();
+
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => {
+        const raw = asString(v).toLowerCase();
+        return numToDay[raw] ?? raw;
+      })
+      .filter(Boolean);
+  }
+
+  const raw = asString(value);
+  if (!raw || raw.includes("[Ljava.lang.Object")) {
+    return type === "daily" || type === "weekdays" ? allDays : [];
+  }
+
+  return raw
+    .split(/[,;|]/)
+    .map((v) => {
+      const token = v.trim().toLowerCase();
+      return numToDay[token] ?? token;
+    })
+    .filter(Boolean);
+}
+
+export function normalizeRecurringTemplateRow(
+  row: Record<string, unknown>,
+): NormalizedRecurringTemplateRow | null {
+  const templateId = asString(pickField(row, ["template_id", "templateId"]));
+  const templateName = asString(
+    pickField(row, ["template_name", "templateName", "name"]),
+  );
+  const taskTitle = asString(pickField(row, ["task_title", "taskTitle"]));
+  const picName = asString(pickField(row, ["pic_name", "picName"]));
+  const picWa = asString(pickField(row, ["pic_wa", "picWa"]));
+
+  if (!templateId || !templateName || !taskTitle || !picName || !picWa) {
+    return null;
+  }
+
+  const versionRaw = pickField(row, ["template_version", "templateVersion"]);
+  const templateVersion =
+    versionRaw === undefined || versionRaw === null || versionRaw === ""
+      ? 1
+      : Number(versionRaw);
+
+  return {
+    templateId,
+    templateName,
+    outletCode: normalizeOutletCode(pickField(row, ["outlet", "outlet_code"])),
+    areaName: asString(pickField(row, ["area", "area_name"])) || null,
+    categoryName:
+      asString(pickField(row, ["category", "category_name"])) || null,
+    picName,
+    picWa,
+    staffId: asString(pickField(row, ["staff_id", "staffId"])) || null,
+    taskTitle,
+    taskDescription:
+      asString(pickField(row, ["task_description", "taskDescription"])) ||
+      null,
+    repeatType: normalizeRepeatType(pickField(row, ["repeat_type", "repeatType"])),
+    repeatDays: normalizeRepeatDays(
+      pickField(row, ["repeat_days", "repeatDays"]),
+      pickField(row, ["repeat_type", "repeatType"]),
+    ),
+    repeatTime: parseTimeOfDay(
+      pickField(row, ["repeat_time", "repeatTime"]),
+      "08:00",
+    ),
+    deadlineTime: parseTimeOfDay(
+      pickField(row, ["deadline_time", "deadlineTime"]),
+      "17:00",
+    ),
+    requiresPhoto: coerceBoolean(
+      pickField(row, ["requires_photo", "requiresPhoto"]),
+      true,
+    ),
+    activeStatus: coerceBoolean(
+      pickField(row, ["active_status", "activeStatus", "is_active"]),
+      true,
+    ),
+    templateVersion:
+      Number.isFinite(templateVersion) && templateVersion > 0
+        ? templateVersion
+        : 1,
+    createdAt: parseDate(pickField(row, ["created_at", "createdAt"])),
+    updatedAt: parseDate(pickField(row, ["updated_at", "updatedAt"])),
+  };
 }
 
 export function normalizeStaffRow(

@@ -1,95 +1,116 @@
-import Link from "next/link";
-import { listChecklistTemplates } from "@/lib/services/checklist.service";
+import {
+  Building2,
+  CheckCircle2,
+  Database,
+  History,
+  Info,
+  Layers,
+  Repeat,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+import { AdminPage } from "@/components/admin-page";
+import { SettingsLinkCard } from "@/components/settings-link-card";
+import { SettingsLogoutCard } from "@/components/settings-logout-card";
+import { Card } from "@/components/ui/card";
 import { listRecurringTemplates } from "@/lib/services/recurring.service";
+import { listStaff } from "@/lib/services/staff.service";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [templates, recurring] = await Promise.all([
-    listChecklistTemplates(),
+  const [recurring, staff] = await Promise.all([
     listRecurringTemplates(),
+    listStaff({ status: "ACTIVE" }),
   ]);
 
+  const staffPreview = staff
+    .slice(0, 3)
+    .map((s) => s.name)
+    .join(", ");
+
   return (
-    <main className="min-h-screen bg-background px-6 py-12">
-      <div className="mx-auto max-w-xl space-y-8">
-        <div className="space-y-2">
-          <Link
-            href="/dashboard"
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            ← Dashboard
-          </Link>
-          <h1 className="text-2xl font-semibold">Pengaturan</h1>
-        </div>
-
-        <section className="space-y-3">
-          <h2 className="text-lg font-medium">Checklist templates</h2>
-          {templates.length === 0 ? (
+    <AdminPage title="Pengaturan" backHref="/dashboard">
+      <Card className="space-y-4 p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <Database className="size-5 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-semibold">PostgreSQL v2</h3>
             <p className="text-sm text-muted-foreground">
-              Belum ada template. Seed via{" "}
-              <code className="text-xs">pnpm seed:checklist</code>
+              Data operasional tersimpan di Supabase. Template checklist sudah
+              dimigrasi dari v1.
             </p>
-          ) : (
-            <ul className="divide-y divide-border text-sm">
-              {templates.map((t) => (
-                <li key={t.template_id} className="py-2">
-                  <Link
-                    href={`/checklist-template/${t.template_id}`}
-                    className="font-medium hover:underline"
-                  >
-                    {t.template_name}
-                  </Link>
-                  <p className="text-xs text-muted-foreground">
-                    {t.template_id} · {t.items.length} item
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3">
+          <CheckCircle2 className="size-5 text-emerald-600" />
+          <span className="text-sm font-medium text-emerald-800">
+            Terhubung ke database PostgreSQL
+          </span>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg bg-blue-50 p-3 text-sm">
+          <Info className="mt-0.5 size-4 shrink-0 text-blue-600" />
+          <p className="text-blue-800">
+            Data tugas & checklist disimpan di Supabase. Sync dari v1 via{" "}
+            <code className="text-xs">pnpm sync:from-gas</code>.
+          </p>
+        </div>
+      </Card>
 
-        <section className="space-y-3">
-          <h2 className="text-lg font-medium">Recurring templates</h2>
-          {recurring.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Belum ada template.</p>
-          ) : (
-            <ul className="divide-y divide-border text-sm">
-              {recurring.map((t) => (
-                <li key={t.template_id} className="py-2">
-                  <p className="font-medium">{t.template_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t.repeat_type} · {t.active_status ? "aktif" : "nonaktif"}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+      <SettingsLinkCard
+        href="/settings/recurring-tasks"
+        icon={Repeat}
+        title="Template Tugas Berulang"
+        description="Kelola jadwal, PIC, dan checklist harian"
+        meta={`${recurring.length} template · ${recurring.filter((t) => t.active_status).length} aktif`}
+      />
+      <SettingsLinkCard
+        href="/settings/staff"
+        icon={Users}
+        title="Master Staff"
+        description="Daftar staf operasional per outlet"
+        meta={
+          staffPreview
+            ? `${staff.length} aktif · ${staffPreview}${staff.length > 3 ? "…" : ""}`
+            : `${staff.length} staf`
+        }
+      />
+      <SettingsLinkCard
+        href="/settings/areas"
+        icon={Building2}
+        title="Master Area"
+        description="Area kerja per outlet (Dapur, Bar, …)"
+      />
+      <SettingsLinkCard
+        href="/settings/categories"
+        icon={Layers}
+        title="Master Kategori"
+        description="Kategori tugas (Cleaning, Kitchen, …)"
+      />
+      <SettingsLinkCard
+        href="/settings/users"
+        icon={ShieldCheck}
+        title="Manajemen User Login"
+        description="Akun admin & leader"
+      />
+      <SettingsLinkCard
+        href="/settings/sync-logs"
+        icon={History}
+        title="Sync Logs"
+        description="Riwayat migrasi & sync dari v1"
+      />
 
-        <ul className="space-y-2 text-sm">
-          <li>
-            <Link href="/settings/users" className="hover:underline">
-              Users
-            </Link>
-          </li>
-          <li>
-            <Link href="/settings/sync-logs" className="hover:underline">
-              Sync logs
-            </Link>
-          </li>
-          <li>
-            <Link href="/settings/staff" className="hover:underline">
-              Staff
-            </Link>
-          </li>
-          <li>
-            <Link href="/recurring" className="hover:underline">
-              Recurring page
-            </Link>
-          </li>
-        </ul>
-      </div>
-    </main>
+      <Card className="p-4">
+        <p className="text-center text-xs text-muted-foreground">
+          Nusa Food Task &amp; Report System v2
+          <br />
+          Data disimpan di PostgreSQL (Supabase)
+        </p>
+      </Card>
+
+      <SettingsLogoutCard />
+    </AdminPage>
   );
 }
