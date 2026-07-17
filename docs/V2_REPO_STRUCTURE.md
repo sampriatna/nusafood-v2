@@ -362,10 +362,10 @@ Deploy: hanya bugfix, freeze fitur
 - [x] Role-based access
 
 ### Sprint 7 — Cutover Prep
-- [ ] Load testing
-- [ ] Rollback drill
-- [ ] Training leader
-- [ ] Go/no-go decision
+- [x] Load testing (`pnpm load:test`)
+- [x] Rollback drill (`pnpm rollback:drill` + emergency fallback env)
+- [x] Training leader (catatan di `SPRINT7_CUTOVER.md`)
+- [x] Go/no-go decision (checklist di `SPRINT7_CUTOVER.md`)
 
 ---
 
@@ -406,4 +406,4 @@ test('foto upload ke storage dan muncul di dashboard', async () => {
 | Photo storage | Supabase Storage | ⬜ TBD |
 | WA provider fase awal | Tetap GAS | ✅ |
 | WA provider fase akhir | Fonnte / WABA | ⬜ TBD |
-| Auth | JWT + bcrypt (migrate dari v1) | ⬜ TBD |
+| Auth | JWT + bcrypt (migrate dari v1) | ✅ Sprint 6 |

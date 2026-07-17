@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { jwtVerify } from "jose"
+import {
+  buildV1FallbackUrl,
+  emergencyFallbackEnabled,
+  isStaffSurfacePath,
+} from "@/lib/emergency-fallback"
 
 const SESSION_COOKIE = "nusa_session"
 
@@ -60,6 +65,14 @@ async function hasValidSession(request: NextRequest): Promise<boolean> {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // Level-2 rollback: staff surfaces → v1 (lihat V2_ROLLBACK_PLAN.md)
+  if (emergencyFallbackEnabled() && isStaffSurfacePath(pathname)) {
+    const target = buildV1FallbackUrl(pathname, request.nextUrl.search)
+    if (target) {
+      return NextResponse.redirect(target, 302)
+    }
+  }
 
   if (isPublicPath(pathname) || isPublicTaskApi(pathname)) {
     return NextResponse.next()

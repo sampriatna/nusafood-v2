@@ -12,6 +12,7 @@ Mulai dari [`docs/V2_README.md`](./docs/V2_README.md), lalu:
 3. [API spec](./docs/V2_API_SPEC.md)
 4. [Struktur repo](./docs/V2_REPO_STRUCTURE.md)
 5. [Rollback plan](./docs/V2_ROLLBACK_PLAN.md)
+6. [Sprint 7 cutover prep](./docs/SPRINT7_CUTOVER.md)
 
 ## Struktur
 
@@ -57,7 +58,7 @@ Health check: [http://localhost:3000/api/health](http://localhost:3000/api/healt
 | Staff report + photo upload + submit | ✅ Sprint 4 |
 | Checklist + recurring APIs & staff page | ✅ Sprint 5 |
 | Auth multi-user + RBAC | ✅ Sprint 6 |
-| Cutover prep | ⬜ Sprint 7 |
+| Cutover prep (smoke/load/rollback drill) | ✅ Sprint 7 |
 
 ## Catatan
 

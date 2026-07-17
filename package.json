@@ -15,6 +15,9 @@
     "sync:from-gas": "tsx --env-file=.env scripts/sync-from-gas.ts",
     "migrate:from-sheets": "tsx --env-file=.env scripts/migrate-from-sheets.ts",
     "seed:checklist": "tsx --env-file=.env scripts/seed-checklist.ts",
+    "smoke:cutover": "tsx --env-file=.env scripts/smoke-cutover.ts",
+    "load:test": "tsx --env-file=.env scripts/load-test.ts",
+    "rollback:drill": "bash scripts/rollback-drill.sh",
 
     "test": "vitest run",
     "test:api": "vitest run",
