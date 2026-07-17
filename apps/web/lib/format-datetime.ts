@@ -59,6 +59,60 @@ export function todayKeyInAppTz(): string {
   return dateKeyInAppTz(new Date());
 }
 
+/** Parse YYYY-MM-DD as noon UTC (aman untuk aritmetika hari tanpa DST). */
+function parseDateKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+}
+
+function addDaysToDateKey(key: string, days: number): string {
+  const dt = parseDateKey(key);
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dateKeyInAppTz(dt);
+}
+
+function weekdayInAppTz(value: Date | string | number): number {
+  const date = toDate(value);
+  if (!date) return 0;
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIMEZONE,
+    weekday: "short",
+  }).format(date);
+  const map: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  return map[weekday] ?? 0;
+}
+
+/** Senin–Minggu dalam WIB (YYYY-MM-DD). */
+export function weekRangeKeysInAppTz(
+  ref: Date | string | number = new Date(),
+): { start: string; end: string } {
+  const todayKey = dateKeyInAppTz(ref);
+  const mondayOffset = (weekdayInAppTz(ref) + 6) % 7;
+  const start = addDaysToDateKey(todayKey, -mondayOffset);
+  const end = addDaysToDateKey(start, 6);
+  return { start, end };
+}
+
+export function monthKeyInAppTz(value: Date | string | number = new Date()): string {
+  return dateKeyInAppTz(value).slice(0, 7);
+}
+
+export function isDateKeyInRange(
+  key: string,
+  start: string,
+  end: string,
+): boolean {
+  return key >= start && key <= end;
+}
+
 /** Label singkat zona waktu untuk UI */
 export function timezoneLabel(): string {
   return "WIB";

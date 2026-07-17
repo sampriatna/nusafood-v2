@@ -43,7 +43,9 @@ import type {
 
 import {
   dateKeyInAppTz,
+  isDateKeyInRange,
   todayKeyInAppTz,
+  weekRangeKeysInAppTz,
 } from "@/lib/format-datetime";
 
 const statusOptions: { value: TaskStatus | "ALL"; label: string }[] = [
@@ -66,43 +68,20 @@ function getTodayDate(): string {
 }
 
 function isWithinTimePeriod(deadline: string, period: TimePeriod): boolean {
-  const today = new Date();
   const todayDate = getTodayDate();
   const taskDate = getTaskDate(deadline);
 
   if (!taskDate) return false;
 
-  const taskDateObj = new Date(taskDate);
-
   switch (period) {
     case "today":
       return taskDate === todayDate;
     case "week": {
-      const currentDay = today.getDay();
-      const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
-      const weekStart = new Date(today);
-      weekStart.setDate(diff);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 6);
-
-      const start = new Date(
-        weekStart.getFullYear(),
-        weekStart.getMonth(),
-        weekStart.getDate(),
-      );
-      const end = new Date(
-        weekEnd.getFullYear(),
-        weekEnd.getMonth(),
-        weekEnd.getDate(),
-      );
-
-      return taskDateObj >= start && taskDateObj <= end;
+      const { start, end } = weekRangeKeysInAppTz();
+      return isDateKeyInRange(taskDate, start, end);
     }
     case "month":
-      return (
-        taskDateObj.getFullYear() === today.getFullYear() &&
-        taskDateObj.getMonth() === today.getMonth()
-      );
+      return taskDate.slice(0, 7) === todayDate.slice(0, 7);
     default:
       return false;
   }
