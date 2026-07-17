@@ -11,6 +11,8 @@ Script one-way untuk mengimpor template checklist dan tugas berulang dari Google
 - `DATABASE_URL` + `DIRECT_URL` mengarah ke Supabase v2
 - Outlet seed sudah ada (`pnpm db:seed`) — script akan auto-create area/kategori jika belum ada
 - Untuk sumber GAS: `GAS_WEB_APP_URL` + `ADMIN_API_KEY` (sama dengan v1)
+- GAS v1 memvalidasi query param **`admin_secret`** (bukan `api_key`)
+- Di production v1, checklist items tersimpan di **recurring templates** (`TPL-*`), bukan sheet `CHKM-*` terpisah
 
 ---
 
