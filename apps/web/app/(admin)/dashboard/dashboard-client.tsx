@@ -18,7 +18,6 @@ import {
   DashboardSummaryCards,
 } from "@/components/dashboard-summary";
 import { MobileHeader } from "@/components/mobile-header";
-import { StatusBadge } from "@/components/status-badge";
 import { TaskCard, TaskCardSkeleton } from "@/components/task-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,12 +31,10 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  fetchChecklistReports,
   fetchOutlets,
   fetchTasks,
 } from "@/lib/api/client";
 import type {
-  ChecklistReport,
   ChecklistSummary,
   DashboardSummary,
   Task,
@@ -154,30 +151,42 @@ function matchesStatusFilter(
   }
 }
 
-function matchesChecklistStatusFilter(
-  report: ChecklistReport,
-  selectedStatus: TaskStatus | "ALL",
-): boolean {
-  if (selectedStatus === "ALL") return true;
+function isChecklistTask(task: Task): boolean {
+  return (
+    task.checklist_mode === true ||
+    task.task_id.startsWith("CHK-TSK-")
+  );
+}
 
-  switch (selectedStatus) {
-    case "OPEN":
-      return report.status === "OPEN" && !report.is_late;
-    case "SUBMITTED":
-      return report.status === "SUBMITTED";
-    case "DONE":
-      return report.status === "DONE";
-    case "LATE":
-      return report.status === "LATE" || report.is_late;
-    case "REVISI":
-      return report.status === "REVISI";
-    default:
-      return true;
-  }
+function calculateChecklistSummary(taskList: Task[]): ChecklistSummary {
+  const checklistTasks = taskList.filter(isChecklistTask);
+
+  const openStatuses = ["CREATED", "SENT", "WA_FAILED", "OPEN", "OPENED"];
+  const submittedStatuses = [
+    "SUBMITTED",
+    "RESUBMITTED",
+    "WAITING_VERIFICATION",
+  ];
+  const doneStatuses = ["DONE", "VERIFIED"];
+  const revisiStatuses = ["REVISI", "REVISION", "REVISION_REQUESTED"];
+
+  return {
+    total: checklistTasks.length,
+    open: checklistTasks.filter((t) => openStatuses.includes(t.status)).length,
+    submitted: checklistTasks.filter((t) =>
+      submittedStatuses.includes(t.status),
+    ).length,
+    done: checklistTasks.filter((t) => doneStatuses.includes(t.status)).length,
+    late: checklistTasks.filter(
+      (t) => t.status === "LATE" || t.is_late === true,
+    ).length,
+    revisi: checklistTasks.filter((t) => revisiStatuses.includes(t.status))
+      .length,
+  };
 }
 
 function calculateTaskSummary(taskList: Task[]): DashboardSummary {
-  const manualTasks = taskList.filter((t) => !t.checklist_mode);
+  const manualTasks = taskList.filter((t) => !isChecklistTask(t));
 
   const openStatuses = ["CREATED", "SENT", "WA_FAILED", "OPEN", "OPENED"];
   const submittedStatuses = [
@@ -203,20 +212,8 @@ function calculateTaskSummary(taskList: Task[]): DashboardSummary {
   };
 }
 
-function calculateChecklistSummary(reports: ChecklistReport[]): ChecklistSummary {
-  return {
-    total: reports.length,
-    open: reports.filter((r) => r.status === "OPEN" && !r.is_late).length,
-    submitted: reports.filter((r) => r.status === "SUBMITTED").length,
-    done: reports.filter((r) => r.status === "DONE").length,
-    late: reports.filter((r) => r.status === "LATE" || r.is_late).length,
-    revisi: reports.filter((r) => r.status === "REVISI").length,
-  };
-}
-
 export function DashboardClient() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [checklists, setChecklists] = useState<ChecklistReport[]>([]);
   const [outlets, setOutlets] = useState<string[]>([]);
   const [summary, setSummary] = useState<DashboardSummary>({
     total: 0,
@@ -254,27 +251,18 @@ export function DashboardClient() {
     setLoadError(null);
 
     try {
-      const [tasksResult, checklistsResult, outletsResult] = await Promise.all([
-        fetchTasks({ limit: 200 }),
-        fetchChecklistReports(),
+      const [tasksResult, outletsResult] = await Promise.all([
+        fetchTasks({ limit: 500 }),
         fetchOutlets(),
       ]);
 
       if (tasksResult.success && tasksResult.data) {
         setTasks(tasksResult.data);
         setSummary(calculateTaskSummary(tasksResult.data));
+        setChecklistSummary(calculateChecklistSummary(tasksResult.data));
       } else {
         setTasks([]);
         setLoadError(tasksResult.error || "Gagal memuat tugas");
-      }
-
-      if (checklistsResult.success && checklistsResult.data) {
-        setChecklists(checklistsResult.data);
-        setChecklistSummary(
-          calculateChecklistSummary(checklistsResult.data),
-        );
-      } else {
-        setChecklists([]);
       }
 
       if (outletsResult.success && outletsResult.data) {
@@ -296,7 +284,8 @@ export function DashboardClient() {
     setCurrentPage(1);
   }, [selectedOutlet, selectedStatus, searchQuery, timePeriod]);
 
-  const manualTasks = tasks.filter((t) => !t.checklist_mode);
+  const manualTasks = tasks.filter((t) => !isChecklistTask(t));
+  const checklistTasks = tasks.filter(isChecklistTask);
 
   const filteredTasks = manualTasks
     .filter((task) => {
@@ -320,24 +309,21 @@ export function DashboardClient() {
         new Date(a.deadline).getTime() - new Date(b.deadline).getTime(),
     );
 
-  const filteredChecklists = checklists
+  const filteredChecklists = checklistTasks
     .filter((checklist) => {
       if (!isWithinTimePeriod(checklist.deadline, timePeriod)) return false;
 
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        const title = checklist.checklist_title || "";
         const matchesSearch =
-          title.toLowerCase().includes(query) ||
+          checklist.task_title.toLowerCase().includes(query) ||
           checklist.task_id.toLowerCase().includes(query) ||
           checklist.pic_name.toLowerCase().includes(query);
         if (!matchesSearch) return false;
       }
 
       if (!matchesOutlet(checklist.outlet, selectedOutlet)) return false;
-      if (!matchesChecklistStatusFilter(checklist, selectedStatus)) {
-        return false;
-      }
+      if (!matchesStatusFilter(checklist, selectedStatus)) return false;
       return true;
     })
     .sort(
@@ -529,7 +515,7 @@ export function DashboardClient() {
             </TabsTrigger>
             <TabsTrigger value="checklists" className="flex items-center gap-2">
               <ListChecks className="size-4" />
-              Checklist ({checklists.length})
+              Checklist ({checklistTasks.length})
             </TabsTrigger>
           </TabsList>
 
@@ -731,39 +717,7 @@ export function DashboardClient() {
               ) : (
                 <div className="space-y-3">
                   {filteredChecklists.map((checklist) => (
-                    <Link
-                      key={checklist.task_id}
-                      href={`/tasks/${checklist.task_id}`}
-                    >
-                      <Card className="cursor-pointer transition-colors hover:border-primary/50">
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="mb-1 flex items-center gap-2">
-                                <StatusBadge status={checklist.status} />
-                                <span className="text-xs text-muted-foreground">
-                                  {checklist.task_id}
-                                </span>
-                              </div>
-                              <h3 className="truncate font-medium text-foreground">
-                                {checklist.checklist_title}
-                              </h3>
-                              <p className="text-sm text-muted-foreground">
-                                {checklist.outlet} - {checklist.area} | PIC:{" "}
-                                {checklist.pic_name}
-                              </p>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Deadline:{" "}
-                                {new Date(checklist.deadline).toLocaleString(
-                                  "id-ID",
-                                )}
-                              </p>
-                            </div>
-                            <ChevronRight className="size-5 text-muted-foreground" />
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
+                    <TaskCard key={checklist.task_id} task={checklist} />
                   ))}
                 </div>
               )}

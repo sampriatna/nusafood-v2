@@ -1,5 +1,4 @@
 import { AdminPage } from "@/components/admin-page";
-import { MasterDataSyncButton } from "@/components/master-data-sync-button";
 import { authRequired, getSession } from "@/lib/auth";
 import {
   listAreas,
@@ -25,7 +24,6 @@ export default async function StaffSettingsPage() {
 
   return (
     <AdminPage title="Master Staff" backHref="/settings">
-      <MasterDataSyncButton canManage={canManage} />
       <p className="text-sm text-muted-foreground">
         {staff.length} staf · {staff.filter((s) => s.status === "ACTIVE").length}{" "}
         aktif

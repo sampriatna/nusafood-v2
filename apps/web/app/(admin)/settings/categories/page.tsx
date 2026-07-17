@@ -1,5 +1,4 @@
 import { AdminPage } from "@/components/admin-page";
-import { MasterDataSyncButton } from "@/components/master-data-sync-button";
 import { authRequired, getSession } from "@/lib/auth";
 import { listCategories } from "@/lib/services/master-data.service";
 import { CategoriesManager } from "./categories-manager";
@@ -19,7 +18,6 @@ export default async function CategoriesSettingsPage() {
 
   return (
     <AdminPage title="Master Kategori" backHref="/settings">
-      <MasterDataSyncButton canManage={canManage} />
       <p className="text-sm text-muted-foreground">
         {categories.length} kategori terdaftar
       </p>

@@ -8,7 +8,8 @@
     ".": "./src/client.ts",
     "./normalizers": "./src/normalizers.ts",
     "./sync": "./src/sync.ts",
-    "./sync-checklist": "./src/sync-checklist.ts"
+    "./sync-checklist": "./src/sync-checklist.ts",
+    "./v1-full-sync": "./src/v1-full-sync.ts"
   },
 
 

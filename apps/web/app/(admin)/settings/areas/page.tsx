@@ -1,5 +1,4 @@
 import { AdminPage } from "@/components/admin-page";
-import { MasterDataSyncButton } from "@/components/master-data-sync-button";
 import { authRequired, getSession } from "@/lib/auth";
 import { listAreas, listOutlets } from "@/lib/services/master-data.service";
 import { AreasManager } from "./areas-manager";
@@ -20,7 +19,6 @@ export default async function AreasSettingsPage() {
 
   return (
     <AdminPage title="Master Area" backHref="/settings">
-      <MasterDataSyncButton canManage={canManage} />
       <p className="text-sm text-muted-foreground">
         {areas.length} area terdaftar
       </p>

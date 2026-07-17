@@ -7,7 +7,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/** Legacy alias — redirects to full v1 sync. */
+/** Sync semua data operasional v1 → PostgreSQL v2 (master, tasks, recurring, checklist). */
 export async function POST() {
   const auth = await requireAuth(["ADMIN"]);
   if (!auth.ok) return auth.response;
@@ -19,10 +19,10 @@ export async function POST() {
     if (error instanceof V1FullSyncError) {
       return fail(error.message, { code: error.code, status: error.status });
     }
-    console.error("[POST /api/master-data/sync-from-gas]", error);
+    console.error("[POST /api/sync/from-v1]", error);
     return fail(
-      error instanceof Error ? error.message : "Sync master data gagal",
-      { code: "MASTER_DATA_SYNC_FAILED", status: 500 },
+      error instanceof Error ? error.message : "Sync v1 gagal",
+      { code: "V1_FULL_SYNC_FAILED", status: 500 },
     );
   }
 }
