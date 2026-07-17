@@ -1,0 +1,157 @@
+{
+  "checklist_templates": [
+    {
+      "template_id": "CHKM-20260605-001",
+      "template_name": "Checklist Opening Kitchen",
+      "outlet": "KBU",
+      "area": "Dapur",
+      "task_title": "Opening Kitchen",
+      "checklist_title": "CHECKLIST OPENING KITCHEN",
+      "pic_name": "Budi",
+      "pic_wa": "6281234567890",
+      "requires_photo": true,
+      "active_status": true,
+      "created_at": "2026-01-15T08:00:00Z",
+      "updated_at": "2026-01-15T08:00:00Z"
+    },
+    {
+      "template_id": "CHKM-20260605-002",
+      "template_name": "Closing Bar Harian",
+      "outlet": "Kisamen",
+      "area": "Bar",
+      "task_title": "Closing Bar",
+      "checklist_title": "CLOSING BAR HARIAN",
+      "pic_name": "Dewi",
+      "pic_wa": "6281234567891",
+      "requires_photo": true,
+      "active_status": true,
+      "created_at": "2026-01-15T09:00:00Z",
+      "updated_at": "2026-01-15T09:00:00Z"
+    }
+  ],
+  "checklist_items": [
+    {
+      "checklist_item_id": "CHKI-20260605-001",
+      "template_id": "CHKM-20260605-001",
+      "item_order": 1,
+      "item_text": "Cuci seluruh area dapur",
+      "requires_photo": false,
+      "is_required": true,
+      "active_status": true
+    },
+    {
+      "checklist_item_id": "CHKI-20260605-002",
+      "template_id": "CHKM-20260605-001",
+      "item_order": 2,
+      "item_text": "Bersihkan kompor dan hood",
+      "requires_photo": true,
+      "is_required": true,
+      "active_status": true
+    },
+    {
+      "checklist_item_id": "CHKI-20260605-003",
+      "template_id": "CHKM-20260605-001",
+      "item_order": 3,
+      "item_text": "Cek suhu kulkas (di bawah 5°C)",
+      "requires_photo": true,
+      "is_required": true,
+      "active_status": true
+    },
+    {
+      "checklist_item_id": "CHKI-20260605-004",
+      "template_id": "CHKM-20260605-001",
+      "item_order": 4,
+      "item_text": "Siapkan bahan mise en place",
+      "requires_photo": false,
+      "is_required": true,
+      "active_status": true
+    },
+    {
+      "checklist_item_id": "CHKI-20260605-005",
+      "template_id": "CHKM-20260605-001",
+      "item_order": 5,
+      "item_text": "Bersihkan meja prep",
+      "requires_photo": true,
+      "is_required": true,
+      "active_status": true
+    },
+    {
+      "checklist_item_id": "CHKI-20260605-006",
+      "template_id": "CHKM-20260605-001",
+      "item_order": 6,
+      "item_text": "Cek stock bumbu dasar",
+      "requires_photo": false,
+      "is_required": true,
+      "active_status": true
+    },
+    {
+      "checklist_item_id": "CHKI-20260605-007",
+      "template_id": "CHKM-20260605-001",
+      "item_order": 7,
+      "item_text": "Foto kondisi dapur siap operasi",
+      "requires_photo": true,
+      "is_required": true,
+      "active_status": true
+    },
+    {
+      "checklist_item_id": "CHKI-20260605-008",
+      "template_id": "CHKM-20260605-002",
+      "item_order": 1,
+      "item_text": "Hitung stock minuman",
+      "requires_photo": true,
+      "is_required": true,
+      "active_status": true
+    },
+    {
+      "checklist_item_id": "CHKI-20260605-009",
+      "template_id": "CHKM-20260605-002",
+      "item_order": 2,
+      "item_text": "Bersihkan meja bar",
+      "requires_photo": false,
+      "is_required": true,
+      "active_status": true
+    }
+  ],
+  "recurring_templates": [
+    {
+      "template_id": "REC-20260605-001",
+      "template_name": "Checklist Opening Dapur",
+      "outlet": "KBU",
+      "area": "Dapur",
+      "category": "Kitchen",
+      "pic_name": "Budi",
+      "pic_wa": "6281234567890",
+      "task_title": "Checklist Opening Dapur",
+      "task_description": "Checklist pembukaan dapur setiap pagi",
+      "repeat_type": "daily",
+      "repeat_days": ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"],
+      "repeat_time": "07:00",
+      "deadline_time": "09:00",
+      "requires_photo": true,
+      "active_status": true,
+      "template_version": 1,
+      "created_at": "2026-01-10T08:00:00Z",
+      "updated_at": "2026-01-10T08:00:00Z"
+    },
+    {
+      "template_id": "REC-20260605-002",
+      "template_name": "Cek Stock Mingguan",
+      "outlet": "KBU",
+      "area": "Gudang",
+      "category": "Stock",
+      "pic_name": "Dewi",
+      "pic_wa": "6281234567891",
+      "task_title": "Cek Stock Bahan Baku",
+      "task_description": "Cek dan catat stock bahan baku di gudang",
+      "repeat_type": "weekly",
+      "repeat_days": ["senin"],
+      "repeat_time": "10:00",
+      "deadline_time": "12:00",
+      "requires_photo": true,
+      "active_status": true,
+      "template_version": 1,
+      "created_at": "2026-01-10T08:00:00Z",
+      "updated_at": "2026-01-10T08:00:00Z"
+    }
+  ]
+}
