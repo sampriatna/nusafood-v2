@@ -185,6 +185,17 @@ async function loadFromGas(): Promise<ChecklistSyncPayload> {
   };
 }
 
+async function assertDatabaseReachable() {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `DATABASE_URL tidak valid atau Supabase menolak koneksi. Update .env dari Supabase Dashboard (Settings → Database), lalu coba lagi.\n${message}`,
+    );
+  }
+}
+
 async function main() {
   const file = getArg("--file") ?? process.env.CHECKLIST_SYNC_FILE;
   const useGas = process.argv.includes("--gas");
@@ -237,6 +248,9 @@ async function main() {
     console.log(JSON.stringify({ source, exported: abs, counts: { templateCount, itemCount, recurringCount } }, null, 2));
     return;
   }
+
+  await assertDatabaseReachable();
+  console.log("[migrate] Database OK — writing to Supabase…");
 
   const result = await syncChecklistPayloadToDb(prisma, payload, { source });
   console.log(JSON.stringify({ source, result }, null, 2));
