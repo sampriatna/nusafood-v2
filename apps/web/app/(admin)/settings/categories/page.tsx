@@ -1,4 +1,5 @@
-import { SettingsBackLink } from "@/components/settings-back-link";
+import { AdminPage } from "@/components/admin-page";
+import { Card, CardContent } from "@/components/ui/card";
 import { listCategories } from "@/lib/services/master-data.service";
 
 export const dynamic = "force-dynamic";
@@ -7,23 +8,19 @@ export default async function CategoriesSettingsPage() {
   const categories = await listCategories();
 
   return (
-    <main className="min-h-screen bg-background px-4 py-8 sm:px-6">
-      <div className="mx-auto max-w-xl space-y-6">
-        <div className="space-y-2">
-          <SettingsBackLink />
-          <h1 className="text-2xl font-semibold">Master Kategori</h1>
-          <p className="text-sm text-muted-foreground">
-            {categories.length} kategori terdaftar
-          </p>
-        </div>
-        <ul className="divide-y divide-border rounded-lg border border-border bg-card text-sm">
+    <AdminPage title="Master Kategori" backHref="/settings">
+      <p className="text-sm text-muted-foreground">
+        {categories.length} kategori terdaftar
+      </p>
+      <Card>
+        <CardContent className="divide-y divide-border p-0">
           {categories.map((category) => (
-            <li key={category.name} className="px-4 py-3 font-medium">
+            <div key={category.name} className="px-4 py-3 text-sm font-medium">
               {category.name}
-            </li>
+            </div>
           ))}
-        </ul>
-      </div>
-    </main>
+        </CardContent>
+      </Card>
+    </AdminPage>
   );
 }

@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { Settings } from "lucide-react";
 import { LogoutButton } from "@/components/logout-button";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { getDashboardSummary } from "@/lib/services/dashboard.service";
 import { listTasks } from "@/lib/services/task.service";
 
@@ -32,7 +34,15 @@ export default async function DashboardPage() {
               <p className="text-sm text-muted-foreground">TaskNF3 v2 · staging</p>
               <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
             </div>
-            <LogoutButton />
+            <div className="flex flex-wrap items-center gap-2">
+              <LogoutButton />
+              <Button asChild variant="outline" size="sm">
+                <Link href="/settings">
+                  <Settings className="mr-1.5 size-4" />
+                  Pengaturan
+                </Link>
+              </Button>
+            </div>
           </div>
           <p className="text-sm text-muted-foreground">
             Data dari PostgreSQL. Sync via{" "}
