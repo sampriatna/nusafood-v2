@@ -41,6 +41,11 @@ import type {
   TaskStatus,
 } from "@nusafood/types";
 
+import {
+  dateKeyInAppTz,
+  todayKeyInAppTz,
+} from "@/lib/format-datetime";
+
 const statusOptions: { value: TaskStatus | "ALL"; label: string }[] = [
   { value: "ALL", label: "Semua Status" },
   { value: "OPEN", label: "Belum Dikerjakan" },
@@ -53,17 +58,11 @@ const statusOptions: { value: TaskStatus | "ALL"; label: string }[] = [
 type TimePeriod = "today" | "week" | "month";
 
 function getTaskDate(deadline: string): string {
-  const date = new Date(deadline);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().split("T")[0];
+  return dateKeyInAppTz(deadline);
 }
 
 function getTodayDate(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return todayKeyInAppTz();
 }
 
 function isWithinTimePeriod(deadline: string, period: TimePeriod): boolean {

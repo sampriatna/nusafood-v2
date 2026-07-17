@@ -13,6 +13,7 @@ import {
 import { PhotoUploader } from "@/components/photo-uploader";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { formatDateTimeId } from "@/lib/format-datetime";
 import type { Task } from "@nusafood/types";
 
 type PageState = "loading" | "error" | "form" | "submitting" | "success";
@@ -211,15 +212,14 @@ export function StaffReportClient({ taskId, token }: Props) {
               <>
                 <p className="text-base font-bold text-warning-foreground">
                   Deadline:{" "}
-                  {deadlineDate.toLocaleDateString("id-ID", {
+                  {formatDateTimeId(deadlineDate, {
                     weekday: "short",
                     day: "numeric",
                     month: "short",
-                  })}{" "}
-                  {deadlineDate.toLocaleTimeString("id-ID", {
                     hour: "2-digit",
                     minute: "2-digit",
-                  })}
+                  })}{" "}
+                  WIB
                 </p>
                 <p className="text-sm text-warning-foreground/80">
                   Sisa waktu:{" "}

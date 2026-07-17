@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { formatDateTimeId } from "@/lib/format-datetime";
 import { StatusBadge } from "@/components/status-badge";
 import { getTaskById } from "@/lib/services/task.service";
 import { TaskActions } from "./task-actions";
@@ -48,7 +49,7 @@ export default async function TaskDetailPage({ params }: Props) {
           </div>
           <div>
             <dt className="text-muted-foreground">Deadline</dt>
-            <dd>{new Date(task.deadline).toLocaleString("id-ID")}</dd>
+            <dd>{formatDateTimeId(task.deadline)} WIB</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Deskripsi</dt>

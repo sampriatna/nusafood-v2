@@ -5,6 +5,11 @@ import Link from "next/link";
 import { ChevronRight, Clock, MapPin, User } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Card } from "@/components/ui/card";
+import {
+  dateKeyInAppTz,
+  formatDateId,
+  formatTimeId,
+} from "@/lib/format-datetime";
 import { cn } from "@/lib/utils";
 
 interface TaskCardProps {
@@ -69,14 +74,8 @@ export function TaskCard({ task, className }: TaskCardProps) {
             >
               <Clock className="size-4 shrink-0" />
               <span>
-                {deadlineDate.toLocaleDateString("id-ID", {
-                  day: "numeric",
-                  month: "short",
-                })}{" "}
-                {deadlineDate.toLocaleTimeString("id-ID", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {formatDateId(deadlineDate)}{" "}
+                {formatTimeId(deadlineDate)} WIB
               </span>
             </div>
           </div>
