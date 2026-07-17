@@ -1,6 +1,5 @@
 import { fail, ok } from "@/lib/api/response";
 import { getTaskByToken } from "@/lib/services/task.service";
-import { checkGasFallback } from "@/lib/services/gas-adapter.service";
 
 export const dynamic = "force-dynamic";
 
@@ -19,27 +18,14 @@ export async function GET(request: Request, { params }: Params) {
     }
 
     const task = await getTaskByToken(taskId, token);
-    if (task) {
-      return ok(task);
+    if (!task) {
+      return fail("Tugas tidak ditemukan", {
+        code: "TASK_NOT_FOUND",
+        status: 404,
+      });
     }
 
-    // Fase 1–3: jika tidak ada di DB, catat bahwa GAS fallback tersedia
-    // (implementasi fetch GAS penuh di Sprint 3/4).
-    const gas = await checkGasFallback();
-    if (gas === "ok" || gas === "degraded") {
-      return fail(
-        "Tugas belum ada di database v2. Fallback GAS akan diaktifkan di fase berikutnya.",
-        {
-          code: "GAS_FALLBACK_PENDING",
-          status: 404,
-        },
-      );
-    }
-
-    return fail("Tugas tidak ditemukan", {
-      code: "TASK_NOT_FOUND",
-      status: 404,
-    });
+    return ok(task);
   } catch (error) {
     console.error("[GET /api/tasks/:taskId/public]", error);
     return fail("Gagal mengambil tugas publik", {

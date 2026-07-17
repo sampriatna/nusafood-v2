@@ -117,6 +117,36 @@ export function createApiClient(options: ApiClientOptions = {}) {
           `/api/tasks/${taskId}/resend-wa`,
           { method: "POST" },
         ),
+      submit: (
+        taskId: string,
+        payload: {
+          token: string;
+          after_photo_url: string;
+          staff_note?: string;
+        },
+      ) =>
+        request<Task>(`/api/tasks/${taskId}/submit`, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }),
+    },
+    uploads: {
+      photo: async (form: FormData) => {
+        const res = await fetch(`${baseUrl}/api/uploads/photo`, {
+          method: "POST",
+          body: form,
+          headers: options.getToken
+            ? {
+                Authorization: `Bearer ${(await options.getToken()) ?? ""}`,
+              }
+            : undefined,
+        });
+        return parseJson<{
+          url: string;
+          size_bytes: number;
+          storage: string;
+        }>(res);
+      },
     },
     staff: {
       list: (filters?: { outlet?: string; status?: string }) => {

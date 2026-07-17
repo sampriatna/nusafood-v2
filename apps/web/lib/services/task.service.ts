@@ -1,7 +1,13 @@
 import type { Prisma, TaskStatus } from "@nusafood/database";
 import type { Task, TaskFilters } from "@nusafood/types";
+import { asString, normalizeStatus } from "@nusafood/database/normalizers";
 import { prisma } from "@/lib/db";
 import { mapTaskToApi } from "@/lib/mappers/task";
+import {
+  callGasAction,
+  isGasEnabled,
+} from "@/lib/services/gas-adapter.service";
+
 
 const OPEN_STATUSES: TaskStatus[] = [
   "CREATED",
@@ -101,6 +107,11 @@ export async function getTaskById(taskId: string): Promise<Task | null> {
   return task ? mapTaskToApi(task) : null;
 }
 
+/**
+ * Adapter baca tugas by token:
+ * 1) PostgreSQL v2
+ * 2) Fallback GAS v1 (tugas historis) jika enabled
+ */
 export async function getTaskByToken(
   taskId: string,
   token: string,
@@ -108,5 +119,47 @@ export async function getTaskByToken(
   const task = await prisma.task.findFirst({
     where: { taskId, token },
   });
-  return task ? mapTaskToApi(task) : null;
+  if (task) return mapTaskToApi(task);
+
+  if (!isGasEnabled()) return null;
+
+  const gas = await callGasAction<Record<string, unknown>>(
+    "getTaskByToken",
+    { task_id: taskId, token },
+    "GET",
+  );
+
+  if (!gas.success || !gas.data) return null;
+
+  const data = gas.data;
+  const mapped: Task = {
+    task_id: asString(data.task_id) || taskId,
+    token: asString(data.token) || token,
+    created_at: asString(data.created_at) || new Date().toISOString(),
+    created_by: asString(data.created_by),
+    outlet: asString(data.outlet),
+    area: asString(data.area),
+    category: asString(data.category),
+    task_title: asString(data.task_title),
+    task_description: asString(data.task_description),
+    priority: (asString(data.priority) || "Medium") as Task["priority"],
+    pic_name: asString(data.pic_name),
+    pic_wa: asString(data.pic_wa),
+    deadline: asString(data.deadline) || new Date().toISOString(),
+    before_photo_url: asString(data.before_photo_url) || undefined,
+    status: normalizeStatus(data.status) as Task["status"],
+    report_link: asString(data.report_link),
+    after_photo_url: asString(data.after_photo_url) || undefined,
+    staff_note: asString(data.staff_note) || undefined,
+    is_late: Boolean(data.is_late === true || data.is_late === "YES"),
+    last_updated:
+      asString(data.last_updated || data.updated_at) ||
+      new Date().toISOString(),
+    checklist_mode:
+      data.checklist_mode === true || data.checklist_mode === "YES",
+    source_version: "v1",
+  };
+
+  return mapped;
 }
+

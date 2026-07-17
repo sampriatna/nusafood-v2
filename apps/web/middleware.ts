@@ -7,6 +7,8 @@ const PUBLIC_PATHS = [
   "/checklist",
   "/api/health",
   "/api/auth/login",
+  "/api/uploads/photo",
+  "/uploads",
 ];
 
 function isPublicPath(pathname: string) {
@@ -16,22 +18,24 @@ function isPublicPath(pathname: string) {
   );
 }
 
+function isPublicTaskApi(pathname: string) {
+  return (
+    Boolean(pathname.match(/^\/api\/tasks\/[^/]+\/public/)) ||
+    Boolean(pathname.match(/^\/api\/tasks\/[^/]+\/open/)) ||
+    Boolean(pathname.match(/^\/api\/tasks\/[^/]+\/submit/)) ||
+    Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/public/))
+  );
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (isPublicPath(pathname)) {
+  if (isPublicPath(pathname) || isPublicTaskApi(pathname)) {
     return NextResponse.next();
   }
 
-  if (
-    pathname.match(/^\/api\/tasks\/[^/]+\/public/) ||
-    pathname.match(/^\/api\/checklist-reports\/[^/]+\/public/)
-  ) {
-    return NextResponse.next();
-  }
-
-  // Sprint 2: read UI/API dibuka tanpa session agar staging bisa diuji.
-  // Set AUTH_REQUIRED=true untuk enforce cookie nusa_session (Sprint 6).
+  // Sprint 2–4: admin UI/API terbuka tanpa session untuk uji staging.
+  // Set AUTH_REQUIRED=true mulai Sprint 6.
   if (process.env.AUTH_REQUIRED !== "true") {
     return NextResponse.next();
   }

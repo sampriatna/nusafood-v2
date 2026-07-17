@@ -62,13 +62,31 @@ export default async function TaskDetailPage({ params }: Props) {
               <dd>{task.staff_note}</dd>
             </div>
           ) : null}
+          {task.after_photo_url ? (
+            <div>
+              <dt className="mb-2 text-muted-foreground">Foto bukti</dt>
+              <dd>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={task.after_photo_url}
+                  alt="Foto bukti"
+                  className="max-h-72 w-full rounded-md border border-border object-cover"
+                />
+              </dd>
+            </div>
+          ) : null}
           {task.report_link ? (
             <div>
               <dt className="text-muted-foreground">Link laporan</dt>
-              <dd className="break-all font-mono text-xs">{task.report_link}</dd>
+              <dd className="break-all font-mono text-xs">
+                <a href={task.report_link} className="hover:underline">
+                  {task.report_link}
+                </a>
+              </dd>
             </div>
           ) : null}
         </dl>
+
         <TaskActions taskId={task.task_id} status={task.status} />
       </div>
     </main>

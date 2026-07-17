@@ -317,10 +317,57 @@ export async function createTask(
 export async function markTaskOpened(taskId: string, token: string): Promise<Task> {
   const task = await prisma.task.findFirst({ where: { taskId, token } });
   if (!task) {
+    if (isGasEnabled()) {
+      const gas = await callGasAction("markOpened", {
+        task_id: taskId,
+        token,
+      });
+      await logSyncOperation({
+        operation: "mark_opened",
+        entityType: "task",
+        entityId: taskId,
+        v1Status: gas.success ? "success" : "failed",
+        v2Status: null,
+        v1Response: gas.raw ?? { error: gas.error },
+        errorMessage: gas.success
+          ? "Tugas hanya di GAS"
+          : gas.error,
+      });
+      if (!gas.success) {
+        throw new TaskWriteError(
+          gas.error ?? "Tugas tidak ditemukan",
+          "TASK_NOT_FOUND",
+          404,
+        );
+      }
+      // Minimal success payload for gas-only open
+      return {
+        task_id: taskId,
+        token,
+        created_at: new Date().toISOString(),
+        created_by: "",
+        outlet: "",
+        area: "",
+        category: "",
+        task_title: "",
+        task_description: "",
+        priority: "Medium",
+        pic_name: "",
+        pic_wa: "",
+        deadline: new Date().toISOString(),
+        status: "OPENED",
+        report_link: "",
+        is_late: false,
+        last_updated: new Date().toISOString(),
+        source_version: "v1",
+      };
+    }
     throw new TaskWriteError("Tugas tidak ditemukan", "TASK_NOT_FOUND", 404);
   }
 
-  const openable = ["CREATED", "SENT", "OPEN", "WA_FAILED"].includes(task.status);
+  const openable = ["CREATED", "SENT", "OPEN", "WA_FAILED"].includes(
+    task.status,
+  );
   const updated = await prisma.task.update({
     where: { id: task.id },
     data: {
@@ -328,7 +375,6 @@ export async function markTaskOpened(taskId: string, token: string): Promise<Tas
       openedAt: task.openedAt ?? new Date(),
     },
   });
-
 
   await writeAuditLog({
     entityType: "task",
@@ -352,6 +398,7 @@ export async function markTaskOpened(taskId: string, token: string): Promise<Tas
 
   return mapTaskToApi(updated);
 }
+
 
 export async function verifyTask(
   taskId: string,
@@ -449,6 +496,158 @@ export async function requestRevision(
       v2Status: "success",
       v1Response: gas.raw ?? { error: gas.error },
       errorMessage: gas.success ? null : gas.error,
+    });
+  }
+
+  return mapTaskToApi(updated);
+}
+
+export async function submitTaskReport(input: {
+  taskId: string;
+  token: string;
+  afterPhotoUrl?: string;
+  staffNote?: string;
+}): Promise<Task> {
+  if (!input.afterPhotoUrl?.trim()) {
+    throw new TaskWriteError("Foto bukti wajib diupload", "PHOTO_REQUIRED", 422);
+  }
+
+  const task = await prisma.task.findFirst({
+    where: { taskId: input.taskId, token: input.token },
+  });
+
+  if (!task) {
+    // Tugas mungkin hanya di GAS (historis) — coba dual-write submit ke GAS saja
+    if (isGasEnabled()) {
+      const gas = await callGasAction("submitTaskReport", {
+        task_id: input.taskId,
+        token: input.token,
+        after_photo_url: input.afterPhotoUrl,
+        staff_note: input.staffNote,
+        // Kompatibilitas v1 yang masih menerima base64 field kosong
+        after_photo_base64: "",
+      });
+      await logSyncOperation({
+        operation: "submit_report",
+        entityType: "task",
+        entityId: input.taskId,
+        v1Status: gas.success ? "success" : "failed",
+        v2Status: "failed",
+        v1Response: gas.raw ?? { error: gas.error },
+        errorMessage: gas.success
+          ? "Tugas hanya di GAS (belum di DB v2)"
+          : gas.error,
+      });
+      if (!gas.success) {
+        throw new TaskWriteError(
+          gas.error ?? "Gagal submit ke sistem lama",
+          "GAS_FALLBACK_FAILED",
+          502,
+        );
+      }
+      // Kembalikan shape minimal dari GAS bila ada
+      if (gas.data && typeof gas.data === "object") {
+        const data = gas.data as Record<string, unknown>;
+        return {
+          task_id: input.taskId,
+          token: input.token,
+          created_at: asString(data.created_at) || new Date().toISOString(),
+          created_by: asString(data.created_by),
+          outlet: asString(data.outlet),
+          area: asString(data.area),
+          category: asString(data.category),
+          task_title: asString(data.task_title),
+          task_description: asString(data.task_description),
+          priority: (asString(data.priority) || "Medium") as Task["priority"],
+          pic_name: asString(data.pic_name),
+          pic_wa: asString(data.pic_wa),
+          deadline: asString(data.deadline) || new Date().toISOString(),
+          status: "SUBMITTED",
+          report_link: asString(data.report_link),
+          after_photo_url: input.afterPhotoUrl,
+          staff_note: input.staffNote,
+          is_late: false,
+          last_updated: new Date().toISOString(),
+          source_version: "v1",
+        };
+      }
+    }
+
+    throw new TaskWriteError("Tugas tidak ditemukan", "TASK_NOT_FOUND", 404);
+  }
+
+  const terminal = ["DONE", "VERIFIED"].includes(task.status);
+  if (terminal) {
+    throw new TaskWriteError(
+      "Tugas sudah selesai diverifikasi",
+      "TASK_ALREADY_DONE",
+      422,
+    );
+  }
+
+  const isLate = new Date() > task.deadline;
+  const nextStatus =
+    task.status === "REVISION_REQUESTED" ||
+    task.status === "REVISI" ||
+    task.status === "REVISION"
+      ? "RESUBMITTED"
+      : "SUBMITTED";
+
+  const updated = await prisma.task.update({
+    where: { id: task.id },
+    data: {
+      status: nextStatus,
+      afterPhotoUrl: input.afterPhotoUrl,
+      staffNote: input.staffNote?.trim() || null,
+      submittedAt: new Date(),
+      isLate,
+    },
+  });
+
+  await writeAuditLog({
+    entityType: "task",
+    entityId: input.taskId,
+    action: "submitted",
+    actorType: "staff",
+    newValue: {
+      after_photo_url: input.afterPhotoUrl,
+      staff_note: input.staffNote,
+      status: nextStatus,
+    },
+  });
+
+  if (dualWriteEnabled() && isGasEnabled()) {
+    const gas = await callGasAction("submitTaskReport", {
+      task_id: input.taskId,
+      token: input.token,
+      after_photo_url: input.afterPhotoUrl,
+      staff_note: input.staffNote,
+      after_photo_base64: "",
+    });
+    await logSyncOperation({
+      operation: "submit_report",
+      entityType: "task",
+      entityId: input.taskId,
+      v1Status: gas.success ? "success" : "failed",
+      v2Status: "success",
+      v1Response: gas.raw ?? { error: gas.error },
+      v2Response: { status: nextStatus },
+      errorMessage: gas.success ? null : gas.error,
+    });
+    if (gas.success) {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: { gasSyncedAt: new Date() },
+      });
+    }
+  } else {
+    await logSyncOperation({
+      operation: "submit_report",
+      entityType: "task",
+      entityId: input.taskId,
+      v1Status: null,
+      v2Status: "success",
+      v2Response: { status: nextStatus },
     });
   }
 
