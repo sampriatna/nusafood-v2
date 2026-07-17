@@ -13,6 +13,7 @@ Mulai dari [`docs/V2_README.md`](./docs/V2_README.md), lalu:
 4. [Struktur repo](./docs/V2_REPO_STRUCTURE.md)
 5. [Rollback plan](./docs/V2_ROLLBACK_PLAN.md)
 6. [Sprint 7 cutover prep](./docs/SPRINT7_CUTOVER.md)
+7. [Checklist go-live per role](./docs/GO_LIVE_CHECKLIST.md)
 
 ## Struktur
 
