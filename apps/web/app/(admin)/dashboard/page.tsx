@@ -42,6 +42,15 @@ export default async function DashboardPage() {
             <Link href="/tasks/new" className="text-primary hover:underline">
               + Buat tugas
             </Link>
+            <Link href="/settings" className="text-primary hover:underline">
+              Pengaturan
+            </Link>
+            <Link
+              href="/settings/recurring-tasks"
+              className="text-muted-foreground hover:underline"
+            >
+              Tugas berulang
+            </Link>
             <Link
               href="/settings/sync-logs"
               className="text-muted-foreground hover:underline"

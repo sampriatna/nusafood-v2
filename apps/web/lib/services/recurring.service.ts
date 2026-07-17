@@ -145,6 +145,33 @@ export async function createRecurringTemplate(input: {
     include,
   });
 
+  await prisma.checklistTemplate.upsert({
+    where: { templateId: row.templateId },
+    create: {
+      templateId: row.templateId,
+      templateName: row.templateName,
+      outletId: row.outletId,
+      areaId: row.areaId,
+      taskTitle: row.taskTitle,
+      checklistTitle: row.taskTitle,
+      picName: row.picName,
+      picWa: row.picWa,
+      requiresPhoto: row.requiresPhoto,
+      activeStatus: row.activeStatus,
+    },
+    update: {
+      templateName: row.templateName,
+      outletId: row.outletId,
+      areaId: row.areaId,
+      taskTitle: row.taskTitle,
+      checklistTitle: row.taskTitle,
+      picName: row.picName,
+      picWa: row.picWa,
+      requiresPhoto: row.requiresPhoto,
+      activeStatus: row.activeStatus,
+    },
+  });
+
   return mapRecurring(row);
 }
 
@@ -160,5 +187,11 @@ export async function toggleRecurringTemplate(templateId: string) {
     data: { activeStatus: !row.activeStatus },
     include,
   });
+
+  await prisma.checklistTemplate.updateMany({
+    where: { templateId },
+    data: { activeStatus: updated.activeStatus },
+  });
+
   return mapRecurring(updated);
 }

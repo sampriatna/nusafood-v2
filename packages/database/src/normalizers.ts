@@ -404,7 +404,7 @@ export interface NormalizedRecurringTemplateRow {
   updatedAt: Date | null;
 }
 
-function normalizeRepeatDays(value: unknown, repeatType?: string): string[] {
+function normalizeRepeatDays(value: unknown, repeatType?: unknown): string[] {
   const allDays = [
     "senin",
     "selasa",
@@ -423,6 +423,7 @@ function normalizeRepeatDays(value: unknown, repeatType?: string): string[] {
     "6": "sabtu",
     "7": "minggu",
   };
+  const type = asString(repeatType, "daily").toLowerCase();
 
   if (Array.isArray(value)) {
     return value
@@ -435,7 +436,6 @@ function normalizeRepeatDays(value: unknown, repeatType?: string): string[] {
 
   const raw = asString(value);
   if (!raw || raw.includes("[Ljava.lang.Object")) {
-    const type = asString(repeatType, "daily").toLowerCase();
     return type === "daily" || type === "weekdays" ? allDays : [];
   }
 

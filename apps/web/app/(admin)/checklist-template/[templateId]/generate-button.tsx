@@ -3,15 +3,25 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 
-export function GenerateChecklistButton({ templateId }: { templateId: string }) {
+type Props = {
+  templateId: string;
+  picName: string;
+  picWa: string;
+};
+
+export function GenerateChecklistButton({ templateId, picName, picWa }: Props) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-4">
+      <p className="text-sm">
+        Kirim checklist ke <span className="font-medium">{picName}</span> (
+        {picWa})
+      </p>
       <Button
-        disabled={pending}
+        disabled={pending || !picName || !picWa}
         onClick={() => {
           setError(null);
           setLink(null);
@@ -21,8 +31,8 @@ export function GenerateChecklistButton({ templateId }: { templateId: string }) 
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 template_id: templateId,
-                pic_name: "Staff Uji",
-                pic_wa: "628123456789",
+                pic_name: picName,
+                pic_wa: picWa,
               }),
             });
             const json = (await res.json()) as {
@@ -43,12 +53,17 @@ export function GenerateChecklistButton({ templateId }: { templateId: string }) 
           });
         }}
       >
-        {pending ? "Generating…" : "Generate checklist untuk staff"}
+        {pending ? "Generating…" : "Kirim Checklist ke Staff"}
       </Button>
       {link ? (
         <p className="break-all text-sm">
           Link staff:{" "}
-          <a href={link} className="text-primary underline" target="_blank" rel="noreferrer">
+          <a
+            href={link}
+            className="text-primary underline"
+            target="_blank"
+            rel="noreferrer"
+          >
             {link}
           </a>
         </p>
