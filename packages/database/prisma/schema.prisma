@@ -3,8 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Supabase: pooler (6543) di DATABASE_URL; session/direct di DIRECT_URL untuk migrate
+  directUrl = env("DIRECT_URL")
 }
 
 enum StaffRole {
