@@ -74,6 +74,14 @@ export function TaskDetailClient({ task: initialTask }: Props) {
   );
   const canRemind = openStatuses.includes(task.status);
 
+  const showBeforePhoto = Boolean(task.before_photo_url);
+  const showAfterPhoto =
+    Boolean(task.after_photo_url) ||
+    ["SUBMITTED", "RESUBMITTED", "WAITING_VERIFICATION", "DONE", "VERIFIED"].includes(
+      task.status,
+    );
+  const showPhotoSection = showBeforePhoto || showAfterPhoto;
+
   const timeline: TimelineEvent[] = [
     {
       label: "Dibuat",
@@ -291,47 +299,51 @@ export function TaskDetailClient({ task: initialTask }: Props) {
           ) : null}
         </Card>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="p-3">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">
-              Foto Before
-            </p>
-            {task.before_photo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={task.before_photo_url}
-                alt="Before"
-                className="aspect-video w-full rounded-lg object-cover"
-              />
-            ) : (
-              <div className="flex aspect-video w-full items-center justify-center rounded-lg bg-muted">
-                <span className="text-xs text-muted-foreground">
-                  Tidak ada foto
-                </span>
-              </div>
-            )}
-          </Card>
+        {showPhotoSection ? (
+          <div
+            className={
+              showBeforePhoto && showAfterPhoto
+                ? "grid grid-cols-2 gap-3"
+                : "grid grid-cols-1 gap-3"
+            }
+          >
+            {showBeforePhoto ? (
+              <Card className="p-3">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                  Foto Before
+                </p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={task.before_photo_url}
+                  alt="Before"
+                  className="aspect-video w-full rounded-lg object-cover"
+                />
+              </Card>
+            ) : null}
 
-          <Card className="p-3">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">
-              Foto After
-            </p>
-            {task.after_photo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={task.after_photo_url}
-                alt="After"
-                className="aspect-video w-full rounded-lg object-cover"
-              />
-            ) : (
-              <div className="flex aspect-video w-full items-center justify-center rounded-lg bg-muted">
-                <span className="text-xs text-muted-foreground">
-                  Belum ada foto
-                </span>
-              </div>
-            )}
-          </Card>
-        </div>
+            {showAfterPhoto ? (
+              <Card className="p-3">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                  Foto After
+                </p>
+                {task.after_photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={task.after_photo_url}
+                    alt="After"
+                    className="aspect-video w-full rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="flex aspect-video w-full items-center justify-center rounded-lg bg-muted">
+                    <span className="text-xs text-muted-foreground">
+                      Belum ada foto
+                    </span>
+                  </div>
+                )}
+              </Card>
+            ) : null}
+          </div>
+        ) : null}
 
         {task.staff_note ? (
           <Card className="p-4">
