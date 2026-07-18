@@ -29,7 +29,7 @@ import {
   logSyncOperation,
   writeAuditLog,
 } from "@/lib/services/dual-write.service";
-import { TaskWriteError } from "@/lib/services/task-write.service";
+import { TaskWriteError } from "@/lib/services/task-errors";
 
 export class ChecklistError extends TaskWriteError {}
 
