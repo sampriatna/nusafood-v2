@@ -1,6 +1,10 @@
 import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
+  OutletAccessError,
+  assertChecklistTemplateOutletAccess,
+} from "@/lib/outlet-scope";
+import {
   ChecklistError,
   generateChecklistReport,
 } from "@/lib/services/checklist.service";
@@ -21,6 +25,7 @@ export async function POST(request: Request) {
     if (!body.template_id) {
       return fail("template_id wajib", { status: 400 });
     }
+    await assertChecklistTemplateOutletAccess(auth.session!, body.template_id);
     const data = await generateChecklistReport({
       template_id: body.template_id,
       pic_name: body.pic_name,
@@ -29,6 +34,9 @@ export async function POST(request: Request) {
     });
     return ok(data, undefined, { status: 201 });
   } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     if (error instanceof ChecklistError) {
       return fail(error.message, { code: error.code, status: error.status });
     }

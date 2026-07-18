@@ -84,12 +84,14 @@ export async function POST(request: Request) {
     await touchLastLogin(user.id)
 
     const displayName = user.staff?.name || user.username
+    const outlet = user.staff?.outlet
     const token = await createSessionToken({
       userId: user.userId,
       userName: displayName,
       userRole: user.role,
       staffId: user.staffId ?? undefined,
-      userOutlet: undefined,
+      userOutlet: outlet?.code,
+      userOutletId: outlet?.id,
     })
 
     const response = ok({
@@ -97,7 +99,7 @@ export async function POST(request: Request) {
       staff_id: user.staffId,
       name: displayName,
       role: user.role,
-      outlet: null,
+      outlet: outlet?.code ?? null,
     })
     response.cookies.set(SESSION_COOKIE_NAME, token, cookieOptions(60 * 60 * 12))
     return response

@@ -25,7 +25,7 @@ type UserRow = {
   lastLogin: Date | null
   createdAt: Date
   updatedAt: Date
-  staff?: { name: string } | null
+  staff?: { name: string; outlet?: { id: string; code: string; name: string } } | null
 }
 
 function toPublic(user: UserRow): PublicUser {
@@ -43,7 +43,9 @@ function toPublic(user: UserRow): PublicUser {
   }
 }
 
-const withStaff = { staff: { select: { name: true } } } as const
+const withStaff = {
+  staff: { select: { name: true, outlet: { select: { id: true, code: true, name: true } } } },
+} as const
 
 export async function listUsers(): Promise<PublicUser[]> {
   const rows = await prisma.userAccount.findMany({

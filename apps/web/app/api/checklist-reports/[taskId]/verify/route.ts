@@ -1,6 +1,10 @@
 import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
+  OutletAccessError,
+  assertTaskOutletAccess,
+} from "@/lib/outlet-scope";
+import {
   ChecklistError,
   verifyChecklistReport,
 } from "@/lib/services/checklist.service";
@@ -15,6 +19,7 @@ export async function POST(request: Request, { params }: Params) {
 
   try {
     const { taskId } = await params;
+    await assertTaskOutletAccess(auth.session!, taskId);
     const body = (await request.json().catch(() => ({}))) as {
       note?: string;
       verified_by?: string;
@@ -26,6 +31,9 @@ export async function POST(request: Request, { params }: Params) {
     );
     return ok(data);
   } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     if (error instanceof ChecklistError) {
       return fail(error.message, { code: error.code, status: error.status });
     }

@@ -2,6 +2,10 @@ import type { UpdateStaffPayload } from "@nusafood/types";
 import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
+  OutletAccessError,
+  assertStaffOutletAccess,
+} from "@/lib/outlet-scope";
+import {
   StaffWriteError,
   getStaffById,
   updateStaff,
@@ -17,11 +21,19 @@ export async function GET(
   if (!auth.ok) return auth.response;
 
   const { staffId } = await context.params;
-  const staff = await getStaffById(staffId);
-  if (!staff) {
-    return fail("Staff tidak ditemukan", { code: "NOT_FOUND", status: 404 });
+  try {
+    await assertStaffOutletAccess(auth.session!, staffId);
+    const staff = await getStaffById(staffId);
+    if (!staff) {
+      return fail("Staff tidak ditemukan", { code: "NOT_FOUND", status: 404 });
+    }
+    return ok(staff);
+  } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
+    throw error;
   }
-  return ok(staff);
 }
 
 export async function PUT(

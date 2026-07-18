@@ -68,8 +68,20 @@ const include = {
   category: true,
 } as const;
 
-export async function listRecurringTemplates() {
+export async function listRecurringTemplates(outlet?: string) {
   const rows = await prisma.recurringTemplate.findMany({
+    where: {
+      ...(outlet
+        ? {
+            outlet: {
+              OR: [
+                { code: { equals: outlet, mode: "insensitive" } },
+                { name: { equals: outlet, mode: "insensitive" } },
+              ],
+            },
+          }
+        : {}),
+    },
     include,
     orderBy: { updatedAt: "desc" },
   });

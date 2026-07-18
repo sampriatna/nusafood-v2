@@ -1,6 +1,10 @@
 import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
+  OutletAccessError,
+  assertTaskOutletAccess,
+} from "@/lib/outlet-scope";
+import {
   TaskWriteError,
   requestRevision,
 } from "@/lib/services/task-write.service";
@@ -15,6 +19,7 @@ export async function POST(request: Request, { params }: Params) {
 
   try {
     const { taskId } = await params;
+    await assertTaskOutletAccess(auth.session!, taskId);
     const body = (await request.json()) as {
       revision_note?: string;
       verified_by?: string;
@@ -26,6 +31,9 @@ export async function POST(request: Request, { params }: Params) {
     );
     return ok(task);
   } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     if (error instanceof TaskWriteError) {
       return fail(error.message, { code: error.code, status: error.status });
     }

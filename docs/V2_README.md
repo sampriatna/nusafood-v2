@@ -31,6 +31,7 @@ Dokumentasi perencanaan migrasi dari **v1** (Next.js + Google Apps Script + Goog
 | [V2_REPO_STRUCTURE.md](./V2_REPO_STRUCTURE.md) | Blueprint struktur repo, tech stack, env vars |
 | [V2_ROLLBACK_PLAN.md](./V2_ROLLBACK_PLAN.md) | Prosedur rollback jika cutover gagal |
 | [GO_LIVE_CHECKLIST.md](./GO_LIVE_CHECKLIST.md) | Checklist go-live per role (Admin / Leader / Staff) + template WA |
+| [P0_ROADMAP.md](./P0_ROADMAP.md) | Prioritas P0/P1, urutan coding, penilaian kesiapan cutover |
 
 ## Prinsip Migrasi
 

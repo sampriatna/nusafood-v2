@@ -553,28 +553,30 @@ export async function verifyChecklistReport(
     throw new ChecklistError("Checklist tidak ditemukan", "NOT_FOUND", 404);
   }
 
-  await prisma.checklistReport.update({
-    where: { id: report.id },
-    data: {
-      status: "DONE",
-      verifiedAt: new Date(),
-      verifiedBy: verifiedBy ?? "v2-admin",
-      revisionNote: note ?? null,
-    },
-  });
-
-  if (report.taskId) {
-    await prisma.task.updateMany({
-      where: { taskId: report.taskId },
+  await prisma.$transaction(async (tx) => {
+    await tx.checklistReport.update({
+      where: { id: report.id },
       data: {
         status: "DONE",
         verifiedAt: new Date(),
         verifiedBy: verifiedBy ?? "v2-admin",
-        leaderVerification: note ?? null,
-        finalStatus: "DONE",
+        revisionNote: note ?? null,
       },
     });
-  }
+
+    if (report.taskId) {
+      await tx.task.updateMany({
+        where: { taskId: report.taskId },
+        data: {
+          status: "DONE",
+          verifiedAt: new Date(),
+          verifiedBy: verifiedBy ?? "v2-admin",
+          leaderVerification: note ?? null,
+          finalStatus: "DONE",
+        },
+      });
+    }
+  });
 
   await writeAuditLog({
     entityType: "checklist_report",
@@ -600,28 +602,30 @@ export async function requestChecklistRevision(
     throw new ChecklistError("Checklist tidak ditemukan", "NOT_FOUND", 404);
   }
 
-  await prisma.checklistReport.update({
-    where: { id: report.id },
-    data: {
-      status: "REVISI",
-      revisionNote: revisionNote.trim(),
-      revisionCount: { increment: 1 },
-      verifiedBy: verifiedBy ?? "v2-admin",
-      verifiedAt: new Date(),
-    },
-  });
-
-  if (report.taskId) {
-    await prisma.task.updateMany({
-      where: { taskId: report.taskId },
+  await prisma.$transaction(async (tx) => {
+    await tx.checklistReport.update({
+      where: { id: report.id },
       data: {
-        status: "REVISION_REQUESTED",
-        leaderVerification: revisionNote.trim(),
+        status: "REVISI",
+        revisionNote: revisionNote.trim(),
+        revisionCount: { increment: 1 },
         verifiedBy: verifiedBy ?? "v2-admin",
         verifiedAt: new Date(),
       },
     });
-  }
+
+    if (report.taskId) {
+      await tx.task.updateMany({
+        where: { taskId: report.taskId },
+        data: {
+          status: "REVISION_REQUESTED",
+          leaderVerification: revisionNote.trim(),
+          verifiedBy: verifiedBy ?? "v2-admin",
+          verifiedAt: new Date(),
+        },
+      });
+    }
+  });
 
   await writeAuditLog({
     entityType: "checklist_report",

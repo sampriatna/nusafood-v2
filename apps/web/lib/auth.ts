@@ -33,6 +33,7 @@ export interface SessionPayload {
   userName: string;
   userRole: StaffRole;
   userOutlet?: string;
+  userOutletId?: string;
   staffId?: string;
 }
 
@@ -52,6 +53,7 @@ export async function createSessionToken(
     userName: payload.userName,
     userRole: payload.userRole,
     userOutlet: payload.userOutlet,
+    userOutletId: payload.userOutletId,
     staffId: payload.staffId,
   };
 
@@ -85,6 +87,7 @@ export async function verifySessionToken(
       userName: String(payload.userName ?? ""),
       userRole: payload.userRole as StaffRole,
       userOutlet: payload.userOutlet as string | undefined,
+      userOutletId: payload.userOutletId as string | undefined,
       staffId: payload.staffId as string | undefined,
     };
   } catch {
