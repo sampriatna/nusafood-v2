@@ -1,4 +1,9 @@
 import { fail, ok } from "@/lib/api/response";
+import { requireAuth } from "@/lib/require-auth";
+import {
+  OutletAccessError,
+  assertChecklistTemplateOutletAccess,
+} from "@/lib/outlet-scope";
 import {
   ChecklistError,
   saveChecklistItems,
@@ -9,8 +14,12 @@ export const dynamic = "force-dynamic";
 type Params = { params: Promise<{ templateId: string }> };
 
 export async function PUT(request: Request, { params }: Params) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
   try {
     const { templateId } = await params;
+    await assertChecklistTemplateOutletAccess(auth.session!, templateId);
     const body = (await request.json()) as {
       items?: Array<{
         item_text: string;
@@ -25,6 +34,9 @@ export async function PUT(request: Request, { params }: Params) {
     const data = await saveChecklistItems(templateId, items);
     return ok(data);
   } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     if (error instanceof ChecklistError) {
       return fail(error.message, { code: error.code, status: error.status });
     }

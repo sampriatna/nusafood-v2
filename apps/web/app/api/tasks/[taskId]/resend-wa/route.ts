@@ -1,6 +1,10 @@
 import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
+  OutletAccessError,
+  assertTaskOutletAccess,
+} from "@/lib/outlet-scope";
+import {
   TaskWriteError,
   resendWhatsApp,
 } from "@/lib/services/task-write.service";
@@ -15,9 +19,13 @@ export async function POST(_request: Request, { params }: Params) {
 
   try {
     const { taskId } = await params;
+    await assertTaskOutletAccess(auth.session!, taskId);
     await resendWhatsApp(taskId);
     return ok({ task_id: taskId, resent: true });
   } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     if (error instanceof TaskWriteError) {
       return fail(error.message, { code: error.code, status: error.status });
     }

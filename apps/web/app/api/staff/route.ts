@@ -2,6 +2,10 @@ import type { CreateStaffPayload } from "@nusafood/types";
 import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
+  OutletAccessError,
+  resolveListOutletFilter,
+} from "@/lib/outlet-scope";
+import {
   StaffWriteError,
   createStaff,
   listStaff,
@@ -15,8 +19,12 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
+    const outlet = resolveListOutletFilter(
+      auth.session!,
+      searchParams.get("outlet"),
+    );
     const data = await listStaff({
-      outlet: searchParams.get("outlet") ?? undefined,
+      outlet,
       status: searchParams.get("status") ?? undefined,
     });
     return ok(data, { total: data.length });

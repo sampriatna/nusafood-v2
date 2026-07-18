@@ -20,6 +20,10 @@ import {
   logSyncOperation,
   writeAuditLog,
 } from "@/lib/services/dual-write.service";
+import {
+  requestChecklistRevision,
+  verifyChecklistReport,
+} from "@/lib/services/checklist.service";
 
 export class TaskWriteError extends Error {
   code: string;
@@ -410,6 +414,18 @@ export async function verifyTask(
     throw new TaskWriteError("Tugas tidak ditemukan", "TASK_NOT_FOUND", 404);
   }
 
+  const checklistReport = await prisma.checklistReport.findFirst({
+    where: { taskId },
+  });
+  if (task.checklistMode || checklistReport) {
+    await verifyChecklistReport(taskId, note, verifiedBy);
+    const refreshed = await prisma.task.findUnique({ where: { taskId } });
+    if (!refreshed) {
+      throw new TaskWriteError("Tugas tidak ditemukan", "TASK_NOT_FOUND", 404);
+    }
+    return mapTaskToApi(refreshed);
+  }
+
   const updated = await prisma.task.update({
     where: { id: task.id },
     data: {
@@ -462,6 +478,18 @@ export async function requestRevision(
   const task = await prisma.task.findUnique({ where: { taskId } });
   if (!task) {
     throw new TaskWriteError("Tugas tidak ditemukan", "TASK_NOT_FOUND", 404);
+  }
+
+  const checklistReport = await prisma.checklistReport.findFirst({
+    where: { taskId },
+  });
+  if (task.checklistMode || checklistReport) {
+    await requestChecklistRevision(taskId, revisionNote, verifiedBy);
+    const refreshed = await prisma.task.findUnique({ where: { taskId } });
+    if (!refreshed) {
+      throw new TaskWriteError("Tugas tidak ditemukan", "TASK_NOT_FOUND", 404);
+    }
+    return mapTaskToApi(refreshed);
   }
 
   const updated = await prisma.task.update({

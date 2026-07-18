@@ -2,6 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { formatDateTimeId } from "@/lib/format-datetime";
 import { StatusBadge } from "@/components/status-badge";
+import { getSession } from "@/lib/auth";
+import {
+  OutletAccessError,
+  assertTaskOutletAccess,
+} from "@/lib/outlet-scope";
 import { getTaskById } from "@/lib/services/task.service";
 import { TaskActions } from "./task-actions";
 
@@ -13,6 +18,15 @@ type Props = {
 
 export default async function TaskDetailPage({ params }: Props) {
   const { taskId } = await params;
+  const session = await getSession();
+  if (session) {
+    try {
+      await assertTaskOutletAccess(session, taskId);
+    } catch (error) {
+      if (error instanceof OutletAccessError) notFound();
+      throw error;
+    }
+  }
   const task = await getTaskById(taskId);
   if (!task) notFound();
 
@@ -88,7 +102,11 @@ export default async function TaskDetailPage({ params }: Props) {
           ) : null}
         </dl>
 
-        <TaskActions taskId={task.task_id} status={task.status} />
+        <TaskActions
+          taskId={task.task_id}
+          status={task.status}
+          checklistMode={task.checklist_mode}
+        />
       </div>
     </main>
   );

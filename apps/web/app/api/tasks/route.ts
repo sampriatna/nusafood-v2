@@ -3,6 +3,11 @@ import { fail, ok } from "@/lib/api/response";
 import { listTasks } from "@/lib/services/task.service";
 import { requireAuth } from "@/lib/require-auth";
 import {
+  OutletAccessError,
+  assertCreateOutletAllowed,
+  resolveListOutletFilter,
+} from "@/lib/outlet-scope";
+import {
   TaskWriteError,
   createTask,
 } from "@/lib/services/task-write.service";
@@ -22,8 +27,12 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
+    const outlet = resolveListOutletFilter(
+      auth.session!,
+      searchParams.get("outlet"),
+    );
     const result = await listTasks({
-      outlet: searchParams.get("outlet") ?? undefined,
+      outlet,
       status: searchParams.get("status") ?? undefined,
       pic: searchParams.get("pic") ?? undefined,
       date_from: searchParams.get("date_from") ?? undefined,
@@ -49,9 +58,15 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as CreateTaskPayload;
+    if (body.outlet) {
+      assertCreateOutletAllowed(auth.session!, body.outlet);
+    }
     const task = await createTask(body);
     return ok(task, undefined, { status: 201 });
   } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     if (error instanceof TaskWriteError) {
       return fail(error.message, { code: error.code, status: error.status });
     }

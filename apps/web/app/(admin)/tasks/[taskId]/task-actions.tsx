@@ -5,9 +5,13 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type Props = { taskId: string; status: string };
+type Props = {
+  taskId: string;
+  status: string;
+  checklistMode?: boolean;
+};
 
-export function TaskActions({ taskId, status }: Props) {
+export function TaskActions({ taskId, status, checklistMode }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState("");
@@ -43,6 +47,12 @@ export function TaskActions({ taskId, status }: Props) {
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />
+      {checklistMode ? (
+        <p className="text-xs text-muted-foreground">
+          Checklist — approve/revisi memperbarui task dan checklist report
+          bersamaan.
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
