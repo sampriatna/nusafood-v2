@@ -24,17 +24,9 @@ import {
   requestChecklistRevision,
   verifyChecklistReport,
 } from "@/lib/services/checklist.service";
+import { TaskWriteError } from "@/lib/services/task-errors";
 
-export class TaskWriteError extends Error {
-  code: string;
-  status: number;
-
-  constructor(message: string, code: string, status = 400) {
-    super(message);
-    this.code = code;
-    this.status = status;
-  }
-}
+export { TaskWriteError };
 
 async function resolveRelations(payload: CreateTaskPayload) {
   const outletCode = normalizeOutletCode(payload.outlet);
