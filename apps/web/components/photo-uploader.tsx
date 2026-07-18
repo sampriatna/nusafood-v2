@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Camera, CheckCircle2, RefreshCcw } from "lucide-react";
+import { Camera, CheckCircle2, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { compressImageFile } from "@/lib/image-utils";
@@ -31,7 +31,8 @@ export function PhotoUploader({
   size = "default",
   upload,
 }: PhotoUploaderProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [preview, setPreview] = useState<string | undefined>(value);
 
@@ -101,14 +102,48 @@ export function PhotoUploader({
     [onChange, upload],
   );
 
+  const clearInputs = () => {
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
+  };
+
   const clearPhoto = () => {
     setPreview(undefined);
     onChange(undefined);
-    if (inputRef.current) inputRef.current.value = "";
+    clearInputs();
   };
 
   const isLarge = size === "large";
   const shown = preview || value;
+
+  const pickerButtons = (replaceMode: boolean) => (
+    <div className="grid grid-cols-2 gap-3">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => cameraInputRef.current?.click()}
+        className={cn(
+          "flex h-auto flex-col gap-2 py-4 font-semibold",
+          isLarge ? "text-base" : "text-sm",
+        )}
+      >
+        <Camera className={cn(isLarge ? "h-7 w-7" : "h-5 w-5")} />
+        {replaceMode ? "Ambil Ulang" : "Ambil Foto"}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => galleryInputRef.current?.click()}
+        className={cn(
+          "flex h-auto flex-col gap-2 py-4 font-semibold",
+          isLarge ? "text-base" : "text-sm",
+        )}
+      >
+        <ImageIcon className={cn(isLarge ? "h-7 w-7" : "h-5 w-5")} />
+        {replaceMode ? "Ganti Galeri" : "Pilih Galeri"}
+      </Button>
+    </div>
+  );
 
   return (
     <div className={cn("space-y-3", className)}>
@@ -125,11 +160,24 @@ export function PhotoUploader({
       ) : null}
 
       <input
-        ref={inputRef}
+        ref={cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
-        onChange={(e) => handleFileChange(e.target.files?.[0])}
+        onChange={(e) => {
+          void handleFileChange(e.target.files?.[0]);
+          clearInputs();
+        }}
+        className="hidden"
+      />
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        onChange={(e) => {
+          void handleFileChange(e.target.files?.[0]);
+          clearInputs();
+        }}
         className="hidden"
       />
 
@@ -162,52 +210,36 @@ export function PhotoUploader({
               Foto siap
             </div>
           </div>
+          {pickerButtons(true)}
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             onClick={clearPhoto}
-            className={cn("w-full font-semibold", isLarge ? "h-14 text-base" : "h-12")}
+            className={cn(
+              "w-full text-muted-foreground",
+              isLarge ? "h-12 text-base" : "h-10 text-sm",
+            )}
           >
-            <RefreshCcw className="mr-2 h-5 w-5" />
-            Ganti Foto
+            Hapus Foto
           </Button>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
+        <div
           className={cn(
-            "flex w-full flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-primary/50 bg-primary/5 transition-all hover:border-primary hover:bg-primary/10 active:scale-[0.98]",
-            isLarge ? "min-h-[220px] p-8" : "min-h-[160px] p-6",
+            "rounded-xl border-2 border-dashed border-primary/50 bg-primary/5 p-4",
+            isLarge ? "p-6" : "p-4",
           )}
         >
-          <div
+          {pickerButtons(false)}
+          <p
             className={cn(
-              "flex items-center justify-center rounded-full bg-primary/20",
-              isLarge ? "h-20 w-20" : "h-14 w-14",
+              "mt-3 text-center text-muted-foreground",
+              isLarge ? "text-sm" : "text-xs",
             )}
           >
-            <Camera className={cn("text-primary", isLarge ? "h-10 w-10" : "h-7 w-7")} />
-          </div>
-          <div className="text-center">
-            <p
-              className={cn(
-                "font-bold text-foreground",
-                isLarge ? "text-xl" : "text-base",
-              )}
-            >
-              KETUK UNTUK AMBIL FOTO
-            </p>
-            <p
-              className={cn(
-                "mt-1 text-muted-foreground",
-                isLarge ? "text-base" : "text-sm",
-              )}
-            >
-              Arahkan kamera ke objek
-            </p>
-          </div>
-        </button>
+            Ambil foto baru atau pilih dari galeri HP
+          </p>
+        </div>
       )}
     </div>
   );

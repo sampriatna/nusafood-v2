@@ -7,6 +7,7 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  ImageIcon,
   Loader2,
   Square,
 } from "lucide-react";
@@ -318,21 +319,39 @@ export function StaffChecklistClient({ taskId, token }: Props) {
                         className="max-h-40 w-full rounded-md object-cover"
                       />
                     ) : null}
-                    <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-primary">
-                      <Camera className="h-4 w-4" />
-                      {itemPhotos[item.checklist_item_id]
-                        ? "Ganti foto"
-                        : "Upload foto item"}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="hidden"
-                        onChange={(e) =>
-                          void handleItemPhoto(item.checklist_item_id, e)
-                        }
-                      />
-                    </label>
+                    <div className="flex flex-wrap gap-3">
+                      <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-primary">
+                        <Camera className="h-4 w-4" />
+                        {itemPhotos[item.checklist_item_id]
+                          ? "Ambil ulang"
+                          : "Ambil foto"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={(e) => {
+                            void handleItemPhoto(item.checklist_item_id, e);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                      <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-primary">
+                        <ImageIcon className="h-4 w-4" />
+                        {itemPhotos[item.checklist_item_id]
+                          ? "Ganti galeri"
+                          : "Pilih galeri"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            void handleItemPhoto(item.checklist_item_id, e);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
                 ) : null}
               </li>
