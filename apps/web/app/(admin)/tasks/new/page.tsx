@@ -1,14 +1,20 @@
 import Link from "next/link";
-import { listAreas, listCategories, listOutlets } from "@/lib/services/master-data.service";
+import {
+  listAreas,
+  listCategories,
+  listOutlets,
+} from "@/lib/services/master-data.service";
+import { listStaff } from "@/lib/services/staff.service";
 import { CreateTaskForm } from "./create-task-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewTaskPage() {
-  const [outlets, areas, categories] = await Promise.all([
+  const [outlets, areas, categories, staff] = await Promise.all([
     listOutlets(),
-    listAreas("KBU"),
+    listAreas(),
     listCategories(),
+    listStaff({ status: "ACTIVE" }),
   ]);
 
   return (
@@ -21,10 +27,9 @@ export default async function NewTaskPage() {
           >
             ← Dashboard
           </Link>
-          <h1 className="text-2xl font-semibold">Buat tugas</h1>
+          <h1 className="text-2xl font-semibold">Buat Tugas Baru</h1>
           <p className="text-sm text-muted-foreground">
-            Write API v2. Dual-write ke GAS aktif jika{" "}
-            <code className="text-xs">DUAL_WRITE_ENABLED=true</code>.
+            Pilih staff dari master data — nama dan nomor WA terisi otomatis.
           </p>
         </div>
         <CreateTaskForm
@@ -32,11 +37,16 @@ export default async function NewTaskPage() {
             value: o.code,
             label: `${o.code} — ${o.name}`,
           }))}
-          areas={areas.map((a) => ({ value: a.name, label: a.name }))}
+          areas={areas.map((a) => ({
+            value: a.name,
+            label: a.name,
+            outlet: a.outlet,
+          }))}
           categories={categories.map((c) => ({
             value: c.name,
             label: c.name,
           }))}
+          staff={staff}
         />
       </div>
     </main>
