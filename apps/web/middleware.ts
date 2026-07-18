@@ -37,6 +37,19 @@ function isPublicTaskApi(pathname: string) {
   )
 }
 
+function isInternalAuthorized(request: NextRequest, pathname: string): boolean {
+  if (pathname !== "/api/internal/recurring/generate") return false;
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get("authorization");
+  if (cronSecret && auth === `Bearer ${cronSecret}`) return true;
+  const expected = process.env.ADMIN_API_KEY;
+  if (expected && !expected.includes("your-gas")) {
+    const provided = request.headers.get("x-internal-key");
+    if (provided === expected) return true;
+  }
+  return false;
+}
+
 function authRequired() {
   return process.env.AUTH_REQUIRED !== "false"
 }
@@ -104,6 +117,9 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/api/") && !valid) {
+    if (isInternalAuthorized(request, pathname)) {
+      return NextResponse.next();
+    }
     return NextResponse.json(
       { success: false, data: null, error: "Unauthorized", code: "UNAUTHORIZED" },
       { status: 401 }

@@ -5,6 +5,12 @@ import {
 } from "@/lib/auth"
 import { ok, fail } from "@/lib/api/response"
 import {
+  checkRateLimit,
+  getClientIp,
+  loginRateLimitConfig,
+} from "@/lib/rate-limit"
+import { logSyncOperation } from "@/lib/services/dual-write.service"
+import {
   ensureBootstrapAdmin,
   findUserForLogin,
   touchLastLogin,
@@ -26,6 +32,23 @@ function cookieOptions(maxAge: number) {
 
 export async function POST(request: Request) {
   try {
+    const ip = getClientIp(request)
+    const { limit, windowMs } = loginRateLimitConfig()
+    const rate = checkRateLimit(`login:${ip}`, limit, windowMs)
+    if (!rate.allowed) {
+      await logSyncOperation({
+        operation: "login_rate_limited",
+        entityType: "auth",
+        v2Status: "failed",
+        v2Response: { ip, retry_after_sec: rate.retryAfterSec },
+        errorMessage: "Terlalu banyak percobaan login",
+      })
+      return fail("Terlalu banyak percobaan login. Coba lagi nanti.", {
+        code: "RATE_LIMITED",
+        status: 429,
+      })
+    }
+
     const body = (await request.json()) as {
       username?: string
       password?: string

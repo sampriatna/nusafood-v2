@@ -92,7 +92,13 @@ async function main() {
       },
     });
 
-    // bcrypt hashes for admin123 / leader123 (cost 10)
+    // Demo login — hanya jika SEED_DEMO_PASSWORDS=true (jangan di production)
+    if (process.env.SEED_DEMO_PASSWORDS !== "true") {
+      console.log(
+        "Skip demo users (set SEED_DEMO_PASSWORDS=true + ADMIN_PASSWORD untuk seed admin/leader)",
+      );
+    } else {
+    // bcrypt hashes for admin123 / leader123 (cost 10) — DEV ONLY
     const adminHash =
       "$2b$10$/NsDP.W.fql71OYoYVZIF.IW.yY4AW1qlbbdZgFOc1Kh1Adtn.NP.";
     const leaderHash =
@@ -131,11 +137,14 @@ async function main() {
         loginEnabled: true,
       },
     });
+    }
   }
 
   console.log(
     `Seed complete: ${outlets.length} outlets, ${AREA_NAMES.length} areas each, ${CATEGORIES.length} categories` +
-      (kbu ? ", demo users admin/leader.kbu" : ""),
+      (kbu && process.env.SEED_DEMO_PASSWORDS === "true"
+        ? ", demo users admin/leader.kbu"
+        : ""),
   );
 }
 

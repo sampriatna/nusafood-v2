@@ -47,11 +47,11 @@ Dokumen ini merangkum penilaian kondisi v2, prioritas perbaikan, dan urutan codi
 
 | # | Item | Status |
 |---|------|--------|
-| 3 | Ganti password default + rate limit login | ⬜ |
-| 4 | WA checklist + resend via GAS + log | ⬜ |
-| 5 | Endpoint generate recurring idempotent | ⬜ |
-| 6 | Vercel Cron | ⬜ |
-| 7 | Monitoring & error log terstruktur | ⬜ |
+| 3 | Ganti password default + rate limit login | ✅ |
+| 4 | WA checklist + resend via GAS + log | ✅ |
+| 5 | Endpoint generate recurring idempotent | ✅ |
+| 6 | Vercel Cron | ✅ |
+| 7 | Monitoring & error log terstruktur | ✅ (metadata di sync_logs v2_response) |
 
 ### Cron tugas berulang (target)
 
@@ -120,11 +120,11 @@ Leader KBU lihat task KBU ✅ · Leader KBU akses task Kisamen via URL/API → *
 
 1. ✅ Outlet-level authorization pada seluruh API
 2. ✅ Transaksi status tasks + checklist_reports
-3. ⬜ Ganti akun/password default + rate limit login
-4. ⬜ WA checklist + resend via GAS
-5. ⬜ Endpoint generate recurring idempotent
-6. ⬜ Vercel Cron
-7. ⬜ Monitoring & error log
+3. ✅ Ganti akun/password default + rate limit login
+4. ✅ WA checklist + resend via GAS
+5. ✅ Endpoint generate recurring idempotent
+6. ✅ Vercel Cron
+7. ✅ Monitoring & error log
 8. ⬜ Pilot KBU 7 hari
 9. ⬜ Isi checklist go/no-go dari hasil nyata
 10. ⬜ Putuskan cutover

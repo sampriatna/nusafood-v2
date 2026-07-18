@@ -1,4 +1,10 @@
 {
   "installCommand": "cd ../.. && pnpm install",
-  "buildCommand": "cd ../.. && pnpm db:generate && pnpm --filter @nusafood/web build"
+  "buildCommand": "cd ../.. && pnpm db:generate && pnpm --filter @nusafood/web build",
+  "crons": [
+    {
+      "path": "/api/internal/recurring/generate",
+      "schedule": "0 1 * * *"
+    }
+  ]
 }

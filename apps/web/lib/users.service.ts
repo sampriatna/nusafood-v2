@@ -186,7 +186,13 @@ export async function ensureBootstrapAdmin() {
   const count = await prisma.userAccount.count()
   if (count > 0) return null
 
-  const password = process.env.ADMIN_PASSWORD || "admin123"
+  const password = process.env.ADMIN_PASSWORD
+  if (!password || password === "change-me") {
+    throw new Error(
+      "ADMIN_PASSWORD wajib di-set sebelum bootstrap admin (min. bukan 'change-me')",
+    )
+  }
+
   return createUser({
     username: "admin",
     password,

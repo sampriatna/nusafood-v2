@@ -84,6 +84,26 @@ export async function POST(request: Request) {
       originalName: file.name,
     });
 
+    const taskMeta = await prisma.task.findUnique({
+      where: { taskId },
+      select: { outletId: true },
+    });
+
+    const { logSyncOperation } = await import("@/lib/services/dual-write.service");
+    await logSyncOperation({
+      operation: "upload_photo",
+      entityType: "task",
+      entityId: taskId,
+      taskId,
+      outletId: taskMeta?.outletId,
+      v2Status: "success",
+      v2Response: {
+        context,
+        storage: result.storage,
+        size_bytes: result.size_bytes,
+      },
+    });
+
     return ok({
       url: result.url,
       size_bytes: result.size_bytes,
@@ -93,6 +113,14 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("[POST /api/uploads/photo]", error);
+    const { logSyncOperation } = await import("@/lib/services/dual-write.service");
+    await logSyncOperation({
+      operation: "upload_photo",
+      entityType: "task",
+      v2Status: "failed",
+      errorMessage:
+        error instanceof Error ? error.message : "Gagal upload foto",
+    }).catch(() => undefined);
     return fail(
       error instanceof Error ? error.message : "Gagal upload foto",
       { code: "PHOTO_UPLOAD_FAILED", status: 500 },

@@ -48,6 +48,8 @@ export function GenerateChecklistButton({ templateId, picName, picWa }: Props) {
                     task_id: string;
                     report_link?: string;
                     token?: string;
+                    wa_sent?: boolean;
+                    wa_error?: string;
                   };
                 };
                 error?: string;
@@ -64,7 +66,20 @@ export function GenerateChecklistButton({ templateId, picName, picWa }: Props) {
                 json.data.task.report_link ||
                 `/checklist/${json.data.task.task_id}?token=${json.data.task.token ?? ""}`;
               setLink(href);
-              toast({ title: "Checklist dikirim", description: picName });
+              if (json.data.task.wa_sent) {
+                toast({
+                  title: "Checklist dikirim",
+                  description: `WA terkirim ke ${picName}`,
+                });
+              } else {
+                toast({
+                  title: "Checklist dibuat",
+                  description:
+                    json.data.task.wa_error === "GAS_NOT_CONFIGURED"
+                      ? "Link siap — WA via GAS belum dikonfigurasi"
+                      : `Link siap — ${json.data.task.wa_error || "WA gagal, share link manual"}`,
+                });
+              }
             });
           }}
         >
