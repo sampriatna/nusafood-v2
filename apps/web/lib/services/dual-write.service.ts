@@ -20,7 +20,30 @@ export async function logSyncOperation(input: {
   v1Response?: unknown;
   v2Response?: unknown;
   errorMessage?: string | null;
+  /** Metadata operasional — disimpan di v2_response JSON */
+  actorId?: string | null;
+  actorName?: string | null;
+  outletId?: string | null;
+  taskId?: string | null;
+  picWa?: string | null;
+  metadata?: Record<string, unknown>;
 }) {
+  const enrichedMeta: Record<string, unknown> = {
+    ...(input.metadata ?? {}),
+  };
+  if (input.actorId) enrichedMeta.actor_id = input.actorId;
+  if (input.actorName) enrichedMeta.actor_name = input.actorName;
+  if (input.outletId) enrichedMeta.outlet_id = input.outletId;
+  if (input.taskId) enrichedMeta.task_id = input.taskId;
+  if (input.picWa) enrichedMeta.pic_wa = input.picWa;
+
+  const baseV2 =
+    input.v2Response && typeof input.v2Response === "object"
+      ? (input.v2Response as Record<string, unknown>)
+      : input.v2Response !== undefined
+        ? { value: input.v2Response }
+        : {};
+
   return prisma.syncLog.create({
     data: {
       operation: input.operation,
@@ -31,9 +54,10 @@ export async function logSyncOperation(input: {
       v1Response: input.v1Response
         ? (input.v1Response as object)
         : undefined,
-      v2Response: input.v2Response
-        ? (input.v2Response as object)
-        : undefined,
+      v2Response:
+        Object.keys(enrichedMeta).length > 0 || Object.keys(baseV2).length > 0
+          ? ({ ...baseV2, ...enrichedMeta } as object)
+          : undefined,
       errorMessage: input.errorMessage ?? null,
     },
   });

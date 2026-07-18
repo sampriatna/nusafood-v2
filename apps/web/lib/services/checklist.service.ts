@@ -261,6 +261,8 @@ export async function generateChecklistReport(input: {
   pic_name?: string;
   pic_wa?: string;
   deadline?: string;
+  recurring_template_id?: string;
+  send_whatsapp?: boolean;
 }) {
   const template = await prisma.checklistTemplate.findUnique({
     where: { templateId: input.template_id },
@@ -309,6 +311,7 @@ export async function generateChecklistReport(input: {
         deadline,
         status: "OPEN",
         checklistMode: true,
+        recurringTemplateId: input.recurring_template_id ?? null,
         reportLink: buildChecklistLink(taskId, token),
         sourceVersion: "v2",
       },
@@ -361,13 +364,46 @@ export async function generateChecklistReport(input: {
     operation: "generate_checklist_report",
     entityType: "checklist_report",
     entityId: reportId,
+    taskId,
+    outletId: template.outletId,
+    picWa: picWa,
     v2Status: "success",
     v2Response: { task_id: taskId, report_id: reportId },
   });
 
+  let waSent = false;
+  let waError: string | undefined;
+  if (input.send_whatsapp !== false) {
+    const { sendChecklistWhatsAppViaGas } = await import(
+      "@/lib/gas-whatsapp.service"
+    );
+    const wa = await sendChecklistWhatsAppViaGas({
+      taskId,
+      templateId: template.templateId,
+      picName,
+      picWa,
+      deadline: deadline.toISOString(),
+      outletId: template.outletId,
+    });
+    waSent = wa.sent;
+    waError = wa.error;
+    if (wa.sent) {
+      await prisma.task.updateMany({
+        where: { taskId },
+        data: { waSentAt: new Date(), status: "SENT" },
+      });
+    }
+  }
+
   return {
     report: mapChecklistReport(result),
-    task: { task_id: taskId, token, report_link: buildChecklistLink(taskId, token) },
+    task: {
+      task_id: taskId,
+      token,
+      report_link: buildChecklistLink(taskId, token),
+      wa_sent: waSent,
+      wa_error: waError,
+    },
   };
 }
 

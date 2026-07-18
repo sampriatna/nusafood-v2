@@ -4,6 +4,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTimeId } from "@/lib/format-datetime";
 import { listSyncLogs } from "@/lib/services/sync.service";
 
+function metaField(
+  v2Response: unknown,
+  key: string,
+): string | undefined {
+  if (!v2Response || typeof v2Response !== "object") return undefined;
+  const value = (v2Response as Record<string, unknown>)[key];
+  return value != null ? String(value) : undefined;
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function SyncLogsPage() {
@@ -47,6 +56,25 @@ export default async function SyncLogsPage() {
                 </div>
                 {log.errorMessage ? (
                   <p className="text-xs text-destructive">{log.errorMessage}</p>
+                ) : null}
+                {metaField(log.v2Response, "task_id") ||
+                metaField(log.v2Response, "actor_name") ||
+                metaField(log.v2Response, "pic_wa") ? (
+                  <p className="text-xs text-muted-foreground">
+                    {[
+                      metaField(log.v2Response, "task_id")
+                        ? `task: ${metaField(log.v2Response, "task_id")}`
+                        : null,
+                      metaField(log.v2Response, "actor_name")
+                        ? `actor: ${metaField(log.v2Response, "actor_name")}`
+                        : null,
+                      metaField(log.v2Response, "pic_wa")
+                        ? `WA: ${metaField(log.v2Response, "pic_wa")}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
                 ) : null}
               </CardContent>
             </Card>

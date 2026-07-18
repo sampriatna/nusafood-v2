@@ -77,7 +77,13 @@ export function TaskActions({ taskId, status, checklistMode }: Props) {
           type="button"
           variant="secondary"
           disabled={pending}
-          onClick={() => run(`/api/tasks/${taskId}/resend-wa`)}
+          onClick={() =>
+            run(
+              checklistMode
+                ? `/api/checklist-reports/${taskId}/resend-wa`
+                : `/api/tasks/${taskId}/resend-wa`,
+            )
+          }
         >
           Resend WA
         </Button>
