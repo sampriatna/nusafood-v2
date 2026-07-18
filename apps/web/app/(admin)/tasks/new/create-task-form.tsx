@@ -89,9 +89,15 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
 
     const formData = new FormData(event.currentTarget);
     const deadlineLocal = String(formData.get("deadline") || "");
-    const deadline = deadlineLocal
-      ? new Date(deadlineLocal).toISOString()
-      : "";
+    let deadline = "";
+    if (deadlineLocal) {
+      const parsed = new Date(deadlineLocal);
+      if (Number.isNaN(parsed.getTime())) {
+        setError("Deadline tidak valid");
+        return;
+      }
+      deadline = parsed.toISOString();
+    }
 
     const payload = {
       outlet,
@@ -110,21 +116,41 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
         const res = await fetch("/api/tasks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
           body: JSON.stringify(payload),
         });
-        const json = (await res.json()) as {
+
+        const raw = await res.text();
+        let json: {
           success: boolean;
           data?: { task_id: string };
           error?: string;
         };
+        try {
+          json = JSON.parse(raw) as typeof json;
+        } catch {
+          setError(
+            res.ok
+              ? "Respons server tidak valid"
+              : `Server error (${res.status}). Coba lagi atau hubungi admin.`,
+          );
+          return;
+        }
+
         if (!json.success || !json.data?.task_id) {
           setError(json.error || "Gagal membuat tugas");
           return;
         }
+
         router.push(`/tasks/${json.data.task_id}`);
-        router.refresh();
-      } catch {
-        setError("Tidak bisa menghubungi server");
+      } catch (cause) {
+        const message =
+          cause instanceof Error ? cause.message : "Tidak bisa menghubungi server";
+        setError(
+          message.includes("fetch")
+            ? "Tidak bisa menghubungi server. Cek koneksi internet."
+            : message || "Tidak bisa menghubungi server",
+        );
       }
     });
   }
