@@ -89,6 +89,13 @@ export async function POST(request: Request) {
       select: { outletId: true },
     });
 
+    if (context === "before") {
+      await prisma.task.update({
+        where: { taskId },
+        data: { beforePhotoUrl: result.url },
+      });
+    }
+
     const { logSyncOperation } = await import("@/lib/services/dual-write.service");
     await logSyncOperation({
       operation: "upload_photo",

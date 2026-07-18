@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Staff } from "@nusafood/types";
 import { Send, User } from "lucide-react";
+import { PhotoUploader } from "@/components/photo-uploader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [picName, setPicName] = useState("");
   const [picWa, setPicWa] = useState("");
+  const [beforePhotoPreview, setBeforePhotoPreview] = useState<string | undefined>();
 
   const filteredAreas = useMemo(
     () =>
@@ -142,7 +144,42 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
           return;
         }
 
-        router.push(`/tasks/${json.data.task_id}`);
+        const taskId = json.data.task_id;
+
+        if (beforePhotoPreview) {
+          const blob = await (await fetch(beforePhotoPreview)).blob();
+          const photoForm = new FormData();
+          photoForm.append("file", blob, "before.jpg");
+          photoForm.append("task_id", taskId);
+          photoForm.append("context", "before");
+
+          const uploadRes = await fetch("/api/uploads/photo", {
+            method: "POST",
+            credentials: "same-origin",
+            body: photoForm,
+          });
+          const uploadRaw = await uploadRes.text();
+          let uploadJson: { success: boolean; error?: string };
+          try {
+            uploadJson = JSON.parse(uploadRaw) as typeof uploadJson;
+          } catch {
+            setError(
+              uploadRes.ok
+                ? "Tugas dibuat, tapi upload foto before gagal (respons tidak valid)"
+                : `Tugas dibuat, tapi upload foto before gagal (${uploadRes.status})`,
+            );
+            return;
+          }
+          if (!uploadJson.success) {
+            setError(
+              uploadJson.error ||
+                "Tugas dibuat, tapi upload foto before gagal. Coba dari halaman detail.",
+            );
+            return;
+          }
+        }
+
+        router.push(`/tasks/${taskId}`);
       } catch (cause) {
         const message =
           cause instanceof Error ? cause.message : "Tidak bisa menghubungi server";
@@ -247,6 +284,14 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
               placeholder="Jelaskan detail tugas yang harus dikerjakan…"
             />
           </div>
+          <PhotoUploader
+            label="Foto Before (opsional)"
+            value={beforePhotoPreview}
+            onChange={setBeforePhotoPreview}
+          />
+          <p className="text-xs text-muted-foreground">
+            Foto kondisi sebelum tugas dikerjakan. Kosongkan jika tidak perlu.
+          </p>
         </CardContent>
       </Card>
 
