@@ -11,7 +11,7 @@ export function mapStaffToApi(staff: StaffWithRelations): Staff {
     staff_id: staff.staffId,
     name: staff.name,
     position: staff.position ?? "",
-    outlet: (staff.outlet?.name ?? staff.outlet?.code ?? "") as Staff["outlet"],
+    outlet: (staff.outlet?.code ?? staff.outlet?.name ?? "") as Staff["outlet"],
     area: (staff.area?.name ?? "") as Staff["area"],
     wa_number: staff.waNumber,
     role: staff.role as StaffRole,
