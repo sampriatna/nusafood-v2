@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ChevronRight,
   ClipboardList,
+  FileWarning,
   Filter,
   ListChecks,
   Plus,
@@ -537,6 +538,24 @@ export function DashboardClient() {
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Audit SOP harian
+                  </p>
+                </div>
+                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/teguran">
+            <Card className="cursor-pointer transition-colors hover:border-primary/50">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="rounded-lg bg-primary/10 p-2">
+                  <FileWarning className="size-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Teguran Center
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    ST / SP & disiplin operasional
                   </p>
                 </div>
                 <ChevronRight className="ml-auto size-4 text-muted-foreground" />

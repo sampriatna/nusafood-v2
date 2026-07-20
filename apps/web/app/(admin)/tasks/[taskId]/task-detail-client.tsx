@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Task } from "@nusafood/types";
 import {
@@ -200,9 +201,14 @@ export function TaskDetailClient({ task: initialTask }: Props) {
     startTransition(async () => {
       const result = await postAction(path);
       if (!result.success) {
+        const raw = result.error || "Terjadi kesalahan";
+        const friendly =
+          raw.includes("ADMIN_SECRET") || raw.includes("GAS_")
+            ? "Gagal kirim ulang WA. Cek konfigurasi GAS_WEB_APP_URL / ADMIN_API_KEY."
+            : raw;
         toast({
           title: "Gagal mengirim ulang",
-          description: result.error || "Terjadi kesalahan",
+          description: friendly,
           variant: "destructive",
         });
         return;
@@ -212,24 +218,6 @@ export function TaskDetailClient({ task: initialTask }: Props) {
         description: "Notifikasi sedang diproses",
       });
       refreshFromServer();
-    });
-  }
-
-  function handleSendReminder() {
-    startTransition(async () => {
-      const result = await postAction(`/api/tasks/${task.task_id}/resend-wa`);
-      if (!result.success) {
-        toast({
-          title: "Gagal mengirim teguran",
-          description: result.error || "Terjadi kesalahan",
-          variant: "destructive",
-        });
-        return;
-      }
-      toast({
-        title: "Teguran Terkirim",
-        description: "Notifikasi reminder sudah dikirim kepada staff",
-      });
     });
   }
 
@@ -450,15 +438,19 @@ export function TaskDetailClient({ task: initialTask }: Props) {
                   </Button>
                 ) : null}
                 {canRemind ? (
-                  <Button
-                    variant="outline"
-                    onClick={handleSendReminder}
-                    disabled={pending}
+                  <Link
+                    href={`/teguran/new?task_id=${encodeURIComponent(task.task_id)}`}
                     className="w-full sm:w-auto"
                   >
-                    <Bell className="mr-2 size-4" />
-                    Kirim Teguran
-                  </Button>
+                    <Button
+                      variant="outline"
+                      disabled={pending}
+                      className="w-full sm:w-auto"
+                    >
+                      <Bell className="mr-2 size-4" />
+                      Buat Teguran
+                    </Button>
+                  </Link>
                 ) : null}
               </div>
             </div>

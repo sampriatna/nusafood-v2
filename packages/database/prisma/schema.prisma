@@ -584,3 +584,117 @@ model LeaderMonitorSubmission {
   @@index([reportDate, outletCode], map: "idx_leader_monitor_submissions_date_outlet")
   @@map("leader_monitor_submissions")
 }
+
+/* ─── Disciplinary / Teguran Center ─── */
+
+enum DisciplinaryLetterType {
+  TEGURAN
+  PERINGATAN
+}
+
+enum DisciplinaryLetterStatus {
+  DRAFT
+  WAITING_APPROVAL
+  APPROVED
+  SENT
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
+enum DisciplinarySourceType {
+  TASK_LATE
+  TASK_INCOMPLETE
+  FAKE_REPORT
+  SOP_VIOLATION
+  ATTENDANCE
+  ATTITUDE
+  OTHER
+}
+
+enum DisciplinaryEvidenceType {
+  PHOTO
+  SCREENSHOT
+  TASK_REPORT
+  NOTE
+  FILE
+  LINK
+}
+
+model DisciplinaryLetter {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  letterNumber             String                   @unique @map("letter_number") @db.VarChar(50)
+  type                     DisciplinaryLetterType
+  level                    Int                      @db.SmallInt
+  status                   DisciplinaryLetterStatus @default(DRAFT)
+  employeeId               String                   @map("employee_id") @db.VarChar(50)
+  employeeNameSnapshot     String                   @map("employee_name_snapshot") @db.VarChar(200)
+  employeePositionSnapshot String?                  @map("employee_position_snapshot") @db.VarChar(100)
+  outletId                 String?                  @map("outlet_id") @db.Uuid
+  outletNameSnapshot       String                   @map("outlet_name_snapshot") @db.VarChar(100)
+  relatedTaskId            String?                  @map("related_task_id") @db.VarChar(50)
+  sourceType               DisciplinarySourceType   @map("source_type")
+  incidentDate             DateTime                 @map("incident_date") @db.Date
+  createdBy                String                   @map("created_by") @db.VarChar(100)
+  createdByName            String?                  @map("created_by_name") @db.VarChar(200)
+  approvedBy               String?                  @map("approved_by") @db.VarChar(100)
+  approvedByName           String?                  @map("approved_by_name") @db.VarChar(200)
+  approvedAt               DateTime?                @map("approved_at") @db.Timestamptz(6)
+  sentAt                   DateTime?                @map("sent_at") @db.Timestamptz(6)
+  acknowledgedAt           DateTime?                @map("acknowledged_at") @db.Timestamptz(6)
+  resolvedAt               DateTime?                @map("resolved_at") @db.Timestamptz(6)
+  title                    String                   @db.VarChar(300)
+  chronology               String
+  violationDetail          String                   @map("violation_detail")
+  operationalImpact        String?                  @map("operational_impact")
+  correctionInstruction    String                   @map("correction_instruction")
+  correctionDeadline       DateTime?                @map("correction_deadline") @db.Date
+  sopReference             String?                  @map("sop_reference")
+  consequence              String?
+  internalNote             String?                  @map("internal_note")
+  pdfUrl                   String?                  @map("pdf_url")
+  createdAt                DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  evidence DisciplinaryEvidence[]
+  events   DisciplinaryEvent[]
+
+  @@index([status], map: "idx_disciplinary_letters_status")
+  @@index([employeeId], map: "idx_disciplinary_letters_employee")
+  @@index([type, level], map: "idx_disciplinary_letters_type_level")
+  @@index([createdAt(sort: Desc)], map: "idx_disciplinary_letters_created")
+  @@map("disciplinary_letters")
+}
+
+model DisciplinaryEvidence {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  disciplinaryLetterId String                   @map("disciplinary_letter_id") @db.Uuid
+  evidenceType         DisciplinaryEvidenceType @map("evidence_type")
+  fileUrl              String?                  @map("file_url")
+  textNote             String?                  @map("text_note")
+  relatedTaskPhotoId   String?                  @map("related_task_photo_id") @db.VarChar(100)
+  createdBy            String                   @map("created_by") @db.VarChar(100)
+  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  letter DisciplinaryLetter @relation(fields: [disciplinaryLetterId], references: [id], onDelete: Cascade)
+
+  @@index([disciplinaryLetterId], map: "idx_disciplinary_evidence_letter")
+  @@map("disciplinary_evidence")
+}
+
+model DisciplinaryEvent {
+  id                   String                    @id @default(uuid()) @db.Uuid
+  disciplinaryLetterId String                    @map("disciplinary_letter_id") @db.Uuid
+  action               String                    @db.VarChar(50)
+  actorId              String                    @map("actor_id") @db.VarChar(100)
+  actorNameSnapshot    String                    @map("actor_name_snapshot") @db.VarChar(200)
+  previousStatus       DisciplinaryLetterStatus? @map("previous_status")
+  newStatus            DisciplinaryLetterStatus? @map("new_status")
+  note                 String?
+  createdAt            DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  letter DisciplinaryLetter @relation(fields: [disciplinaryLetterId], references: [id], onDelete: Cascade)
+
+  @@index([disciplinaryLetterId, createdAt(sort: Desc)], map: "idx_disciplinary_events_letter")
+  @@map("disciplinary_events")
+}
