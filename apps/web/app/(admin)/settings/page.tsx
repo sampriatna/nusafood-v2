@@ -1,6 +1,7 @@
 import {
   Building2,
   CheckCircle2,
+  ClipboardList,
   Database,
   History,
   Info,
@@ -70,6 +71,12 @@ export default async function SettingsPage() {
         </div>
       </Card>
 
+      <SettingsLinkCard
+        href="/settings/daily-activity"
+        icon={ClipboardList}
+        title="Daily Activity SOP"
+        description="Link report staff, template kegiatan harian, leader monitoring"
+      />
       <SettingsLinkCard
         href="/settings/recurring-tasks"
         icon={Repeat}

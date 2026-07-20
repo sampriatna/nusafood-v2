@@ -60,6 +60,8 @@ Health check: [http://localhost:3000/api/health](http://localhost:3000/api/healt
 | Checklist + recurring APIs & staff page | ✅ Sprint 5 |
 | Auth multi-user + RBAC | ✅ Sprint 6 |
 | Cutover prep (smoke/load/rollback drill) | ✅ Sprint 7 |
+| Daily Activity SOP (`/r/`, templates, dashboard) | ✅ Sprint 8 (sync v1 PR #18–#21) |
+| Leader Monitoring (cek fisik + validasi) | ✅ Sprint 8 (sync v1 PR #18–#21) |
 
 ## Catatan
 

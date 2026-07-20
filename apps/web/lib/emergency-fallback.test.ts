@@ -14,7 +14,10 @@ describe("emergency fallback", () => {
   it("detects staff surfaces", () => {
     expect(isStaffSurfacePath("/report/TASK-1")).toBe(true)
     expect(isStaffSurfacePath("/checklist/CHK-1")).toBe(true)
+    expect(isStaffSurfacePath("/r/budi")).toBe(true)
     expect(isStaffSurfacePath("/api/tasks/TASK-1/public")).toBe(true)
+    expect(isStaffSurfacePath("/api/staff-reports/by-token/abc")).toBe(true)
+    expect(isStaffSurfacePath("/api/staff-reports/submit")).toBe(true)
     expect(isStaffSurfacePath("/dashboard")).toBe(false)
   })
 
