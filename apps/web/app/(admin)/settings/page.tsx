@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Database,
+  FileWarning,
   History,
   Info,
   Layers,
@@ -71,6 +72,12 @@ export default async function SettingsPage() {
         </div>
       </Card>
 
+      <SettingsLinkCard
+        href="/teguran"
+        icon={FileWarning}
+        title="Teguran Center"
+        description="Surat Teguran (ST) & Surat Peringatan (SP) operasional"
+      />
       <SettingsLinkCard
         href="/settings/daily-activity"
         icon={ClipboardList}

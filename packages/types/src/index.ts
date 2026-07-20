@@ -749,3 +749,211 @@ export const LEADER_FOLLOW_UP_OPTIONS: {
 ];
 
 export const LEADER_SHIFTS = ["Pagi", "Siang", "Malam"] as const;
+
+/* ─── Teguran Center / Disciplinary Letters ─── */
+
+export type DisciplinaryLetterType = "TEGURAN" | "PERINGATAN";
+export type DisciplinaryLetterLevel = 1 | 2 | 3;
+export type DisciplinaryLetterStatus =
+  | "DRAFT"
+  | "WAITING_APPROVAL"
+  | "APPROVED"
+  | "SENT"
+  | "ACKNOWLEDGED"
+  | "RESOLVED"
+  | "CANCELLED";
+
+export type DisciplinarySourceType =
+  | "TASK_LATE"
+  | "TASK_INCOMPLETE"
+  | "FAKE_REPORT"
+  | "SOP_VIOLATION"
+  | "ATTENDANCE"
+  | "ATTITUDE"
+  | "OTHER";
+
+export type DisciplinaryEvidenceType =
+  | "PHOTO"
+  | "SCREENSHOT"
+  | "TASK_REPORT"
+  | "NOTE"
+  | "FILE"
+  | "LINK";
+
+export interface DisciplinaryEvidence {
+  id: string;
+  disciplinary_letter_id: string;
+  evidence_type: DisciplinaryEvidenceType;
+  file_url?: string | null;
+  text_note?: string | null;
+  related_task_photo_id?: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface DisciplinaryEvent {
+  id: string;
+  disciplinary_letter_id: string;
+  action: string;
+  actor_id: string;
+  actor_name_snapshot: string;
+  previous_status?: DisciplinaryLetterStatus | null;
+  new_status?: DisciplinaryLetterStatus | null;
+  note?: string | null;
+  created_at: string;
+}
+
+export interface DisciplinaryLetter {
+  id: string;
+  letter_number: string;
+  type: DisciplinaryLetterType;
+  level: DisciplinaryLetterLevel;
+  status: DisciplinaryLetterStatus;
+  employee_id: string;
+  employee_name_snapshot: string;
+  employee_position_snapshot?: string | null;
+  outlet_id?: string | null;
+  outlet_name_snapshot: string;
+  related_task_id?: string | null;
+  source_type: DisciplinarySourceType;
+  incident_date: string;
+  created_by: string;
+  created_by_name?: string | null;
+  approved_by?: string | null;
+  approved_by_name?: string | null;
+  approved_at?: string | null;
+  sent_at?: string | null;
+  acknowledged_at?: string | null;
+  resolved_at?: string | null;
+  title: string;
+  chronology: string;
+  violation_detail: string;
+  operational_impact?: string | null;
+  correction_instruction: string;
+  correction_deadline?: string | null;
+  sop_reference?: string | null;
+  consequence?: string | null;
+  internal_note?: string | null;
+  pdf_url?: string | null;
+  created_at: string;
+  updated_at: string;
+  evidence?: DisciplinaryEvidence[];
+  events?: DisciplinaryEvent[];
+  employee_history_count?: number;
+}
+
+export interface DisciplinaryEvidenceInput {
+  evidence_type: DisciplinaryEvidenceType;
+  file_url?: string | null;
+  text_note?: string | null;
+  related_task_photo_id?: string | null;
+}
+
+export interface CreateDisciplinaryLetterPayload {
+  type: DisciplinaryLetterType;
+  level: DisciplinaryLetterLevel;
+  employee_id: string;
+  outlet_id?: string | null;
+  outlet_name?: string | null;
+  employee_name?: string | null;
+  employee_position?: string | null;
+  related_task_id?: string | null;
+  source_type: DisciplinarySourceType;
+  incident_date: string;
+  title?: string;
+  chronology: string;
+  violation_detail: string;
+  operational_impact?: string | null;
+  correction_instruction: string;
+  correction_deadline?: string | null;
+  sop_reference?: string | null;
+  consequence?: string | null;
+  internal_note?: string | null;
+  evidence?: DisciplinaryEvidenceInput[];
+  submit_for_approval?: boolean;
+}
+
+export interface UpdateDisciplinaryLetterPayload
+  extends Partial<CreateDisciplinaryLetterPayload> {
+  id: string;
+}
+
+export interface DisciplinaryFilters {
+  outlet?: string;
+  employee_id?: string;
+  type?: DisciplinaryLetterType | "ALL";
+  level?: DisciplinaryLetterLevel | "ALL";
+  status?: DisciplinaryLetterStatus | "ALL";
+  date_from?: string;
+  date_to?: string;
+}
+
+export interface DisciplinarySummary {
+  total_this_month: number;
+  st_active: number;
+  sp_active: number;
+  waiting_approval: number;
+  repeat_employees: number;
+}
+
+export interface DisciplinaryDashboardData {
+  summary: DisciplinarySummary;
+  letters: DisciplinaryLetter[];
+}
+
+export interface DisciplinaryTaskPrefill {
+  related_task_id: string;
+  employee_id: string;
+  employee_name: string;
+  employee_position?: string | null;
+  outlet_id?: string | null;
+  outlet_name: string;
+  source_type: DisciplinarySourceType;
+  incident_date: string;
+  title: string;
+  chronology: string;
+  violation_detail: string;
+  correction_instruction: string;
+  suggested_type: DisciplinaryLetterType;
+  suggested_level: DisciplinaryLetterLevel;
+  integrity_warning: boolean;
+  evidence: DisciplinaryEvidenceInput[];
+  task_link?: string | null;
+  previous_letter_count: number;
+}
+
+export const DISCIPLINARY_TYPE_OPTIONS: {
+  value: DisciplinaryLetterType;
+  label: string;
+  short: string;
+}[] = [
+  { value: "TEGURAN", label: "Surat Teguran (ST)", short: "ST" },
+  { value: "PERINGATAN", label: "Surat Peringatan (SP)", short: "SP" },
+];
+
+export const DISCIPLINARY_SOURCE_OPTIONS: {
+  value: DisciplinarySourceType;
+  label: string;
+}[] = [
+  { value: "TASK_LATE", label: "Task terlambat" },
+  { value: "TASK_INCOMPLETE", label: "Task tidak selesai" },
+  { value: "FAKE_REPORT", label: "Laporan palsu / foto tidak valid" },
+  { value: "SOP_VIOLATION", label: "Pelanggaran SOP" },
+  { value: "ATTENDANCE", label: "Absensi" },
+  { value: "ATTITUDE", label: "Attitude / insubordinasi" },
+  { value: "OTHER", label: "Lainnya" },
+];
+
+export const DISCIPLINARY_STATUS_OPTIONS: {
+  value: DisciplinaryLetterStatus;
+  label: string;
+}[] = [
+  { value: "DRAFT", label: "Draft" },
+  { value: "WAITING_APPROVAL", label: "Menunggu Approval" },
+  { value: "APPROVED", label: "Disetujui" },
+  { value: "SENT", label: "Terkirim" },
+  { value: "ACKNOWLEDGED", label: "Diakui" },
+  { value: "RESOLVED", label: "Selesai" },
+  { value: "CANCELLED", label: "Dibatalkan" },
+];
+
