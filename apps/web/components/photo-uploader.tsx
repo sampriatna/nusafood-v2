@@ -18,7 +18,7 @@ interface PhotoUploaderProps {
   upload?: {
     taskId: string;
     token: string;
-    context?: "before" | "after" | "checklist_item";
+    context?: "before" | "after" | "checklist_item" | "daily_report";
   };
 }
 

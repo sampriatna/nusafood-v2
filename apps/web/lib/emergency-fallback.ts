@@ -18,10 +18,13 @@ export function isStaffSurfacePath(pathname: string): boolean {
   return (
     pathname.startsWith("/report/") ||
     pathname.startsWith("/checklist/") ||
+    pathname.startsWith("/r/") ||
     Boolean(pathname.match(/^\/api\/tasks\/[^/]+\/(public|open|submit)/)) ||
     Boolean(
       pathname.match(/^\/api\/checklist-reports\/[^/]+\/(public|submit)/)
-    )
+    ) ||
+    Boolean(pathname.match(/^\/api\/staff-reports\/by-token\//)) ||
+    pathname === "/api/staff-reports/submit"
   )
 }
 

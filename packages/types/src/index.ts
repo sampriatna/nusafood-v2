@@ -305,3 +305,224 @@ export interface HealthStatus {
   storage: "ok" | "degraded" | "down" | "skipped";
   gas_fallback: "ok" | "degraded" | "down" | "disabled";
 }
+
+/* ─── Daily Activity SOP (staff static report link) ─── */
+
+export type ReportConditionStatus =
+  | "aman"
+  | "kendala_ringan"
+  | "follow_up_leader"
+  | "perlu_belanja";
+
+export type ReportTemplateCategory =
+  | "Cleaning"
+  | "Opening"
+  | "Closing"
+  | "Stock"
+  | "Production"
+  | "Maintenance"
+  | "Kendala"
+  | "Special"
+  | "General";
+
+export type ReportTemplateKind =
+  | "daily_required"
+  | "special_task"
+  | "issue_quick";
+
+export interface StaffReportLink {
+  id: string;
+  staff_id: string;
+  token: string;
+  short_code: string;
+  is_active: boolean;
+  created_at: string;
+  revoked_at?: string | null;
+  staff_name?: string;
+  outlet?: Outlet | string;
+  position?: string;
+  report_url?: string;
+  report_url_long?: string;
+}
+
+export interface ReportTemplateChecklistItem {
+  id: string;
+  report_template_id: string;
+  item_text: string;
+  is_required: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface ReportTemplate {
+  id: string;
+  code?: string;
+  title: string;
+  category: ReportTemplateCategory | string;
+  /** Outlet code e.g. "KBU", null = semua outlet */
+  outlet_id: string | null;
+  position_group: string | null;
+  standard_result: string;
+  description: string;
+  requires_photo: boolean;
+  is_required_daily: boolean;
+  kind: ReportTemplateKind;
+  target_time_start?: string | null;
+  target_time_end?: string | null;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+  checklist_items?: ReportTemplateChecklistItem[];
+}
+
+export interface CreateReportTemplatePayload {
+  title: string;
+  category?: ReportTemplateCategory | string;
+  outlet_id?: string | null;
+  position_group?: string | null;
+  standard_result?: string;
+  description?: string;
+  requires_photo?: boolean;
+  is_required_daily?: boolean;
+  kind?: ReportTemplateKind;
+  target_time_start?: string | null;
+  target_time_end?: string | null;
+  active?: boolean;
+  sort_order?: number;
+  checklist_items?: { item_text: string; is_required?: boolean; sort_order?: number }[];
+}
+
+export interface UpdateReportTemplatePayload {
+  id: string;
+  title?: string;
+  category?: ReportTemplateCategory | string;
+  outlet_id?: string | null;
+  position_group?: string | null;
+  standard_result?: string;
+  description?: string;
+  requires_photo?: boolean;
+  is_required_daily?: boolean;
+  kind?: ReportTemplateKind;
+  target_time_start?: string | null;
+  target_time_end?: string | null;
+  active?: boolean;
+  sort_order?: number;
+  checklist_items?: { item_text: string; is_required?: boolean; sort_order?: number }[];
+}
+
+export interface DailyReportChecklistAnswer {
+  id: string;
+  submission_id: string;
+  checklist_item_id: string;
+  checked: boolean;
+  created_at: string;
+  item_text?: string;
+}
+
+export interface DailyReportSubmission {
+  id: string;
+  staff_id: string;
+  outlet_id: string;
+  report_template_id: string;
+  report_date: string;
+  status_condition: ReportConditionStatus;
+  note: string;
+  photo_url?: string | null;
+  submitted_at: string;
+  created_at: string;
+  checklist_answers?: DailyReportChecklistAnswer[];
+  staff_name?: string;
+  outlet?: string;
+  report_title?: string;
+  position?: string;
+  checklist_total?: number;
+  checklist_checked?: number;
+  checklist_percent?: number;
+}
+
+export interface SubmitDailyReportPayload {
+  token: string;
+  report_template_id: string;
+  status_condition: ReportConditionStatus;
+  note?: string;
+  photo_url?: string | null;
+  checklist_answers: { checklist_item_id: string; checked: boolean }[];
+}
+
+export interface StaffReportLinkContext {
+  link: StaffReportLink;
+  staff: {
+    staff_id: string;
+    name: string;
+    outlet: string;
+    position: string;
+    position_group: string;
+  };
+  templates: ReportTemplate[];
+  today_submissions: DailyReportSubmission[];
+}
+
+export interface DailyReportFilters {
+  date?: string;
+  outlet?: string;
+  staff_id?: string;
+  report_template_id?: string;
+  submit_status?: "submitted" | "not_submitted" | "all";
+}
+
+export interface DailyReportDashboardSummary {
+  total_today: number;
+  staff_submitted: number;
+  staff_not_submitted: number;
+  reports_with_issue: number;
+  complete_ok: number;
+  complete_with_issue: number;
+  not_submitted: number;
+}
+
+export type DailyReportRowLabel =
+  | "selesai_lengkap"
+  | "selesai_kendala"
+  | "belum_submit"
+  | "tidak_wajib";
+
+export interface DailyReportDashboardRow {
+  staff_id: string;
+  staff_name: string;
+  outlet: string;
+  position: string;
+  report_template_id: string;
+  report_title: string;
+  category?: string;
+  is_required_daily: boolean;
+  submitted: boolean;
+  submission?: DailyReportSubmission | null;
+  submitted_at?: string | null;
+  photo_url?: string | null;
+  note?: string | null;
+  status_condition?: ReportConditionStatus | null;
+  checklist_total: number;
+  checklist_checked: number;
+  checklist_percent: number;
+  label: DailyReportRowLabel;
+}
+
+export interface DailyReportDashboardData {
+  summary: DailyReportDashboardSummary;
+  rows: DailyReportDashboardRow[];
+  submissions: DailyReportSubmission[];
+  missing_required: DailyReportDashboardRow[];
+}
+
+export const REPORT_CONDITION_OPTIONS: {
+  value: ReportConditionStatus;
+  label: string;
+  requiresNote: boolean;
+}[] = [
+  { value: "aman", label: "Aman", requiresNote: false },
+  { value: "kendala_ringan", label: "Ada kendala ringan", requiresNote: true },
+  { value: "follow_up_leader", label: "Perlu follow up leader", requiresNote: true },
+  { value: "perlu_belanja", label: "Perlu belanja/perbaikan", requiresNote: true },
+];
+
+export const REPORT_POSITION_GROUPS = ["Waiters", "Bar", "Dapur", "PA"] as const;

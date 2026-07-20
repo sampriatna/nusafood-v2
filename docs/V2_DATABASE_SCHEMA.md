@@ -485,6 +485,56 @@ async function migrateTasks(sheetRows: Record<string, string>[]) {
 
 ---
 
+## Fitur Baru: Staff Static Report Link (Daily Activity SOP)
+
+Pelengkap sistem task utama. Staff membuka `/r/[token]` untuk mengisi **kegiatan standar** (checklist + foto + kondisi), bukan laporan teks bebas. Lihat `docs/STAFF_STATIC_REPORT_LINK.md`.
+
+### Tabel: `staff_report_links`
+
+```sql
+CREATE TABLE staff_report_links (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  staff_id    VARCHAR(50) NOT NULL REFERENCES staff(staff_id),
+  token       VARCHAR(128) NOT NULL UNIQUE,
+  short_code  VARCHAR(48) NOT NULL UNIQUE,
+  is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  revoked_at  TIMESTAMPTZ
+);
+```
+
+### Tabel: `report_templates`
+
+```sql
+CREATE TABLE report_templates (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code               VARCHAR(50) NOT NULL UNIQUE, -- RTPL-*
+  title              VARCHAR(200) NOT NULL,
+  category           VARCHAR(50) NOT NULL DEFAULT 'General',
+  outlet_id          UUID REFERENCES outlets(id),
+  position_group     VARCHAR(100),
+  standard_result    TEXT NOT NULL,
+  description        TEXT,
+  requires_photo     BOOLEAN NOT NULL DEFAULT FALSE,
+  is_required_daily  BOOLEAN NOT NULL DEFAULT FALSE,
+  kind               VARCHAR(30) NOT NULL DEFAULT 'daily_required',
+  target_time_start  TIME,
+  target_time_end    TIME,
+  active             BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order         INT NOT NULL DEFAULT 10,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+### Tabel terkait
+
+- `report_template_checklist_items`
+- `daily_report_submissions` — UNIQUE(staff_id, report_template_id, report_date)
+- `daily_report_checklist_answers`
+
+---
+
 ## Backup & Retention
 
 | Data | Retention | Backup |
@@ -494,3 +544,4 @@ async function migrateTasks(sheetRows: Record<string, string>[]) {
 | Audit logs | 2 tahun | Weekly |
 | Sync logs | 90 hari | Tidak perlu arsip |
 | Foto | Selamanya | Replicate ke secondary bucket |
+| Daily report submissions | 2 tahun | Weekly |

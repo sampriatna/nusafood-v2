@@ -9,7 +9,11 @@ import { randomBytes } from "node:crypto";
 
 export type StorageHealth = "ok" | "degraded" | "down" | "skipped";
 
-export type UploadContext = "before" | "after" | "checklist_item";
+export type UploadContext =
+  | "before"
+  | "after"
+  | "checklist_item"
+  | "daily_report";
 
 export interface UploadResult {
   url: string;

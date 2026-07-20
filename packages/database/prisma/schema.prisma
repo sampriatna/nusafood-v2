@@ -66,6 +66,19 @@ enum SyncStatus {
   failed
 }
 
+enum ReportTemplateKind {
+  daily_required
+  special_task
+  issue_quick
+}
+
+enum ReportConditionStatus {
+  aman
+  kendala_ringan
+  follow_up_leader
+  perlu_belanja
+}
+
 model Outlet {
   id        String   @id @default(uuid()) @db.Uuid
   code      String   @unique @db.VarChar(50)
@@ -74,12 +87,14 @@ model Outlet {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  areas              Area[]
-  staff              Staff[]
-  tasks              Task[]
-  recurringTemplates RecurringTemplate[]
-  checklistTemplates ChecklistTemplate[]
-  checklistReports   ChecklistReport[]
+  areas                   Area[]
+  staff                   Staff[]
+  tasks                   Task[]
+  recurringTemplates      RecurringTemplate[]
+  checklistTemplates      ChecklistTemplate[]
+  checklistReports        ChecklistReport[]
+  reportTemplates         ReportTemplate[]
+  dailyReportSubmissions  DailyReportSubmission[]
 
   @@map("outlets")
 }
@@ -130,11 +145,13 @@ model Staff {
   createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  outlet             Outlet              @relation(fields: [outletId], references: [id])
-  area               Area?               @relation(fields: [areaId], references: [id])
-  userAccount        UserAccount?
-  tasks              Task[]
-  recurringTemplates RecurringTemplate[]
+  outlet                 Outlet                 @relation(fields: [outletId], references: [id])
+  area                   Area?                  @relation(fields: [areaId], references: [id])
+  userAccount            UserAccount?
+  tasks                  Task[]
+  recurringTemplates     RecurringTemplate[]
+  staffReportLinks       StaffReportLink[]
+  dailyReportSubmissions DailyReportSubmission[]
 
   @@index([outletId], map: "idx_staff_outlet")
   @@index([status], map: "idx_staff_status")
@@ -374,4 +391,101 @@ model SyncLog {
 
   @@index([entityType, entityId], map: "idx_sync_logs_entity")
   @@map("sync_logs")
+}
+
+/// Daily Activity SOP — link pribadi staff (/r/[token|short_code])
+model StaffReportLink {
+  id        String    @id @default(uuid()) @db.Uuid
+  staffId   String    @map("staff_id") @db.VarChar(50)
+  token     String    @unique @db.VarChar(128)
+  shortCode String    @unique @map("short_code") @db.VarChar(48)
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  staff Staff @relation(fields: [staffId], references: [staffId])
+
+  @@index([staffId], map: "idx_staff_report_links_staff")
+  @@index([isActive], map: "idx_staff_report_links_active")
+  @@map("staff_report_links")
+}
+
+/// Template kegiatan standar (SOP) — terpisah dari checklist_templates task
+model ReportTemplate {
+  id               String             @id @default(uuid()) @db.Uuid
+  code             String             @unique @db.VarChar(50)
+  title            String             @db.VarChar(200)
+  category         String             @default("General") @db.VarChar(50)
+  outletId         String?            @map("outlet_id") @db.Uuid
+  positionGroup    String?            @map("position_group") @db.VarChar(100)
+  standardResult   String             @map("standard_result")
+  description      String?
+  requiresPhoto    Boolean            @default(false) @map("requires_photo")
+  isRequiredDaily  Boolean            @default(false) @map("is_required_daily")
+  kind             ReportTemplateKind @default(daily_required)
+  targetTimeStart  DateTime?          @map("target_time_start") @db.Time(6)
+  targetTimeEnd    DateTime?          @map("target_time_end") @db.Time(6)
+  active           Boolean            @default(true)
+  sortOrder        Int                @default(10) @map("sort_order")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  outlet      Outlet?                        @relation(fields: [outletId], references: [id])
+  items       ReportTemplateChecklistItem[]
+  submissions DailyReportSubmission[]
+
+  @@index([active, sortOrder], map: "idx_report_templates_active")
+  @@map("report_templates")
+}
+
+model ReportTemplateChecklistItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  reportTemplateId String   @map("report_template_id") @db.Uuid
+  itemText         String   @map("item_text") @db.VarChar(500)
+  isRequired       Boolean  @default(true) @map("is_required")
+  sortOrder        Int      @default(1) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  template ReportTemplate               @relation(fields: [reportTemplateId], references: [id], onDelete: Cascade)
+  answers  DailyReportChecklistAnswer[]
+
+  @@index([reportTemplateId, sortOrder], map: "idx_rtci_template")
+  @@map("report_template_checklist_items")
+}
+
+model DailyReportSubmission {
+  id               String                @id @default(uuid()) @db.Uuid
+  staffId          String                @map("staff_id") @db.VarChar(50)
+  outletId         String                @map("outlet_id") @db.Uuid
+  reportTemplateId String                @map("report_template_id") @db.Uuid
+  reportDate       DateTime              @map("report_date") @db.Date
+  statusCondition  ReportConditionStatus @map("status_condition")
+  note             String?
+  photoUrl         String?               @map("photo_url")
+  submittedAt      DateTime              @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  staff    Staff                        @relation(fields: [staffId], references: [staffId])
+  outlet   Outlet                       @relation(fields: [outletId], references: [id])
+  template ReportTemplate               @relation(fields: [reportTemplateId], references: [id])
+  answers  DailyReportChecklistAnswer[]
+
+  @@unique([staffId, reportTemplateId, reportDate])
+  @@index([reportDate], map: "idx_daily_report_submissions_date")
+  @@map("daily_report_submissions")
+}
+
+model DailyReportChecklistAnswer {
+  id              String   @id @default(uuid()) @db.Uuid
+  submissionId    String   @map("submission_id") @db.Uuid
+  checklistItemId String   @map("checklist_item_id") @db.Uuid
+  checked         Boolean  @default(false)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  submission DailyReportSubmission      @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  item       ReportTemplateChecklistItem @relation(fields: [checklistItemId], references: [id])
+
+  @@unique([submissionId, checklistItemId])
+  @@map("daily_report_checklist_answers")
 }
