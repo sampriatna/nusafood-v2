@@ -1,13 +1,11 @@
 import type { SubmitLeaderMonitorPayload } from "@nusafood/types";
 import { submitLeaderMonitor } from "@/lib/leader-monitoring-store";
-import { ensureStaffReportCache } from "@/lib/ensure-staff-report-cache";
 import { requireAuth } from "@/lib/require-auth";
 import { ok, fail } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  await ensureStaffReportCache();
   const auth = await requireAuth(["ADMIN", "LEADER"]);
   if (!auth.ok) return auth.response;
 
@@ -20,7 +18,7 @@ export async function POST(request: Request) {
       outlet_id: body.outlet_id || auth.session?.userOutlet || body.outlet_id,
     };
 
-    const result = submitLeaderMonitor(payload);
+    const result = await submitLeaderMonitor(payload);
     if (!result.success) {
       return fail(result.error, { status: 400 });
     }

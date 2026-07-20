@@ -306,13 +306,8 @@ export interface HealthStatus {
   gas_fallback: "ok" | "degraded" | "down" | "disabled";
 }
 
-// =============================================
-// STAFF STATIC REPORT LINK (Daily Report / SOP)
-// Report = kegiatan standar + checklist + foto + kondisi
-// Bukan input teks bebas.
-// =============================================
+/* ─── Daily Activity SOP (staff static report link) ─── */
 
-/** Kondisi hasil kerja — pilihan tombol, bukan teks bebas */
 export type ReportConditionStatus =
   | "aman"
   | "kendala_ringan"
@@ -337,15 +332,15 @@ export type ReportTemplateCategory =
   | "Special"
   | "General";
 
-/** Jenis report: wajib harian | tugas khusus | quick kendala */
-export type ReportTemplateKind = "daily_required" | "special_task" | "issue_quick";
+export type ReportTemplateKind =
+  | "daily_required"
+  | "special_task"
+  | "issue_quick";
 
 export interface StaffReportLink {
   id: string;
   staff_id: string;
-  /** Token aman panjang (internal / fallback) */
   token: string;
-  /** Kode pendek dari nama, contoh: dul → /r/dul */
   short_code: string;
   is_active: boolean;
   created_at: string;
@@ -353,9 +348,7 @@ export interface StaffReportLink {
   staff_name?: string;
   outlet?: Outlet | string;
   position?: string;
-  /** URL pendek untuk dibagikan */
   report_url?: string;
-  /** URL panjang (token) — cadangan */
   report_url_long?: string;
 }
 
@@ -370,21 +363,19 @@ export interface ReportTemplateChecklistItem {
 
 export interface ReportTemplate {
   id: string;
+  code?: string;
   title: string;
-  category: ReportTemplateCategory;
+  category: ReportTemplateCategory | string;
   /** Outlet code e.g. "KBU", null = semua outlet */
   outlet_id: string | null;
-  /** Jabatan/group: Waiters | Bar | Dapur | null = semua */
   position_group: string | null;
-  /** Standar hasil kerja (SOP mini) */
   standard_result: string;
-  /** Deskripsi singkat / tujuan — legacy alias display */
   description: string;
   requires_photo: boolean;
   is_required_daily: boolean;
   kind: ReportTemplateKind;
-  target_time_start?: string | null; // "09:00"
-  target_time_end?: string | null; // "10:00"
+  target_time_start?: string | null;
+  target_time_end?: string | null;
   active: boolean;
   sort_order: number;
   created_at: string;
@@ -393,7 +384,7 @@ export interface ReportTemplate {
 
 export interface CreateReportTemplatePayload {
   title: string;
-  category?: ReportTemplateCategory;
+  category?: ReportTemplateCategory | string;
   outlet_id?: string | null;
   position_group?: string | null;
   standard_result?: string;
@@ -411,7 +402,7 @@ export interface CreateReportTemplatePayload {
 export interface UpdateReportTemplatePayload {
   id: string;
   title?: string;
-  category?: ReportTemplateCategory;
+  category?: ReportTemplateCategory | string;
   outlet_id?: string | null;
   position_group?: string | null;
   standard_result?: string;
@@ -432,7 +423,6 @@ export interface DailyReportChecklistAnswer {
   checklist_item_id: string;
   checked: boolean;
   created_at: string;
-  /** Denormalized */
   item_text?: string;
 }
 
@@ -455,7 +445,6 @@ export interface DailyReportSubmission {
   leader_validated_by?: string | null;
   leader_validated_by_name?: string | null;
   leader_validation_photo_url?: string | null;
-  /** Denormalized for dashboard */
   staff_name?: string;
   outlet?: string;
   report_title?: string;
@@ -470,6 +459,7 @@ export interface SubmitDailyReportPayload {
   report_template_id: string;
   status_condition: ReportConditionStatus;
   note?: string;
+  photo_url?: string | null;
   photo_base64?: string;
   checklist_answers: { checklist_item_id: string; checked: boolean }[];
 }
@@ -519,13 +509,12 @@ export interface DailyReportDashboardSummary {
   not_submitted: number;
 }
 
-/** Label warna dashboard */
 export type DailyReportRowLabel =
-  | "selesai_lengkap" // hijau
-  | "selesai_kendala" // kuning
-  | "belum_submit" // merah
-  | "tidak_wajib" // abu
-  | "perlu_perbaikan"; // oranye — leader minta revisi / tidak valid
+  | "selesai_lengkap"
+  | "selesai_kendala"
+  | "belum_submit"
+  | "tidak_wajib"
+  | "perlu_perbaikan";
 
 export interface DailyReportDashboardRow {
   staff_id: string;
@@ -555,9 +544,6 @@ export interface DailyReportDashboardData {
   missing_required: DailyReportDashboardRow[];
 }
 
-/** @deprecated use status_condition */
-export type DailyReportStatus = "submitted" | "issue" | "reviewed";
-
 export const REPORT_CONDITION_OPTIONS: {
   value: ReportConditionStatus;
   label: string;
@@ -571,10 +557,7 @@ export const REPORT_CONDITION_OPTIONS: {
 
 export const REPORT_POSITION_GROUPS = ["Waiters", "Bar", "Dapur", "PA"] as const;
 
-// =============================================
-// LEADER MONITORING (kontrol lapangan di atas Daily Report)
-// Staff submit ≠ otomatis benar. Leader cek fisik → validasi.
-// =============================================
+/* ─── Leader Monitoring (kontrol lapangan di atas Daily Report) ─── */
 
 export type LeaderMonitorKind =
   | "opening_control"
@@ -583,10 +566,8 @@ export type LeaderMonitorKind =
   | "closing_control"
   | "issue_log";
 
-/** Hijau / Kuning / Merah hasil keliling leader */
 export type LeaderMonitorStatus = "aman" | "ada_catatan" | "tidak_sesuai";
 
-/** Skor per titik: 2 aman, 1 catatan, 0 gagal */
 export type LeaderItemScore = 0 | 1 | 2;
 
 export type LeaderFollowUpStatus = "open" | "on_progress" | "selesai";
@@ -642,7 +623,6 @@ export interface LeaderMonitorSubmission {
   fix_deadline?: string | null;
   photo_url?: string | null;
   follow_up_status: LeaderFollowUpStatus;
-  /** Link ke laporan staff (spot check / validasi) */
   staff_submission_id?: string | null;
   staff_validation?: StaffReportValidationStatus | null;
   created_at: string;
@@ -713,7 +693,11 @@ export const LEADER_MONITOR_KIND_META: {
   { kind: "jam_ramai_control", label: "Jam Ramai Control", short: "Jam Ramai" },
   { kind: "spot_check_area", label: "Spot Check Area", short: "Spot Check" },
   { kind: "closing_control", label: "Closing Control", short: "Closing" },
-  { kind: "issue_log", label: "Issue Log / Catatan Masalah", short: "Issue Log" },
+  {
+    kind: "issue_log",
+    label: "Issue Log / Catatan Masalah",
+    short: "Issue Log",
+  },
 ];
 
 export const LEADER_MONITOR_STATUS_OPTIONS: {
@@ -723,10 +707,14 @@ export const LEADER_MONITOR_STATUS_OPTIONS: {
 }[] = [
   { value: "aman", label: "Aman / Siap", color: "green" },
   { value: "ada_catatan", label: "Ada catatan", color: "yellow" },
-  { value: "tidak_sesuai", label: "Tidak sesuai / belum siap", color: "red" },
+  {
+    value: "tidak_sesuai",
+    label: "Tidak sesuai / belum siap",
+    color: "red",
+  },
 ];
 
-export const LEADER_SCORE_OPTIONS: {
+export const LEADER_ITEM_SCORE_OPTIONS: {
   value: LeaderItemScore;
   label: string;
 }[] = [
@@ -735,7 +723,10 @@ export const LEADER_SCORE_OPTIONS: {
   { value: 0, label: "Gagal" },
 ];
 
-export const STAFF_VALIDATION_OPTIONS: {
+/** @deprecated use LEADER_ITEM_SCORE_OPTIONS */
+export const LEADER_SCORE_OPTIONS = LEADER_ITEM_SCORE_OPTIONS;
+
+export const STAFF_REPORT_VALIDATION_OPTIONS: {
   value: StaffReportValidationStatus;
   label: string;
 }[] = [
@@ -744,6 +735,9 @@ export const STAFF_VALIDATION_OPTIONS: {
   { value: "tidak_valid", label: "Tidak valid" },
   { value: "manipulasi", label: "Diduga manipulasi" },
 ];
+
+/** @deprecated use STAFF_REPORT_VALIDATION_OPTIONS */
+export const STAFF_VALIDATION_OPTIONS = STAFF_REPORT_VALIDATION_OPTIONS;
 
 export const LEADER_FOLLOW_UP_OPTIONS: {
   value: LeaderFollowUpStatus;

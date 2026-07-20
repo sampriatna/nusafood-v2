@@ -1,13 +1,11 @@
 import type { LeaderFollowUpStatus } from "@nusafood/types";
 import { updateLeaderMonitorFollowUp } from "@/lib/leader-monitoring-store";
-import { ensureStaffReportCache } from "@/lib/ensure-staff-report-cache";
 import { requireAuth } from "@/lib/require-auth";
 import { ok, fail } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  await ensureStaffReportCache();
   const auth = await requireAuth(["ADMIN", "LEADER"]);
   if (!auth.ok) return auth.response;
 

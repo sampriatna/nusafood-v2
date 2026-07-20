@@ -22,7 +22,6 @@ import {
   submitLeaderMonitor,
   updateLeaderMonitorFollowUp,
   fetchStaffList,
-  syncStaffReportStaff,
 } from "@/lib/api/daily-report-client";
 import type {
   LeaderMonitorDashboardData,
@@ -82,10 +81,8 @@ export default function LeaderMonitoringPage() {
     try {
       const staffRes = await fetchStaffList({ status: "ACTIVE" });
       if (staffRes.success && staffRes.data) {
-        await syncStaffReportStaff(staffRes.data);
         const opt = await getLeaderStaffOptions(
           outlet === "ALL" ? undefined : outlet,
-          staffRes.data
         );
         if (opt.success && opt.data) setStaffOptions(opt.data);
       }

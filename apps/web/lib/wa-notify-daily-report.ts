@@ -1,5 +1,5 @@
 import type { ReportConditionStatus, Staff } from "@nusafood/types";
-import { getStaffCache } from "./staff-report-store";
+import { listStaff } from "@/lib/services/staff.service";
 import {
   buildKendalaWaMessage,
   buildWaMeLink,
@@ -22,18 +22,18 @@ export type KendalaNotifyResult = {
   message: string;
 };
 
-export function findLeadersForOutlet(outlet: string): Staff[] {
-  const staff = getStaffCache().filter((s) => s.status === "ACTIVE");
+export async function findLeadersForOutlet(outlet: string): Promise<Staff[]> {
+  const staff = await listStaff({ status: "ACTIVE" });
   const sameOutletLeaders = staff.filter(
     (s) =>
       (s.role === "LEADER" || s.role === "ADMIN") &&
       s.outlet === outlet &&
-      s.wa_number
+      s.wa_number,
   );
   if (sameOutletLeaders.length > 0) return sameOutletLeaders;
 
   return staff.filter(
-    (s) => (s.role === "LEADER" || s.role === "ADMIN") && s.wa_number
+    (s) => (s.role === "LEADER" || s.role === "ADMIN") && s.wa_number,
   );
 }
 
@@ -98,7 +98,7 @@ export async function notifyLeadersOnKendala(input: {
   }
 
   const message = buildKendalaWaMessage(input);
-  const leadersRaw = findLeadersForOutlet(input.outlet);
+  const leadersRaw = await findLeadersForOutlet(input.outlet);
   const leaders: LeaderNotifyTarget[] = leadersRaw
     .map((l) => ({
       staff_id: l.staff_id,

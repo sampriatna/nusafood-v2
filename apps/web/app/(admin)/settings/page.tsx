@@ -85,6 +85,12 @@ export default async function SettingsPage() {
         meta={`${recurring.length} template · ${recurring.filter((t) => t.active_status).length} aktif`}
       />
       <SettingsLinkCard
+        href="/settings/daily-activity"
+        icon={ClipboardList}
+        title="Daily Activity SOP"
+        description="Template kegiatan harian, link staff, dan dashboard audit"
+      />
+      <SettingsLinkCard
         href="/settings/staff"
         icon={Users}
         title="Master Staff"

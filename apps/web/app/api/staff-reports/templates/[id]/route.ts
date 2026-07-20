@@ -1,30 +1,36 @@
-import type { ReportTemplateCategory, ReportTemplateKind } from "@nusafood/types";
-import { updateReportTemplate } from "@/lib/staff-report-store";
-import { ensureStaffReportCache } from "@/lib/ensure-staff-report-cache";
+import type {
+  ReportTemplateCategory,
+  ReportTemplateKind,
+} from "@nusafood/types";
+import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
-import { fail } from "@/lib/api/response";
-import { NextResponse } from "next/server";
+import {
+  DailyActivityError,
+  updateReportTemplate,
+} from "@/lib/services/daily-activity.service";
 
 export const dynamic = "force-dynamic";
 
-export async function PUT(
+export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  await ensureStaffReportCache();
-  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  const auth = await requireAuth(["ADMIN"]);
   if (!auth.ok) return auth.response;
 
-  const { id } = await context.params;
-
   try {
+    const { id } = await context.params;
     const body = await request.json();
 
     const checklistItems = Array.isArray(body.checklist_items)
       ? body.checklist_items
           .map(
             (
-              item: { item_text?: string; is_required?: boolean; sort_order?: number },
+              item: {
+                item_text?: string;
+                is_required?: boolean;
+                sort_order?: number;
+              },
               index: number,
             ) => ({
               item_text: String(item.item_text || "").trim(),
@@ -35,12 +41,19 @@ export async function PUT(
           .filter((i: { item_text: string }) => i.item_text)
       : undefined;
 
-    const result = updateReportTemplate({
+    const template = await updateReportTemplate({
       id,
-      title: body.title,
-      category: body.category as ReportTemplateCategory | undefined,
-      description: body.description,
-      standard_result: body.standard_result,
+      title: body.title !== undefined ? String(body.title) : undefined,
+      category:
+        body.category !== undefined
+          ? (body.category as ReportTemplateCategory)
+          : undefined,
+      description:
+        body.description !== undefined ? String(body.description) : undefined,
+      standard_result:
+        body.standard_result !== undefined
+          ? String(body.standard_result)
+          : undefined,
       outlet_id:
         body.outlet_id === undefined
           ? undefined
@@ -53,31 +66,45 @@ export async function PUT(
           : body.position_group === "" || body.position_group === "ALL"
             ? null
             : String(body.position_group),
-      requires_photo: body.requires_photo,
-      is_required_daily: body.is_required_daily,
-      kind: body.kind as ReportTemplateKind | undefined,
+      requires_photo:
+        body.requires_photo !== undefined
+          ? Boolean(body.requires_photo)
+          : undefined,
+      is_required_daily:
+        body.is_required_daily !== undefined
+          ? Boolean(body.is_required_daily)
+          : undefined,
+      kind:
+        body.kind !== undefined
+          ? (body.kind as ReportTemplateKind)
+          : undefined,
       target_time_start:
-        body.target_time_start === undefined
-          ? undefined
-          : body.target_time_start
+        body.target_time_start !== undefined
+          ? body.target_time_start
             ? String(body.target_time_start)
-            : null,
+            : null
+          : undefined,
       target_time_end:
-        body.target_time_end === undefined
-          ? undefined
-          : body.target_time_end
+        body.target_time_end !== undefined
+          ? body.target_time_end
             ? String(body.target_time_end)
-            : null,
-      active: body.active,
-      sort_order: body.sort_order !== undefined ? Number(body.sort_order) : undefined,
+            : null
+          : undefined,
+      active: body.active !== undefined ? Boolean(body.active) : undefined,
+      sort_order:
+        body.sort_order !== undefined ? Number(body.sort_order) : undefined,
       checklist_items: checklistItems,
     });
 
-    if (!result.success) {
-      return fail(result.error, { status: 404 });
+    return ok(template);
+  } catch (error) {
+    if (error instanceof DailyActivityError) {
+      return fail(error.message, { code: error.code, status: error.status });
     }
-    return NextResponse.json({ success: true, data: result.data, error: null });
-  } catch {
-    return fail("Invalid request body", { status: 400 });
+    console.error("[PATCH /api/staff-reports/templates/:id]", error);
+    return fail("Gagal update template", {
+      code: "TEMPLATE_UPDATE_FAILED",
+      status: 500,
+    });
   }
 }

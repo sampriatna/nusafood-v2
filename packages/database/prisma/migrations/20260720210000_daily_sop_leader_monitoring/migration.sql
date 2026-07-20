@@ -1,12 +1,5 @@
--- CreateEnum
-CREATE TYPE "ReportConditionStatus" AS ENUM (
-  'aman',
-  'kendala_ringan',
-  'follow_up_leader',
-  'perlu_belanja'
-);
+-- Leader Monitoring + staff report validation (extends daily_activity_sop migration)
 
--- CreateEnum
 CREATE TYPE "StaffReportValidationStatus" AS ENUM (
   'valid',
   'revisi',
@@ -14,14 +7,6 @@ CREATE TYPE "StaffReportValidationStatus" AS ENUM (
   'manipulasi'
 );
 
--- CreateEnum
-CREATE TYPE "ReportTemplateKind" AS ENUM (
-  'daily_required',
-  'special_task',
-  'issue_quick'
-);
-
--- CreateEnum
 CREATE TYPE "LeaderMonitorKind" AS ENUM (
   'opening_control',
   'jam_ramai_control',
@@ -30,97 +15,34 @@ CREATE TYPE "LeaderMonitorKind" AS ENUM (
   'issue_log'
 );
 
--- CreateEnum
 CREATE TYPE "LeaderMonitorStatus" AS ENUM (
   'aman',
   'ada_catatan',
   'tidak_sesuai'
 );
 
--- CreateEnum
 CREATE TYPE "LeaderFollowUpStatus" AS ENUM (
   'open',
   'on_progress',
   'selesai'
 );
 
--- CreateEnum
 CREATE TYPE "LeaderPhotoMode" AS ENUM (
   'required',
   'optional',
   'required_if_issue'
 );
 
--- CreateTable
-CREATE TABLE "daily_report_templates" (
-  "id" VARCHAR(50) NOT NULL,
-  "title" VARCHAR(500) NOT NULL,
-  "category" VARCHAR(100) NOT NULL,
-  "outlet_code" VARCHAR(50),
-  "position_group" VARCHAR(50),
-  "standard_result" TEXT NOT NULL,
-  "description" TEXT NOT NULL DEFAULT '',
-  "requires_photo" BOOLEAN NOT NULL DEFAULT false,
-  "is_required_daily" BOOLEAN NOT NULL DEFAULT true,
-  "kind" "ReportTemplateKind" NOT NULL DEFAULT 'daily_required',
-  "target_time_start" VARCHAR(10),
-  "target_time_end" VARCHAR(10),
-  "active" BOOLEAN NOT NULL DEFAULT true,
-  "sort_order" INTEGER NOT NULL DEFAULT 0,
-  "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updated_at" TIMESTAMPTZ(6) NOT NULL,
-  CONSTRAINT "daily_report_templates_pkey" PRIMARY KEY ("id")
-);
+ALTER TABLE "daily_report_submissions"
+  ADD COLUMN "leader_validation" "StaffReportValidationStatus",
+  ADD COLUMN "leader_validation_note" TEXT,
+  ADD COLUMN "leader_validated_at" TIMESTAMPTZ(6),
+  ADD COLUMN "leader_validated_by" VARCHAR(50),
+  ADD COLUMN "leader_validated_by_name" VARCHAR(200),
+  ADD COLUMN "leader_validation_photo_url" TEXT;
 
--- CreateTable
-CREATE TABLE "daily_report_template_items" (
-  "id" VARCHAR(50) NOT NULL,
-  "template_id" VARCHAR(50) NOT NULL,
-  "item_text" TEXT NOT NULL,
-  "is_required" BOOLEAN NOT NULL DEFAULT true,
-  "sort_order" INTEGER NOT NULL DEFAULT 0,
-  "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT "daily_report_template_items_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "staff_report_links" (
-  "id" VARCHAR(50) NOT NULL,
-  "staff_id" VARCHAR(50) NOT NULL,
-  "token" VARCHAR(64) NOT NULL,
-  "short_code" VARCHAR(50) NOT NULL,
-  "is_active" BOOLEAN NOT NULL DEFAULT true,
-  "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "revoked_at" TIMESTAMPTZ(6),
-  CONSTRAINT "staff_report_links_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "daily_report_submissions" (
-  "id" VARCHAR(50) NOT NULL,
-  "staff_id" VARCHAR(50) NOT NULL,
-  "outlet_code" VARCHAR(50) NOT NULL,
-  "template_id" VARCHAR(50) NOT NULL,
-  "report_date" DATE NOT NULL,
-  "status_condition" "ReportConditionStatus" NOT NULL,
-  "note" TEXT NOT NULL DEFAULT '',
-  "photo_url" TEXT,
-  "submitted_at" TIMESTAMPTZ(6) NOT NULL,
-  "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updated_at" TIMESTAMPTZ(6) NOT NULL,
-  "checklist_answers" JSONB NOT NULL DEFAULT '[]',
-  "leader_validation" "StaffReportValidationStatus",
-  "leader_validation_note" TEXT,
-  "leader_validated_at" TIMESTAMPTZ(6),
-  "leader_validated_by" VARCHAR(50),
-  "leader_validated_by_name" VARCHAR(200),
-  "leader_validation_photo_url" TEXT,
-  CONSTRAINT "daily_report_submissions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "leader_monitor_templates" (
-  "id" VARCHAR(50) NOT NULL,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
   "kind" "LeaderMonitorKind" NOT NULL,
   "title" VARCHAR(500) NOT NULL,
   "menu_label" VARCHAR(200) NOT NULL,
@@ -134,14 +56,16 @@ CREATE TABLE "leader_monitor_templates" (
   "active" BOOLEAN NOT NULL DEFAULT true,
   "sort_order" INTEGER NOT NULL DEFAULT 0,
   "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updated_at" TIMESTAMPTZ(6) NOT NULL,
+  "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "leader_monitor_templates_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
+CREATE INDEX "idx_leader_monitor_templates_active"
+  ON "leader_monitor_templates"("active", "sort_order");
+
 CREATE TABLE "leader_monitor_submissions" (
-  "id" VARCHAR(50) NOT NULL,
-  "template_id" VARCHAR(50) NOT NULL,
+  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "template_id" UUID NOT NULL,
   "kind" "LeaderMonitorKind" NOT NULL,
   "report_date" DATE NOT NULL,
   "outlet_code" VARCHAR(50) NOT NULL,
@@ -160,36 +84,17 @@ CREATE TABLE "leader_monitor_submissions" (
   "fix_deadline" VARCHAR(20),
   "photo_url" TEXT,
   "follow_up_status" "LeaderFollowUpStatus" NOT NULL DEFAULT 'open',
-  "staff_submission_id" VARCHAR(50),
+  "staff_submission_id" UUID,
   "staff_validation" "StaffReportValidationStatus",
   "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updated_at" TIMESTAMPTZ(6) NOT NULL,
+  "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "leader_monitor_submissions_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE INDEX "idx_daily_report_template_items_template" ON "daily_report_template_items"("template_id");
+CREATE INDEX "idx_leader_monitor_submissions_date_outlet"
+  ON "leader_monitor_submissions"("report_date", "outlet_code");
 
--- CreateIndex
-CREATE UNIQUE INDEX "staff_report_links_token_key" ON "staff_report_links"("token");
-
--- CreateIndex
-CREATE UNIQUE INDEX "staff_report_links_short_code_key" ON "staff_report_links"("short_code");
-
--- CreateIndex
-CREATE INDEX "idx_staff_report_links_staff" ON "staff_report_links"("staff_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "daily_report_submissions_staff_template_date_key" ON "daily_report_submissions"("staff_id", "template_id", "report_date");
-
--- CreateIndex
-CREATE INDEX "idx_daily_report_submissions_date_outlet" ON "daily_report_submissions"("report_date", "outlet_code");
-
--- CreateIndex
-CREATE INDEX "idx_leader_monitor_submissions_date_outlet" ON "leader_monitor_submissions"("report_date", "outlet_code");
-
--- AddForeignKey
-ALTER TABLE "daily_report_template_items" ADD CONSTRAINT "daily_report_template_items_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "daily_report_templates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "daily_report_submissions" ADD CONSTRAINT "daily_report_submissions_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "daily_report_templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "leader_monitor_submissions"
+  ADD CONSTRAINT "leader_monitor_submissions_template_id_fkey"
+  FOREIGN KEY ("template_id") REFERENCES "leader_monitor_templates"("id")
+  ON DELETE RESTRICT ON UPDATE CASCADE;

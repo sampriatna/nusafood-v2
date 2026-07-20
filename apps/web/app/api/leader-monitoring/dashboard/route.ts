@@ -4,14 +4,12 @@ import type {
   LeaderFollowUpStatus,
 } from "@nusafood/types";
 import { buildLeaderMonitorDashboard } from "@/lib/leader-monitoring-store";
-import { ensureStaffReportCache } from "@/lib/ensure-staff-report-cache";
 import { requireAuth } from "@/lib/require-auth";
 import { ok } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  await ensureStaffReportCache();
   const auth = await requireAuth(["ADMIN", "LEADER"]);
   if (!auth.ok) return auth.response;
 
@@ -24,5 +22,5 @@ export async function GET(request: Request) {
       (searchParams.get("follow_up") as LeaderFollowUpStatus | "ALL") || undefined,
   };
 
-  return ok(buildLeaderMonitorDashboard(filters));
+  return ok(await buildLeaderMonitorDashboard(filters));
 }

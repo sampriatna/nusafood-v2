@@ -66,6 +66,52 @@ enum SyncStatus {
   failed
 }
 
+enum ReportTemplateKind {
+  daily_required
+  special_task
+  issue_quick
+}
+
+enum ReportConditionStatus {
+  aman
+  kendala_ringan
+  follow_up_leader
+  perlu_belanja
+}
+
+enum StaffReportValidationStatus {
+  valid
+  revisi
+  tidak_valid
+  manipulasi
+}
+
+enum LeaderMonitorKind {
+  opening_control
+  jam_ramai_control
+  spot_check_area
+  closing_control
+  issue_log
+}
+
+enum LeaderMonitorStatus {
+  aman
+  ada_catatan
+  tidak_sesuai
+}
+
+enum LeaderFollowUpStatus {
+  open
+  on_progress
+  selesai
+}
+
+enum LeaderPhotoMode {
+  required
+  optional
+  required_if_issue
+}
+
 model Outlet {
   id        String   @id @default(uuid()) @db.Uuid
   code      String   @unique @db.VarChar(50)
@@ -74,12 +120,14 @@ model Outlet {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  areas              Area[]
-  staff              Staff[]
-  tasks              Task[]
-  recurringTemplates RecurringTemplate[]
-  checklistTemplates ChecklistTemplate[]
-  checklistReports   ChecklistReport[]
+  areas                   Area[]
+  staff                   Staff[]
+  tasks                   Task[]
+  recurringTemplates      RecurringTemplate[]
+  checklistTemplates      ChecklistTemplate[]
+  checklistReports        ChecklistReport[]
+  reportTemplates         ReportTemplate[]
+  dailyReportSubmissions  DailyReportSubmission[]
 
   @@map("outlets")
 }
@@ -130,11 +178,13 @@ model Staff {
   createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  outlet             Outlet              @relation(fields: [outletId], references: [id])
-  area               Area?               @relation(fields: [areaId], references: [id])
-  userAccount        UserAccount?
-  tasks              Task[]
-  recurringTemplates RecurringTemplate[]
+  outlet                 Outlet                 @relation(fields: [outletId], references: [id])
+  area                   Area?                  @relation(fields: [areaId], references: [id])
+  userAccount            UserAccount?
+  tasks                  Task[]
+  recurringTemplates     RecurringTemplate[]
+  staffReportLinks       StaffReportLink[]
+  dailyReportSubmissions DailyReportSubmission[]
 
   @@index([outletId], map: "idx_staff_outlet")
   @@index([status], map: "idx_staff_status")
@@ -376,175 +426,160 @@ model SyncLog {
   @@map("sync_logs")
 }
 
-enum ReportConditionStatus {
-  aman
-  kendala_ringan
-  follow_up_leader
-  perlu_belanja
-}
-
-enum StaffReportValidationStatus {
-  valid
-  revisi
-  tidak_valid
-  manipulasi
-}
-
-enum ReportTemplateKind {
-  daily_required
-  special_task
-  issue_quick
-}
-
-enum LeaderMonitorKind {
-  opening_control
-  jam_ramai_control
-  spot_check_area
-  closing_control
-  issue_log
-}
-
-enum LeaderMonitorStatus {
-  aman
-  ada_catatan
-  tidak_sesuai
-}
-
-enum LeaderFollowUpStatus {
-  open
-  on_progress
-  selesai
-}
-
-enum LeaderPhotoMode {
-  required
-  optional
-  required_if_issue
-}
-
-model DailyReportTemplate {
-  id              String              @id @db.VarChar(50)
-  title           String              @db.VarChar(500)
-  category        String              @db.VarChar(100)
-  outletCode      String?             @map("outlet_code") @db.VarChar(50)
-  positionGroup   String?             @map("position_group") @db.VarChar(50)
-  standardResult  String              @map("standard_result")
-  description     String              @default("")
-  requiresPhoto   Boolean             @default(false) @map("requires_photo")
-  isRequiredDaily Boolean             @default(true) @map("is_required_daily")
-  kind            ReportTemplateKind  @default(daily_required)
-  targetTimeStart String?             @map("target_time_start") @db.VarChar(10)
-  targetTimeEnd   String?             @map("target_time_end") @db.VarChar(10)
-  active          Boolean             @default(true)
-  sortOrder       Int                 @default(0) @map("sort_order")
-  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  checklistItems DailyReportTemplateItem[]
-  submissions    DailyReportSubmission[]
-
-  @@map("daily_report_templates")
-}
-
-model DailyReportTemplateItem {
-  id         String              @id @db.VarChar(50)
-  templateId String              @map("template_id") @db.VarChar(50)
-  itemText   String              @map("item_text")
-  isRequired Boolean             @default(true) @map("is_required")
-  sortOrder  Int                 @default(0) @map("sort_order")
-  createdAt  DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  template DailyReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-
-  @@index([templateId], map: "idx_daily_report_template_items_template")
-  @@map("daily_report_template_items")
-}
-
+/// Daily Activity SOP — link pribadi staff (/r/[token|short_code])
 model StaffReportLink {
-  id        String    @id @db.VarChar(50)
+  id        String    @id @default(uuid()) @db.Uuid
   staffId   String    @map("staff_id") @db.VarChar(50)
-  token     String    @unique @db.VarChar(64)
-  shortCode String    @unique @map("short_code") @db.VarChar(50)
+  token     String    @unique @db.VarChar(128)
+  shortCode String    @unique @map("short_code") @db.VarChar(48)
   isActive  Boolean   @default(true) @map("is_active")
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
 
+  staff Staff @relation(fields: [staffId], references: [staffId])
+
   @@index([staffId], map: "idx_staff_report_links_staff")
+  @@index([isActive], map: "idx_staff_report_links_active")
   @@map("staff_report_links")
 }
 
+/// Template kegiatan standar (SOP) — terpisah dari checklist_templates task
+model ReportTemplate {
+  id               String             @id @default(uuid()) @db.Uuid
+  code             String             @unique @db.VarChar(50)
+  title            String             @db.VarChar(200)
+  category         String             @default("General") @db.VarChar(50)
+  outletId         String?            @map("outlet_id") @db.Uuid
+  positionGroup    String?            @map("position_group") @db.VarChar(100)
+  standardResult   String             @map("standard_result")
+  description      String?
+  requiresPhoto    Boolean            @default(false) @map("requires_photo")
+  isRequiredDaily  Boolean            @default(false) @map("is_required_daily")
+  kind             ReportTemplateKind @default(daily_required)
+  targetTimeStart  DateTime?          @map("target_time_start") @db.Time(6)
+  targetTimeEnd    DateTime?          @map("target_time_end") @db.Time(6)
+  active           Boolean            @default(true)
+  sortOrder        Int                @default(10) @map("sort_order")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  outlet      Outlet?                        @relation(fields: [outletId], references: [id])
+  items       ReportTemplateChecklistItem[]
+  submissions DailyReportSubmission[]
+
+  @@index([active, sortOrder], map: "idx_report_templates_active")
+  @@map("report_templates")
+}
+
+model ReportTemplateChecklistItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  reportTemplateId String   @map("report_template_id") @db.Uuid
+  itemText         String   @map("item_text") @db.VarChar(500)
+  isRequired       Boolean  @default(true) @map("is_required")
+  sortOrder        Int      @default(1) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  template ReportTemplate               @relation(fields: [reportTemplateId], references: [id], onDelete: Cascade)
+  answers  DailyReportChecklistAnswer[]
+
+  @@index([reportTemplateId, sortOrder], map: "idx_rtci_template")
+  @@map("report_template_checklist_items")
+}
+
 model DailyReportSubmission {
-  id                       String                       @id @db.VarChar(50)
-  staffId                  String                       @map("staff_id") @db.VarChar(50)
-  outletCode               String                       @map("outlet_code") @db.VarChar(50)
-  templateId               String                       @map("template_id") @db.VarChar(50)
-  reportDate               DateTime                     @map("report_date") @db.Date
-  statusCondition          ReportConditionStatus        @map("status_condition")
-  note                     String                       @default("")
-  photoUrl                 String?                      @map("photo_url")
-  submittedAt              DateTime                     @map("submitted_at") @db.Timestamptz(6)
-  createdAt                DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  checklistAnswers         Json                         @default("[]") @map("checklist_answers")
-  leaderValidation         StaffReportValidationStatus? @map("leader_validation")
-  leaderValidationNote     String?                      @map("leader_validation_note")
-  leaderValidatedAt        DateTime?                    @map("leader_validated_at") @db.Timestamptz(6)
-  leaderValidatedBy        String?                      @map("leader_validated_by") @db.VarChar(50)
-  leaderValidatedByName    String?                      @map("leader_validated_by_name") @db.VarChar(200)
-  leaderValidationPhotoUrl String?                      @map("leader_validation_photo_url")
+  id               String                @id @default(uuid()) @db.Uuid
+  staffId          String                @map("staff_id") @db.VarChar(50)
+  outletId         String                @map("outlet_id") @db.Uuid
+  reportTemplateId String                @map("report_template_id") @db.Uuid
+  reportDate       DateTime              @map("report_date") @db.Date
+  statusCondition  ReportConditionStatus @map("status_condition")
+  note             String?
+  photoUrl         String?               @map("photo_url")
+  submittedAt      DateTime              @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  leaderValidation StaffReportValidationStatus? @map("leader_validation")
+  leaderValidationNote String?           @map("leader_validation_note")
+  leaderValidatedAt DateTime?            @map("leader_validated_at") @db.Timestamptz(6)
+  leaderValidatedBy String?              @map("leader_validated_by") @db.VarChar(50)
+  leaderValidatedByName String?          @map("leader_validated_by_name") @db.VarChar(200)
+  leaderValidationPhotoUrl String?       @map("leader_validation_photo_url")
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  template DailyReportTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  staff    Staff                        @relation(fields: [staffId], references: [staffId])
+  outlet   Outlet                       @relation(fields: [outletId], references: [id])
+  template ReportTemplate               @relation(fields: [reportTemplateId], references: [id])
+  answers  DailyReportChecklistAnswer[]
 
-  @@unique([staffId, templateId, reportDate], map: "daily_report_submissions_staff_template_date_key")
-  @@index([reportDate, outletCode], map: "idx_daily_report_submissions_date_outlet")
+  @@unique([staffId, reportTemplateId, reportDate])
+  @@index([reportDate], map: "idx_daily_report_submissions_date")
   @@map("daily_report_submissions")
 }
 
-model LeaderMonitorTemplate {
-  id              String            @id @db.VarChar(50)
-  kind            LeaderMonitorKind
-  title           String            @db.VarChar(500)
-  menuLabel       String            @map("menu_label") @db.VarChar(200)
-  description     String            @default("")
-  standardResult  String            @map("standard_result")
-  outletCode      String?           @map("outlet_code") @db.VarChar(50)
-  targetTimeStart String?           @map("target_time_start") @db.VarChar(10)
-  targetTimeEnd   String?           @map("target_time_end") @db.VarChar(10)
-  photoMode       LeaderPhotoMode   @default(required) @map("photo_mode")
-  checklist       Json              @default("[]")
-  active          Boolean           @default(true)
-  sortOrder       Int               @default(0) @map("sort_order")
-  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+model DailyReportChecklistAnswer {
+  id              String   @id @default(uuid()) @db.Uuid
+  submissionId    String   @map("submission_id") @db.Uuid
+  checklistItemId String   @map("checklist_item_id") @db.Uuid
+  checked         Boolean  @default(false)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  submission DailyReportSubmission      @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  item       ReportTemplateChecklistItem @relation(fields: [checklistItemId], references: [id])
+
+  @@unique([submissionId, checklistItemId])
+  @@map("daily_report_checklist_answers")
+}
+
+/// Leader Monitoring — checklist keliling leader (di atas daily report staff)
+model LeaderMonitorTemplate {
+  id              String           @id @default(uuid()) @db.Uuid
+  kind            LeaderMonitorKind
+  title           String           @db.VarChar(500)
+  menuLabel       String           @map("menu_label") @db.VarChar(200)
+  description     String           @default("")
+  standardResult  String           @map("standard_result")
+  outletCode      String?          @map("outlet_code") @db.VarChar(50)
+  targetTimeStart String?          @map("target_time_start") @db.VarChar(10)
+  targetTimeEnd   String?          @map("target_time_end") @db.VarChar(10)
+  photoMode       LeaderPhotoMode  @default(required) @map("photo_mode")
+  checklist       Json             @default("[]")
+  active          Boolean          @default(true)
+  sortOrder       Int              @default(0) @map("sort_order")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  submissions LeaderMonitorSubmission[]
+
+  @@index([active, sortOrder], map: "idx_leader_monitor_templates_active")
   @@map("leader_monitor_templates")
 }
 
 model LeaderMonitorSubmission {
-  id                 String                       @id @db.VarChar(50)
-  templateId         String                       @map("template_id") @db.VarChar(50)
+  id                 String                     @id @default(uuid()) @db.Uuid
+  templateId         String                     @map("template_id") @db.Uuid
   kind               LeaderMonitorKind
-  reportDate         DateTime                     @map("report_date") @db.Date
-  outletCode         String                       @map("outlet_code") @db.VarChar(50)
-  shift              String                       @db.VarChar(50)
-  leaderId           String                       @map("leader_id") @db.VarChar(50)
-  leaderName         String                       @map("leader_name") @db.VarChar(200)
-  area               String                       @db.VarChar(100)
+  reportDate         DateTime                   @map("report_date") @db.Date
+  outletCode         String                     @map("outlet_code") @db.VarChar(50)
+  shift              String                     @db.VarChar(50)
+  leaderId           String                     @map("leader_id") @db.VarChar(50)
+  leaderName         String                     @map("leader_name") @db.VarChar(200)
+  area               String                     @db.VarChar(100)
   status             LeaderMonitorStatus
-  scoreTotal         Int                          @map("score_total")
-  scoreMax           Int                          @map("score_max")
-  checklistScores    Json                         @default("[]") @map("checklist_scores")
-  relatedStaffIds    Json                         @default("[]") @map("related_staff_ids")
-  relatedStaffNames  String                       @default("") @map("related_staff_names")
-  problemNote        String                       @default("") @map("problem_note")
-  fixInstruction     String                       @default("") @map("fix_instruction")
-  fixDeadline        String?                      @map("fix_deadline") @db.VarChar(20)
-  photoUrl           String?                      @map("photo_url")
-  followUpStatus     LeaderFollowUpStatus         @default(open) @map("follow_up_status")
-  staffSubmissionId  String?                      @map("staff_submission_id") @db.VarChar(50)
+  scoreTotal         Int                        @map("score_total")
+  scoreMax           Int                        @map("score_max")
+  checklistScores    Json                       @default("[]") @map("checklist_scores")
+  relatedStaffIds    Json                       @default("[]") @map("related_staff_ids")
+  relatedStaffNames  String                     @default("") @map("related_staff_names")
+  problemNote        String                     @default("") @map("problem_note")
+  fixInstruction     String                     @default("") @map("fix_instruction")
+  fixDeadline        String?                    @map("fix_deadline") @db.VarChar(20)
+  photoUrl           String?                    @map("photo_url")
+  followUpStatus     LeaderFollowUpStatus       @default(open) @map("follow_up_status")
+  staffSubmissionId  String?                    @map("staff_submission_id") @db.Uuid
   staffValidation    StaffReportValidationStatus? @map("staff_validation")
-  createdAt          DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  template LeaderMonitorTemplate @relation(fields: [templateId], references: [id])
 
   @@index([reportDate, outletCode], map: "idx_leader_monitor_submissions_date_outlet")
   @@map("leader_monitor_submissions")

@@ -22,7 +22,7 @@ import type {
 
 async function callStaffReportApi<T>(
   path: string,
-  options?: { method?: "GET" | "POST" | "PUT"; body?: Record<string, unknown> },
+  options?: { method?: "GET" | "POST" | "PUT" | "DELETE"; body?: Record<string, unknown> },
 ): Promise<ApiResponse<T>> {
   try {
     const method = options?.method || "GET";
@@ -203,9 +203,8 @@ export async function generateStaffReportLink(
 export async function revokeStaffReportLink(
   linkId: string,
 ): Promise<ApiResponse<StaffReportLink>> {
-  return callStaffReportApi(`/links/${encodeURIComponent(linkId)}/revoke`, {
-    method: "POST",
-    body: {},
+  return callStaffReportApi(`/links/${encodeURIComponent(linkId)}`, {
+    method: "DELETE",
   });
 }
 
@@ -244,14 +243,11 @@ export async function getDailyReportDashboard(
   return callStaffReportApi(`/dashboard${qs ? `?${qs}` : ""}`);
 }
 
-/** Sync staff master ke store daily-report (cepat, dari data client). */
+/** @deprecated Staff options now load from Prisma via GET /staff-options */
 export async function syncStaffReportStaff(
   staff: Staff[],
 ): Promise<ApiResponse<{ count: number }>> {
-  return callStaffReportApi("/sync-staff", {
-    method: "POST",
-    body: { staff },
-  });
+  return { success: true, data: { count: staff.length }, error: null };
 }
 
 /** Fetch active staff from v2 API (for dashboard/settings pages). */
@@ -331,16 +327,9 @@ export async function updateLeaderMonitorFollowUp(
 
 export async function getLeaderStaffOptions(
   outlet?: string,
-  staff?: Staff[],
 ): Promise<
   ApiResponse<{ staff_id: string; name: string; position: string; outlet: string }[]>
 > {
-  if (staff?.length) {
-    return callLeaderMonitorApi("/staff-options", {
-      method: "POST",
-      body: { staff, outlet },
-    });
-  }
   const qs = outlet ? `?outlet=${encodeURIComponent(outlet)}` : "";
   return callLeaderMonitorApi(`/staff-options${qs}`);
 }

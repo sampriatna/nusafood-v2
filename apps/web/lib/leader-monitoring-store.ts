@@ -1,6 +1,6 @@
 /**
  * Leader Monitoring — kontrol lapangan di atas Daily Report staff.
- * Tidak mengganti submit staff; hanya validasi & checklist keliling leader.
+ * Templates + submissions in-memory (v1); staff validation via Prisma daily-activity.service.
  */
 
 import type {
@@ -19,11 +19,11 @@ import type {
   ValidateStaffReportPayload,
 } from "@nusafood/types";
 import {
-  getStaffCache,
-  applyLeaderValidation,
-  listSubmissionsNeedingFix,
+  applyLeaderValidation as applyLeaderValidationDb,
   getSubmissionById,
-} from "@/lib/staff-report-store";
+  listSubmissionsNeedingFix,
+} from "@/lib/services/daily-activity.service";
+import { listStaff } from "@/lib/services/staff.service";
 
 function nowISO() {
   return new Date().toISOString();
@@ -43,7 +43,7 @@ function uid(prefix: string) {
 
 function ci(
   templateId: string,
-  texts: string[]
+  texts: string[],
 ): LeaderMonitorTemplate["checklist"] {
   return texts.map((item_text, i) => ({
     id: `${templateId}-CI-${String(i + 1).padStart(2, "0")}`,
@@ -213,7 +213,7 @@ function getState(): StoreState {
 }
 
 export function listLeaderMonitorTemplates(
-  outlet?: string
+  outlet?: string,
 ): LeaderMonitorTemplate[] {
   return getState()
     .templates.filter((t) => t.active)
@@ -222,17 +222,17 @@ export function listLeaderMonitorTemplates(
 }
 
 export function getLeaderMonitorTemplate(
-  idOrKind: string
+  idOrKind: string,
 ): LeaderMonitorTemplate | null {
   const t = getState().templates.find(
-    (x) => x.id === idOrKind || x.kind === idOrKind
+    (x) => x.id === idOrKind || x.kind === idOrKind,
   );
   return t || null;
 }
 
 function computeStatusFromScores(
   scores: { score: LeaderItemScore }[],
-  fallback: LeaderMonitorStatus
+  fallback: LeaderMonitorStatus,
 ): LeaderMonitorStatus {
   if (scores.length === 0) return fallback;
   if (scores.some((s) => s.score === 0)) return "tidak_sesuai";
@@ -240,9 +240,11 @@ function computeStatusFromScores(
   return "aman";
 }
 
-export function submitLeaderMonitor(
-  payload: SubmitLeaderMonitorPayload
-): { success: true; data: LeaderMonitorSubmission } | { success: false; error: string } {
+export async function submitLeaderMonitor(
+  payload: SubmitLeaderMonitorPayload,
+): Promise<
+  { success: true; data: LeaderMonitorSubmission } | { success: false; error: string }
+> {
   const template = getState().templates.find((t) => t.id === payload.template_id);
   if (!template || !template.active) {
     return { success: false, error: "Template monitoring tidak ditemukan." };
@@ -257,7 +259,6 @@ export function submitLeaderMonitor(
     return { success: false, error: "Isi skor checklist (Aman / Catatan / Gagal)." };
   }
 
-  // Ensure all items scored; default missing to 2 if partial? Prefer require all.
   const scoreMap = new Map(scoresInput.map((s) => [s.item_id, s.score]));
   const checklist_scores = template.checklist.map((item) => {
     const score = scoreMap.has(item.id) ? (scoreMap.get(item.id) as LeaderItemScore) : 2;
@@ -270,7 +271,6 @@ export function submitLeaderMonitor(
   let status = payload.status;
   if (checklist_scores.length > 0) {
     const derived = computeStatusFromScores(checklist_scores, status);
-    // Prefer worse of manual vs derived
     const rank: Record<LeaderMonitorStatus, number> = {
       aman: 0,
       ada_catatan: 1,
@@ -333,13 +333,12 @@ export function submitLeaderMonitor(
 
   getState().submissions.push(submission);
 
-  // Spot check / validation: mirror to staff submission if linked
   if (
     payload.staff_submission_id &&
     payload.staff_validation &&
     ["revisi", "tidak_valid", "manipulasi", "valid"].includes(payload.staff_validation)
   ) {
-    applyLeaderValidation({
+    await applyLeaderValidationDb({
       submission_id: payload.staff_submission_id,
       validation: payload.staff_validation,
       note: problem_note || fix_instruction,
@@ -355,7 +354,7 @@ export function submitLeaderMonitor(
 export function updateLeaderMonitorFollowUp(
   id: string,
   follow_up_status: LeaderFollowUpStatus,
-  extra?: { problem_note?: string; fix_instruction?: string }
+  extra?: { problem_note?: string; fix_instruction?: string },
 ): { success: true; data: LeaderMonitorSubmission } | { success: false; error: string } {
   const sub = getState().submissions.find((s) => s.id === id);
   if (!sub) return { success: false, error: "Laporan monitoring tidak ditemukan." };
@@ -367,7 +366,7 @@ export function updateLeaderMonitorFollowUp(
 }
 
 export function listLeaderMonitorSubmissions(
-  filters: LeaderMonitorFilters = {}
+  filters: LeaderMonitorFilters = {},
 ): LeaderMonitorSubmission[] {
   const date = filters.date || todayISO();
   return getState()
@@ -378,21 +377,21 @@ export function listLeaderMonitorSubmissions(
       (s) =>
         !filters.follow_up ||
         filters.follow_up === "ALL" ||
-        s.follow_up_status === filters.follow_up
+        s.follow_up_status === filters.follow_up,
     )
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
-export function buildLeaderMonitorDashboard(
-  filters: LeaderMonitorFilters = {}
-): LeaderMonitorDashboardData {
+export async function buildLeaderMonitorDashboard(
+  filters: LeaderMonitorFilters = {},
+): Promise<LeaderMonitorDashboardData> {
   const date = filters.date || todayISO();
   const outlet = filters.outlet;
   const submissions = listLeaderMonitorSubmissions({ ...filters, date });
   const templates = listLeaderMonitorTemplates(outlet);
 
-  const staff_need_fix = listSubmissionsNeedingFix(date).filter(
-    (s) => !outlet || outlet === "ALL" || s.outlet_id === outlet
+  const staff_need_fix = (await listSubmissionsNeedingFix(date)).filter(
+    (s) => !outlet || outlet === "ALL" || s.outlet_id === outlet || s.outlet === outlet,
   );
 
   const summary: LeaderMonitorDashboardSummary = {
@@ -403,7 +402,7 @@ export function buildLeaderMonitorDashboard(
     issue_open: submissions.filter(
       (s) =>
         (s.kind === "issue_log" || s.status !== "aman") &&
-        (s.follow_up_status === "open" || s.follow_up_status === "on_progress")
+        (s.follow_up_status === "open" || s.follow_up_status === "on_progress"),
     ).length,
     issue_selesai: submissions.filter((s) => s.follow_up_status === "selesai").length,
     staff_revisi_count: staff_need_fix.length,
@@ -412,25 +411,25 @@ export function buildLeaderMonitorDashboard(
   return { summary, templates, submissions, staff_need_fix };
 }
 
-export function validateStaffReportFromLeader(
-  payload: ValidateStaffReportPayload
-): { success: true; data: DailyReportSubmission } | { success: false; error: string } {
-  return applyLeaderValidation(payload);
+export async function validateStaffReportFromLeader(
+  payload: ValidateStaffReportPayload,
+): Promise<
+  { success: true; data: DailyReportSubmission } | { success: false; error: string }
+> {
+  return applyLeaderValidationDb(payload);
 }
 
-export function getLeaderStaffOptions(outlet?: string) {
-  return getStaffCache()
-    .filter((s) => s.status === "ACTIVE")
-    .filter((s) => !outlet || outlet === "ALL" || s.outlet === outlet)
-    .map((s) => ({
-      staff_id: s.staff_id,
-      name: s.name,
-      position: s.position,
-      outlet: s.outlet,
-    }));
+export async function getLeaderStaffOptions(outlet?: string) {
+  const staff = await listStaff({ status: "ACTIVE", outlet: outlet === "ALL" ? undefined : outlet });
+  return staff.map((s) => ({
+    staff_id: s.staff_id,
+    name: s.name,
+    position: s.position,
+    outlet: s.outlet,
+  }));
 }
 
-export function getStaffSubmissionForValidate(id: string) {
+export async function getStaffSubmissionForValidate(id: string) {
   return getSubmissionById(id);
 }
 

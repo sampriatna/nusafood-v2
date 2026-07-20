@@ -525,6 +525,24 @@ export function DashboardClient() {
               </CardContent>
             </Card>
           </Link>
+          <Link href="/dashboard/daily-reports">
+            <Card className="cursor-pointer transition-colors hover:border-primary/50">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="rounded-lg bg-primary/10 p-2">
+                  <ClipboardList className="size-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Daily Activity
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Audit SOP harian
+                  </p>
+                </div>
+                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
           <Link href="/tasks/new">
             <Card className="cursor-pointer transition-colors hover:border-primary/50">
               <CardContent className="flex items-center gap-3 p-4">

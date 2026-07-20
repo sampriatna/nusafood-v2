@@ -17,6 +17,7 @@
     "migrate:from-sheets": "tsx --env-file=.env scripts/migrate-from-sheets.ts",
     "migrate:checklist-from-v1": "env -u DATABASE_URL -u DIRECT_URL tsx --env-file=.env scripts/migrate-checklist-from-v1.ts",
     "seed:checklist": "tsx --env-file=.env scripts/seed-checklist.ts",
+    "seed:daily-activity": "tsx --env-file=.env scripts/seed-daily-activity.ts",
     "smoke:cutover": "tsx --env-file=.env scripts/smoke-cutover.ts",
     "load:test": "tsx --env-file=.env scripts/load-test.ts",
     "rollback:drill": "bash scripts/rollback-drill.sh",
