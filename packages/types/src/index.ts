@@ -128,6 +128,8 @@ export interface CreateTaskPayload {
   priority: TaskPriority;
   pic_name: string;
   pic_wa: string;
+  /** Relasi karyawan valid (opsional untuk task lama / input manual) */
+  staff_id?: string;
   deadline: string;
   before_photo_base64?: string;
   before_photo_url?: string;
@@ -917,6 +919,9 @@ export interface DisciplinaryTaskPrefill {
   suggested_type: DisciplinaryLetterType;
   suggested_level: DisciplinaryLetterLevel;
   integrity_warning: boolean;
+  /** false jika task belum punya karyawan valid (jangan pakai nomor WA sebagai ID formal) */
+  employee_valid: boolean;
+  employee_warning?: string | null;
   evidence: DisciplinaryEvidenceInput[];
   task_link?: string | null;
   previous_letter_count: number;

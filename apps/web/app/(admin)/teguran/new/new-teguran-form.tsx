@@ -12,6 +12,7 @@ import {
   type DisciplinaryTaskPrefill,
 } from "@nusafood/types";
 import { AdminPage } from "@/components/admin-page";
+import { PhotoUploader } from "@/components/photo-uploader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,9 @@ type StaffOption = {
   position?: string | null;
   outlet?: string;
 };
+
+const FAKE_REPORT_WARNING =
+  "Kasus laporan/foto tidak valid termasuk pelanggaran integritas. Pastikan bukti lengkap sebelum diproses sebagai SP.";
 
 const defaultForm = (): CreateDisciplinaryLetterPayload => ({
   type: "TEGURAN",
@@ -52,12 +56,22 @@ export default function NewTeguranForm() {
   const [form, setForm] = useState<CreateDisciplinaryLetterPayload>(defaultForm);
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [integrityWarning, setIntegrityWarning] = useState(false);
+  const [employeeWarning, setEmployeeWarning] = useState<string | null>(null);
   const [evidenceNote, setEvidenceNote] = useState("");
-  const [evidenceUrl, setEvidenceUrl] = useState("");
   const [loadingPrefill, setLoadingPrefill] = useState(false);
 
   const taskId = search.get("task_id");
   const editId = search.get("edit");
+
+  const employeeValid = useMemo(() => {
+    const id = form.employee_id?.trim() || "";
+    if (!id || id === "UNKNOWN" || id === "UNASSIGNED") return false;
+    const digits = id.replace(/\D/g, "");
+    if (digits.length >= 8 && digits === id.replace(/[\s+-]/g, "")) return false;
+    return staff.some((s) => s.staff_id === id) || Boolean(id && staff.length === 0);
+  }, [form.employee_id, staff]);
+
+  const evidenceIncomplete = (form.evidence || []).length === 0;
 
   useEffect(() => {
     void (async () => {
@@ -110,11 +124,17 @@ export default function NewTeguranForm() {
           return;
         }
         const p = json.data;
-        setIntegrityWarning(p.integrity_warning);
+        setIntegrityWarning(p.integrity_warning || p.source_type === "FAKE_REPORT");
+        setEmployeeWarning(
+          p.employee_valid
+            ? null
+            : p.employee_warning ||
+                "Task belum punya relasi karyawan valid. Pilih karyawan dulu sebelum surat dikirim.",
+        );
         setForm({
           type: p.suggested_type,
           level: p.suggested_level,
-          employee_id: p.employee_id,
+          employee_id: p.employee_id || "",
           employee_name: p.employee_name,
           employee_position: p.employee_position,
           outlet_id: p.outlet_id,
@@ -128,7 +148,7 @@ export default function NewTeguranForm() {
           correction_instruction: p.correction_instruction,
           evidence: p.evidence,
         });
-        if (p.previous_letter_count > 0) {
+        if (p.previous_letter_count > 0 && p.employee_valid) {
           toast({
             title: "Riwayat teguran ditemukan",
             description: `Karyawan ini sudah punya ${p.previous_letter_count} surat sebelumnya. Level disarankan ST/SP ${p.suggested_level}.`,
@@ -170,10 +190,17 @@ export default function NewTeguranForm() {
       }>;
       if (!json.success || !json.data) return;
       const d = json.data;
+      const id = d.employee_id || "";
+      if (!id || id === "UNASSIGNED" || id === "UNKNOWN") {
+        setEmployeeWarning(
+          "Task belum punya relasi karyawan valid. Pilih karyawan dulu sebelum surat dikirim.",
+        );
+      }
+      if (d.source_type === "FAKE_REPORT") setIntegrityWarning(true);
       setForm({
         type: d.type,
         level: d.level,
-        employee_id: d.employee_id,
+        employee_id: id === "UNASSIGNED" || id === "UNKNOWN" ? "" : id,
         employee_name: d.employee_name_snapshot,
         employee_position: d.employee_position_snapshot,
         outlet_id: d.outlet_id,
@@ -210,29 +237,61 @@ export default function NewTeguranForm() {
     }
   }
 
-  function addEvidence() {
-    if (!evidenceNote.trim() && !evidenceUrl.trim()) {
-      toast({
-        title: "Bukti kosong",
-        description: "Isi catatan atau URL bukti.",
-        variant: "destructive",
-      });
-      return;
-    }
+  function addEvidenceFromUpload(url: string | undefined) {
+    if (!url) return;
     const item: DisciplinaryEvidenceInput = {
-      evidence_type: evidenceUrl.trim() ? "LINK" : "NOTE",
-      file_url: evidenceUrl.trim() || null,
-      text_note: evidenceNote.trim() || null,
+      evidence_type: "PHOTO",
+      file_url: url,
+      text_note: evidenceNote.trim() || "Foto bukti teguran",
     };
     setForm((prev) => ({
       ...prev,
       evidence: [...(prev.evidence || []), item],
     }));
     setEvidenceNote("");
-    setEvidenceUrl("");
+    toast({ title: "Bukti foto ditambahkan" });
+  }
+
+  function addEvidenceNoteOnly() {
+    if (!evidenceNote.trim()) {
+      toast({
+        title: "Catatan kosong",
+        description: "Isi catatan bukti, atau upload foto di bawah.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const item: DisciplinaryEvidenceInput = {
+      evidence_type: "NOTE",
+      text_note: evidenceNote.trim(),
+    };
+    setForm((prev) => ({
+      ...prev,
+      evidence: [...(prev.evidence || []), item],
+    }));
+    setEvidenceNote("");
   }
 
   function save(submitForApproval = false) {
+    if (submitForApproval && !employeeValid) {
+      toast({
+        title: "Karyawan belum valid",
+        description:
+          employeeWarning ||
+          "Pilih karyawan dari daftar sebelum ajukan approval / proses formal.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (submitForApproval && evidenceIncomplete) {
+      toast({
+        title: "Bukti belum lengkap",
+        description: "Tambahkan bukti dulu sebelum ajukan approval SP.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     startTransition(async () => {
       const payload: CreateDisciplinaryLetterPayload = {
         ...form,
@@ -240,7 +299,7 @@ export default function NewTeguranForm() {
         employee_position:
           form.employee_position || selectedStaff?.position || null,
         outlet_name: form.outlet_name || selectedStaff?.outlet || form.outlet_name,
-        submit_for_approval: submitForApproval || form.type === "PERINGATAN",
+        submit_for_approval: submitForApproval,
       };
 
       if (editId) {
@@ -260,14 +319,28 @@ export default function NewTeguranForm() {
           return;
         }
         if (submitForApproval) {
-          await fetch(`/api/disciplinary/${editId}/actions`, {
+          const approveRes = await fetch(`/api/disciplinary/${editId}/actions`, {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "submit_approval" }),
           });
+          const approveJson = (await approveRes.json()) as ApiResponse<unknown>;
+          if (!approveJson.success) {
+            toast({
+              title: "Draft tersimpan, approval gagal",
+              description: approveJson.error || "Lengkapi data lalu ajukan lagi.",
+              variant: "destructive",
+            });
+            router.push(`/teguran/${editId}`);
+            return;
+          }
         }
-        toast({ title: "Draft tersimpan" });
+        toast({
+          title: submitForApproval
+            ? "Diajukan untuk approval"
+            : "Draft teguran tersimpan",
+        });
         router.push(`/teguran/${editId}`);
         return;
       }
@@ -288,14 +361,16 @@ export default function NewTeguranForm() {
         return;
       }
       toast({
-        title: submitForApproval ? "Diajukan untuk approval" : "Draft tersimpan",
+        title: submitForApproval
+          ? "Diajukan untuk approval"
+          : "Draft teguran tersimpan",
       });
       router.push(`/teguran/${json.data.id}`);
     });
   }
 
   return (
-    <AdminPage title="Buat Teguran / SP" backHref="/teguran" maxWidth="2xl">
+    <AdminPage title="Buat Draft Teguran / SP" backHref="/teguran" maxWidth="2xl">
       {loadingPrefill ? (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
@@ -304,12 +379,36 @@ export default function NewTeguranForm() {
         </Card>
       ) : null}
 
-      {integrityWarning ? (
+      {taskId ? (
+        <Card className="border-sky-200 bg-sky-50">
+          <CardContent className="p-4 text-sm text-sky-950">
+            Dari task terlambat: form ini hanya membuat <strong>draft</strong>.
+            Surat tidak langsung dikirim.
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {employeeWarning ? (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 text-sm text-amber-950">
+            {employeeWarning}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!employeeValid && !employeeWarning && form.employee_id ? (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 text-sm text-amber-950">
+            Karyawan belum valid. Pilih karyawan dari daftar sebelum surat
+            dikirim.
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {integrityWarning || form.source_type === "FAKE_REPORT" ? (
         <Card className="border-red-300 bg-red-50">
           <CardContent className="p-4 text-sm text-red-900">
-            <strong>Peringatan integritas.</strong> Laporan palsu / foto tidak
-            valid adalah pelanggaran serius. Pertimbangkan SP dengan approval
-            Owner/Admin.
+            <strong>Peringatan integritas.</strong> {FAKE_REPORT_WARNING}
           </CardContent>
         </Card>
       ) : null}
@@ -353,6 +452,7 @@ export default function NewTeguranForm() {
               value={form.employee_id}
               onChange={(e) => {
                 const s = staff.find((x) => x.staff_id === e.target.value);
+                setEmployeeWarning(null);
                 setForm((prev) => ({
                   ...prev,
                   employee_id: e.target.value,
@@ -497,41 +597,59 @@ export default function NewTeguranForm() {
 
       <Card>
         <CardContent className="space-y-3 p-4">
-          <h3 className="font-semibold">Bukti</h3>
-          {(form.evidence || []).length === 0 ? (
-            <p className="text-sm text-amber-800">
-              Bukti belum lengkap, surat belum layak dikirim. Draft tetap bisa
-              disimpan.
+          <h3 className="font-semibold">Bukti foto (kamera / galeri)</h3>
+          <p className="text-sm text-muted-foreground">
+            Ambil foto langsung atau pilih dari galeri. Tidak perlu isi link.
+          </p>
+          <PhotoUploader
+            label="Ambil / pilih foto bukti"
+            size="large"
+            upload={{
+              taskId: form.related_task_id || `teguran-${Date.now()}`,
+              context: "disciplinary",
+            }}
+            onChange={(url) => {
+              if (url) addEvidenceFromUpload(url);
+            }}
+          />
+          <div className="space-y-1.5">
+            <Label>Catatan bukti (opsional)</Label>
+            <Input
+              placeholder="Misal: area kotor / foto tidak sesuai"
+              value={evidenceNote}
+              onChange={(e) => setEvidenceNote(e.target.value)}
+            />
+          </div>
+          {evidenceIncomplete ? (
+            <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Bukti belum lengkap. Draft tetap bisa disimpan; kirim / approval
+              formal wajib ada bukti.
             </p>
           ) : (
-            <ul className="space-y-1 text-sm">
+            <ul className="space-y-2 text-sm">
               {(form.evidence || []).map((e, idx) => (
-                <li key={`${e.evidence_type}-${idx}`} className="rounded border p-2">
+                <li
+                  key={`${e.evidence_type}-${idx}`}
+                  className="rounded border p-2"
+                >
                   <span className="font-medium">{e.evidence_type}</span>
                   {e.text_note ? ` — ${e.text_note}` : ""}
                   {e.file_url ? (
-                    <div className="truncate text-xs text-muted-foreground">
-                      {e.file_url}
+                    <div className="mt-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={e.file_url}
+                        alt="Bukti"
+                        className="max-h-40 rounded object-cover"
+                      />
                     </div>
                   ) : null}
                 </li>
               ))}
             </ul>
           )}
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Input
-              placeholder="Catatan bukti"
-              value={evidenceNote}
-              onChange={(e) => setEvidenceNote(e.target.value)}
-            />
-            <Input
-              placeholder="URL foto / link laporan"
-              value={evidenceUrl}
-              onChange={(e) => setEvidenceUrl(e.target.value)}
-            />
-          </div>
-          <Button type="button" variant="outline" onClick={addEvidence}>
-            Tambah bukti
+          <Button type="button" variant="outline" onClick={addEvidenceNoteOnly}>
+            Tambah catatan saja (tanpa foto)
           </Button>
         </CardContent>
       </Card>
@@ -543,16 +661,29 @@ export default function NewTeguranForm() {
           disabled={pending}
           onClick={() => save(false)}
         >
-          Simpan Draft
+          Simpan Draft Teguran
         </Button>
-        <Button
-          className="flex-1"
-          disabled={pending}
-          onClick={() => save(true)}
-        >
-          {form.type === "PERINGATAN" ? "Ajukan Approval" : "Simpan & Siap Kirim"}
-        </Button>
+        {form.type === "PERINGATAN" ? (
+          <Button
+            className="flex-1"
+            disabled={pending || !employeeValid || evidenceIncomplete}
+            onClick={() => save(true)}
+          >
+            Ajukan Approval SP
+          </Button>
+        ) : null}
       </div>
+      {form.type === "PERINGATAN" ? (
+        <p className="text-xs text-muted-foreground">
+          SP formal hanya lanjut setelah approval Admin/Owner. Tombol ini tidak
+          mengirim surat ke karyawan.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Setelah draft tersimpan, kirim surat dilakukan di halaman detail
+          (menandai status di sistem saja, bukan WA/email).
+        </p>
+      )}
     </AdminPage>
   );
 }

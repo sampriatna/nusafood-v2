@@ -1,5 +1,6 @@
 import { fail, ok } from "@/lib/api/response";
 import { prisma } from "@/lib/db";
+import { requireAuth } from "@/lib/require-auth";
 import {
   DailyActivityError,
   assertDailyReportUploadToken,
@@ -30,17 +31,27 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!taskId) {
-      return fail("task_id wajib diisi", {
+    if (
+      ![
+        "before",
+        "after",
+        "checklist_item",
+        "daily_report",
+        "disciplinary",
+      ].includes(context)
+    ) {
+      return fail("context tidak valid", {
         code: "VALIDATION_ERROR",
         status: 400,
       });
     }
 
-    if (
-      !["before", "after", "checklist_item", "daily_report"].includes(context)
-    ) {
-      return fail("context tidak valid", {
+    // Disciplinary evidence: admin/leader session, no task token required
+    if (context === "disciplinary") {
+      const auth = await requireAuth(["ADMIN", "LEADER"]);
+      if (!auth.ok) return auth.response;
+    } else if (!taskId) {
+      return fail("task_id wajib diisi", {
         code: "VALIDATION_ERROR",
         status: 400,
       });
@@ -65,7 +76,7 @@ export async function POST(request: Request) {
         }
         throw error;
       }
-    } else if (context !== "before") {
+    } else if (context !== "before" && context !== "disciplinary") {
       if (!token) {
         return fail("Token tidak valid", {
           code: "INVALID_TOKEN",
@@ -99,17 +110,22 @@ export async function POST(request: Request) {
       });
     }
 
+    const storageKey =
+      context === "disciplinary"
+        ? taskId || `teguran-${Date.now()}`
+        : taskId;
+
     const bytes = Buffer.from(await file.arrayBuffer());
     const result = await uploadPhoto({
       bytes,
       contentType: ALLOWED.has(contentType) ? contentType : "image/jpeg",
-      taskId,
+      taskId: storageKey,
       context,
       originalName: file.name,
     });
 
     let outletId: string | undefined;
-    if (context !== "daily_report") {
+    if (context !== "daily_report" && context !== "disciplinary") {
       const taskMeta = await prisma.task.findUnique({
         where: { taskId },
         select: { outletId: true },
@@ -127,9 +143,17 @@ export async function POST(request: Request) {
     const { logSyncOperation } = await import("@/lib/services/dual-write.service");
     await logSyncOperation({
       operation: "upload_photo",
-      entityType: context === "daily_report" ? "daily_report" : "task",
-      entityId: taskId,
-      taskId: context === "daily_report" ? undefined : taskId,
+      entityType:
+        context === "daily_report"
+          ? "daily_report"
+          : context === "disciplinary"
+            ? "disciplinary"
+            : "task",
+      entityId: storageKey,
+      taskId:
+        context === "daily_report" || context === "disciplinary"
+          ? undefined
+          : taskId,
       outletId,
       v2Status: "success",
       v2Response: {

@@ -1,24 +1,23 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import type { DisciplinaryLetter } from "@nusafood/types";
 import { getLetterPreview } from "@/lib/services/disciplinary-preview";
+import {
+  NF3_COMPANY,
+  buildFounderQrPayload,
+  buildQrImageUrl,
+} from "@/lib/nf3-company";
 
 /**
- * PDF adapter — stores a formal HTML archive that can be printed/saved as PDF.
- * Swap implementation later (pdfkit / puppeteer) without changing callers.
+ * Document adapter for Teguran/SP.
+ * Uses stable API document URL (Vercel-safe). Browser Print → Save as PDF.
  */
 export async function generateDisciplinaryPdfArchive(
   letter: DisciplinaryLetter,
   origin = "",
 ): Promise<{ url: string; html: string }> {
-  const html = buildFormalLetterHtml(letter);
-  const dir = path.join(process.cwd(), "public", "uploads", "disciplinary");
-  await mkdir(dir, { recursive: true });
-  const filename = `${letter.letter_number.replace(/[/\\]/g, "-")}.html`;
-  const filePath = path.join(dir, filename);
-  await writeFile(filePath, html, "utf8");
-  const url = `${origin}/uploads/disciplinary/${filename}`;
-  return { url, html };
+  const html = buildFormalLetterHtml(letter, origin);
+  const base = origin.replace(/\/$/, "");
+  const documentUrl = `${base}/api/disciplinary/${letter.id}/document`;
+  return { url: documentUrl, html };
 }
 
 function esc(value: string | null | undefined): string {
@@ -33,21 +32,43 @@ export function buildLetterPreviewText(letter: DisciplinaryLetter): string {
   return getLetterPreview(letter);
 }
 
-export function buildFormalLetterHtml(letter: DisciplinaryLetter): string {
+function nf3MarkSvg(): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="NF3">
+  <polygon points="32,4 60,54 4,54" fill="#111" stroke="#fff" stroke-width="2"/>
+  <text x="32" y="42" text-anchor="middle" fill="#f5c542" font-family="Arial,sans-serif" font-size="14" font-weight="700">NF3</text>
+</svg>`;
+}
+
+export function buildFormalLetterHtml(
+  letter: DisciplinaryLetter,
+  origin = "",
+): string {
   const isSp = letter.type === "PERINGATAN";
   const title = isSp
     ? `SURAT PERINGATAN ${letter.level}`
-    : `Surat Teguran ${letter.level}`;
+    : `SURAT TEGURAN ${letter.level}`;
+  const qrData = buildFounderQrPayload({
+    letterNumber: letter.letter_number,
+    letterId: letter.id,
+    origin,
+  });
+  const qrUrl = buildQrImageUrl(qrData, 132);
+
   const evidenceHtml = (letter.evidence || [])
     .map((e) => {
-      const bits = [
-        e.evidence_type,
-        e.text_note || "",
-        e.file_url ? `<a href="${esc(e.file_url)}">${esc(e.file_url)}</a>` : "",
-      ]
-        .filter(Boolean)
-        .join(" — ");
-      return `<li>${bits}</li>`;
+      const note = e.text_note ? esc(e.text_note) : "";
+      const looksImage =
+        !!e.file_url &&
+        (/^data:image\//i.test(e.file_url) ||
+          /\.(png|jpe?g|webp|gif)(\?|$)/i.test(e.file_url) ||
+          /\/storage\/v1\/object\//i.test(e.file_url));
+      const img =
+        e.file_url && looksImage
+          ? `<div style="margin-top:6px"><img src="${esc(e.file_url)}" alt="Bukti" style="max-width:240px;max-height:180px;border:1px solid #ccc;border-radius:6px"/></div>`
+          : e.file_url
+            ? `<div><a href="${esc(e.file_url)}">${esc(e.file_url)}</a></div>`
+            : "";
+      return `<li><strong>${esc(e.evidence_type)}</strong>${note ? ` — ${note}` : ""}${img}</li>`;
     })
     .join("");
 
@@ -57,28 +78,47 @@ export function buildFormalLetterHtml(letter: DisciplinaryLetter): string {
   <meta charset="utf-8" />
   <title>${esc(title)} — ${esc(letter.letter_number)}</title>
   <style>
-    body { font-family: Georgia, "Times New Roman", serif; color: #111; max-width: 720px; margin: 40px auto; line-height: 1.5; padding: 0 16px; }
-    h1 { text-align: center; font-size: 20px; margin-bottom: 4px; letter-spacing: 0.04em; }
-    .meta { text-align: center; margin-bottom: 24px; font-size: 14px; }
-    .kop { text-align: center; border-bottom: 2px solid #111; padding-bottom: 12px; margin-bottom: 20px; }
-    .kop strong { font-size: 18px; }
+    @page { margin: 16mm; }
+    body { font-family: "Times New Roman", Georgia, serif; color: #111; max-width: 800px; margin: 0 auto; line-height: 1.55; padding: 18px; font-size: 13.5px; }
+    .kop { display: flex; gap: 14px; align-items: center; border-bottom: 3px double #111; padding-bottom: 12px; margin-bottom: 18px; }
+    .kop-text { flex: 1; }
+    .kop-text .legal { font-size: 17px; font-weight: 700; letter-spacing: 0.02em; }
+    .kop-text .brand { font-size: 12px; color: #444; margin-top: 2px; }
+    .kop-text .addr { font-size: 12px; margin-top: 4px; }
+    h1 { text-align: center; font-size: 18px; margin: 18px 0 4px; letter-spacing: 0.06em; text-decoration: underline; }
+    .meta { text-align: center; margin-bottom: 18px; font-size: 13px; }
     table.info td { padding: 2px 8px 2px 0; vertical-align: top; }
-    .sign { display: flex; justify-content: space-between; margin-top: 48px; gap: 16px; }
-    .sign div { width: 30%; text-align: center; }
-    .line { margin-top: 64px; border-top: 1px solid #333; padding-top: 6px; font-size: 13px; }
-    @media print { body { margin: 12mm; } }
+    .sign { display: flex; justify-content: space-between; margin-top: 40px; gap: 12px; }
+    .sign > div { width: 32%; text-align: center; font-size: 12px; }
+    .sign .role { margin-top: 8px; font-weight: 600; }
+    .founder-box { border: 1px solid #ddd; border-radius: 8px; padding: 10px 8px; min-height: 170px; }
+    .founder-box img.qr { width: 110px; height: 110px; margin: 6px auto; display: block; }
+    .founder-box .name { font-weight: 700; margin-top: 4px; }
+    .print-hint { margin-top: 28px; font-size: 11px; color: #666; text-align: center; }
+    @media print {
+      .print-hint { display: none; }
+      body { padding: 0; }
+    }
   </style>
 </head>
 <body>
   <div class="kop">
-    <strong>Nusa Food</strong><br/>
-    Outlet ${esc(letter.outlet_name_snapshot)}
+    <div>${nf3MarkSvg()}</div>
+    <div class="kop-text">
+      <div class="legal">${esc(NF3_COMPANY.legalName)} (${esc(NF3_COMPANY.brand)})</div>
+      <div class="brand">${esc(NF3_COMPANY.brands.join(" · "))}</div>
+      <div class="addr">${esc(NF3_COMPANY.address)}</div>
+    </div>
   </div>
+
   <h1>${esc(title)}</h1>
-  <div class="meta">Nomor: ${esc(letter.letter_number)} · Tanggal: ${esc(letter.incident_date)}</div>
+  <div class="meta">
+    Nomor: <strong>${esc(letter.letter_number)}</strong><br/>
+    Tanggal: ${esc(letter.incident_date)} · Outlet: ${esc(letter.outlet_name_snapshot)}
+  </div>
 
   <table class="info">
-    <tr><td>Nama</td><td>: ${esc(letter.employee_name_snapshot)}</td></tr>
+    <tr><td>Nama karyawan</td><td>: ${esc(letter.employee_name_snapshot)}</td></tr>
     <tr><td>Jabatan</td><td>: ${esc(letter.employee_position_snapshot || "-")}</td></tr>
     <tr><td>Outlet</td><td>: ${esc(letter.outlet_name_snapshot)}</td></tr>
     ${letter.related_task_id ? `<tr><td>Task terkait</td><td>: ${esc(letter.related_task_id)}</td></tr>` : ""}
@@ -98,14 +138,30 @@ export function buildFormalLetterHtml(letter: DisciplinaryLetter): string {
   <p>${
     isSp
       ? "Surat Peringatan ini merupakan dokumen formal perusahaan. Karyawan wajib memahami dan menandatangani sebagai tanda telah menerima pemberitahuan."
-      : "Teguran ini diberikan untuk pembinaan agar kejadian yang sama tidak berulang. Jika terulang, dapat dinaikkan level atau diproses menjadi Surat Peringatan."
+      : "Teguran ini diberikan untuk pembinaan agar kejadian yang sama tidak berulang. Jika terulang, dapat dinaikkan level atau diproses menjadi Surat Peringatan sesuai keputusan manajemen."
   }</p>
 
   <div class="sign">
-    <div><div class="line">Karyawan</div></div>
-    <div><div class="line">Leader / Manager</div></div>
-    <div><div class="line">Owner / HR / Admin</div></div>
+    <div>
+      <div style="min-height:120px"></div>
+      <div class="role">Karyawan</div>
+      <div>${esc(letter.employee_name_snapshot)}</div>
+    </div>
+    <div>
+      <div style="min-height:120px"></div>
+      <div class="role">Leader / Manager</div>
+      <div>${esc(letter.created_by_name || "........................")}</div>
+    </div>
+    <div class="founder-box">
+      <div>${nf3MarkSvg()}</div>
+      <img class="qr" src="${esc(qrUrl)}" alt="QR Tanda Tangan Founder NF3" />
+      <div class="name">${esc(NF3_COMPANY.founderName)}</div>
+      <div>${esc(NF3_COMPANY.founderTitle)} · ${esc(NF3_COMPANY.brand)}</div>
+      <div style="font-size:10px;color:#666;margin-top:4px">TTD digital QR otomatis</div>
+    </div>
   </div>
+
+  <p class="print-hint">Cetak / simpan PDF: gunakan menu Print browser (Save as PDF).</p>
 </body>
 </html>`;
 }

@@ -40,10 +40,23 @@ export async function GET(request: Request) {
       return fail(error.message, { code: error.code, status: error.status });
     }
     console.error("[GET /api/disciplinary]", error);
-    return fail("Gagal memuat Teguran Center", {
-      code: "DISCIPLINARY_LIST_FAILED",
-      status: 500,
-    });
+    const message =
+      error instanceof Error ? error.message : String(error ?? "");
+    const looksLikeMissingSchema =
+      /does not exist|P2021|P2022|relation .* does not exist|column .* does not exist/i.test(
+        message,
+      );
+    return fail(
+      looksLikeMissingSchema
+        ? "Gagal memuat Teguran Center — jalankan migration disciplinary di Supabase (SQL Editor)"
+        : "Gagal memuat Teguran Center",
+      {
+        code: looksLikeMissingSchema
+          ? "DISCIPLINARY_SCHEMA_MISSING"
+          : "DISCIPLINARY_LIST_FAILED",
+        status: 500,
+      },
+    );
   }
 }
 

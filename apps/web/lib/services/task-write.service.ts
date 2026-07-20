@@ -96,6 +96,16 @@ async function insertTaskToDb(input: {
   const reportLink =
     input.reportLink ?? buildReportLink(input.taskId, input.token);
 
+  const requestedStaffId = input.payload.staff_id?.trim() || null;
+  let staffId: string | null = null;
+  if (requestedStaffId) {
+    const staff = await prisma.staff.findUnique({
+      where: { staffId: requestedStaffId },
+      select: { staffId: true },
+    });
+    staffId = staff?.staffId ?? null;
+  }
+
   const row = await prisma.task.create({
     data: {
       taskId: input.taskId,
@@ -112,6 +122,7 @@ async function insertTaskToDb(input: {
       priority: normalizePriority(input.payload.priority) as TaskPriority,
       picName: input.payload.pic_name.trim(),
       picWa: input.payload.pic_wa.trim(),
+      staffId,
       deadline,
       beforePhotoUrl: input.payload.before_photo_url ?? null,
       status: normalizeStatus(input.status ?? "OPEN"),

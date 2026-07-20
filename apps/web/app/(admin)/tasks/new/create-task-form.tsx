@@ -110,6 +110,7 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
       priority,
       pic_name: picName.trim(),
       pic_wa: picWa.trim(),
+      ...(selectedStaffId ? { staff_id: selectedStaffId } : {}),
       deadline,
     };
 
