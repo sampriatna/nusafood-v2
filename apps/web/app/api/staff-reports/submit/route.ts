@@ -1,12 +1,15 @@
 import type { ReportConditionStatus } from "@nusafood/types";
-import { fail, ok } from "@/lib/api/response";
+import { NextResponse } from "next/server";
+import { fail } from "@/lib/api/response";
 import {
   DailyActivityError,
   submitDailyReport,
 } from "@/lib/services/daily-activity.service";
+import { notifyLeadersOnKendala } from "@/lib/wa-notify-daily-report";
 
 export const dynamic = "force-dynamic";
 
+/** Public submit — if kendala → notify leaders (GAS + wa.me fallback). */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -51,7 +54,31 @@ export async function POST(request: Request) {
       checklist_answers: checklistAnswers,
     });
 
-    return ok(submission);
+    let notify = null;
+    if (statusCondition !== "aman") {
+      notify = await notifyLeadersOnKendala({
+        staff_name: submission.staff_name || "Staff",
+        staff_id: submission.staff_id,
+        outlet: submission.outlet || submission.outlet_id,
+        position: submission.position || "",
+        activity_title: submission.report_title || "Kegiatan",
+        status_condition: statusCondition,
+        note: submission.note || "",
+        checklist_summary:
+          submission.checklist_total != null
+            ? `${submission.checklist_checked}/${submission.checklist_total}`
+            : undefined,
+        report_date: submission.report_date,
+        submission_id: submission.id,
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: submission,
+      error: null,
+      notify,
+    });
   } catch (error) {
     if (error instanceof DailyActivityError) {
       return fail(error.message, { code: error.code, status: error.status });

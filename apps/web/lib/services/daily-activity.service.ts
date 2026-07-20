@@ -12,6 +12,7 @@ import type {
   ReportTemplateKind,
   StaffReportLink,
   StaffReportLinkContext,
+  StaffReportValidationStatus,
   UpdateReportTemplatePayload,
 } from "@nusafood/types";
 import { prisma } from "@/lib/db";
@@ -108,13 +109,25 @@ function isIssueCondition(c: ReportConditionStatus): boolean {
   return c !== "aman";
 }
 
+function needsLeaderFix(
+  validation?: StaffReportValidationStatus | null,
+): boolean {
+  return (
+    validation === "revisi" ||
+    validation === "tidak_valid" ||
+    validation === "manipulasi"
+  );
+}
+
 function rowLabel(
   submitted: boolean,
   isRequired: boolean,
   condition?: ReportConditionStatus | null,
+  leaderValidation?: StaffReportValidationStatus | null,
 ): DailyReportRowLabel {
   if (!isRequired && !submitted) return "tidak_wajib";
   if (!submitted) return "belum_submit";
+  if (needsLeaderFix(leaderValidation)) return "perlu_perbaikan";
   if (condition && isIssueCondition(condition)) return "selesai_kendala";
   return "selesai_lengkap";
 }
@@ -580,6 +593,12 @@ export async function submitDailyReport(input: {
         note,
         photoUrl: input.photo_url ?? undefined,
         submittedAt: now,
+        leaderValidation: null,
+        leaderValidationNote: null,
+        leaderValidatedAt: null,
+        leaderValidatedBy: null,
+        leaderValidatedByName: null,
+        leaderValidationPhotoUrl: null,
       },
     });
 
@@ -701,6 +720,7 @@ export async function buildDailyReportDashboard(
         submitted,
         template.is_required_daily,
         submission?.status_condition,
+        submission?.leader_validation,
       );
 
       rows.push({
@@ -808,4 +828,88 @@ export async function assertDailyReportUploadToken(
     );
   }
   return link;
+}
+
+const submissionInclude = {
+  staff: { include: { outlet: true } },
+  outlet: true,
+  template: true,
+  answers: { include: { item: true } },
+} as const;
+
+export async function getSubmissionById(
+  id: string,
+): Promise<DailyReportSubmission | null> {
+  const row = await prisma.dailyReportSubmission.findUnique({
+    where: { id },
+    include: submissionInclude,
+  });
+  return row ? mapDailySubmission(row) : null;
+}
+
+export async function listSubmissionsNeedingFix(
+  date?: string,
+): Promise<DailyReportSubmission[]> {
+  const reportDate = parseDateOnly(date || todayISO());
+  const rows = await prisma.dailyReportSubmission.findMany({
+    where: {
+      reportDate,
+      leaderValidation: { in: ["revisi", "tidak_valid", "manipulasi"] },
+    },
+    include: submissionInclude,
+    orderBy: { submittedAt: "desc" },
+  });
+  return rows.map(mapDailySubmission);
+}
+
+export async function applyLeaderValidation(payload: {
+  submission_id: string;
+  validation: StaffReportValidationStatus;
+  note?: string;
+  leader_id?: string;
+  leader_name?: string;
+  photo_base64?: string;
+}): Promise<
+  | { success: true; data: DailyReportSubmission }
+  | { success: false; error: string }
+> {
+  const valid: StaffReportValidationStatus[] = [
+    "valid",
+    "revisi",
+    "tidak_valid",
+    "manipulasi",
+  ];
+  if (!valid.includes(payload.validation)) {
+    return { success: false, error: "Status validasi tidak valid." };
+  }
+
+  if (payload.validation !== "valid" && !(payload.note || "").trim()) {
+    return {
+      success: false,
+      error: "Catatan wajib jika Revisi / Tidak valid / Manipulasi.",
+    };
+  }
+
+  const existing = await prisma.dailyReportSubmission.findUnique({
+    where: { id: payload.submission_id },
+  });
+  if (!existing) {
+    return { success: false, error: "Laporan staff tidak ditemukan." };
+  }
+
+  const now = new Date();
+  const updated = await prisma.dailyReportSubmission.update({
+    where: { id: payload.submission_id },
+    data: {
+      leaderValidation: payload.validation,
+      leaderValidationNote: (payload.note || "").trim() || null,
+      leaderValidatedAt: now,
+      leaderValidatedBy: payload.leader_id || "LEADER",
+      leaderValidatedByName: payload.leader_name || "Leader",
+      leaderValidationPhotoUrl: payload.photo_base64 || null,
+    },
+    include: submissionInclude,
+  });
+
+  return { success: true, data: mapDailySubmission(updated) };
 }

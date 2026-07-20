@@ -72,6 +72,12 @@ export default async function SettingsPage() {
       </Card>
 
       <SettingsLinkCard
+        href="/settings/daily-activity"
+        icon={ClipboardList}
+        title="Daily Activity SOP"
+        description="Link report staff, template kegiatan harian, leader monitoring"
+      />
+      <SettingsLinkCard
         href="/settings/recurring-tasks"
         icon={Repeat}
         title="Template Tugas Berulang"

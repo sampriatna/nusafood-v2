@@ -65,5 +65,17 @@ Demo short links setelah seed:
 
 - **Hijau** — selesai lengkap (Aman)
 - **Kuning** — selesai ada kendala
+- **Oranye** — perlu perbaikan (leader validasi revisi / tidak valid)
 - **Merah** — belum submit (wajib)
 - **Abu** — tidak wajib
+
+## Leader Monitoring (lapisan di atas Daily Activity)
+
+| Route | Fungsi |
+|-------|--------|
+| `/dashboard/leader-monitoring` | Checklist keliling leader + validasi laporan staff |
+| `/api/leader-monitoring/*` | Templates, submit, validate, follow-up |
+
+Leader monitoring **tidak mengganti** submit staff di `/r/[token]`. Validasi leader (`leader_validation` di `daily_report_submissions`) disimpan di PostgreSQL; template/submission leader masih in-memory v1 (Prisma schema siap untuk migrasi berikutnya).
+
+Lihat juga [LEADER_MONITORING.md](./LEADER_MONITORING.md).

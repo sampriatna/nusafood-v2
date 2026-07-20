@@ -314,6 +314,13 @@ export type ReportConditionStatus =
   | "follow_up_leader"
   | "perlu_belanja";
 
+/** Validasi laporan staff oleh leader (cek fisik) */
+export type StaffReportValidationStatus =
+  | "valid"
+  | "revisi"
+  | "tidak_valid"
+  | "manipulasi";
+
 export type ReportTemplateCategory =
   | "Cleaning"
   | "Opening"
@@ -431,6 +438,13 @@ export interface DailyReportSubmission {
   submitted_at: string;
   created_at: string;
   checklist_answers?: DailyReportChecklistAnswer[];
+  /** Validasi leader — null = belum dicek fisik */
+  leader_validation?: StaffReportValidationStatus | null;
+  leader_validation_note?: string | null;
+  leader_validated_at?: string | null;
+  leader_validated_by?: string | null;
+  leader_validated_by_name?: string | null;
+  leader_validation_photo_url?: string | null;
   staff_name?: string;
   outlet?: string;
   report_title?: string;
@@ -446,7 +460,22 @@ export interface SubmitDailyReportPayload {
   status_condition: ReportConditionStatus;
   note?: string;
   photo_url?: string | null;
+  photo_base64?: string;
   checklist_answers: { checklist_item_id: string; checked: boolean }[];
+}
+
+export interface KendalaNotifyInfo {
+  needed: boolean;
+  gas_sent: boolean;
+  gas_error?: string;
+  leaders: {
+    staff_id: string;
+    name: string;
+    wa_number: string;
+    outlet: string;
+    wa_link: string;
+  }[];
+  message: string;
 }
 
 export interface StaffReportLinkContext {
@@ -484,7 +513,8 @@ export type DailyReportRowLabel =
   | "selesai_lengkap"
   | "selesai_kendala"
   | "belum_submit"
-  | "tidak_wajib";
+  | "tidak_wajib"
+  | "perlu_perbaikan";
 
 export interface DailyReportDashboardRow {
   staff_id: string;
@@ -526,3 +556,196 @@ export const REPORT_CONDITION_OPTIONS: {
 ];
 
 export const REPORT_POSITION_GROUPS = ["Waiters", "Bar", "Dapur", "PA"] as const;
+
+/* ─── Leader Monitoring (kontrol lapangan di atas Daily Report) ─── */
+
+export type LeaderMonitorKind =
+  | "opening_control"
+  | "jam_ramai_control"
+  | "spot_check_area"
+  | "closing_control"
+  | "issue_log";
+
+export type LeaderMonitorStatus = "aman" | "ada_catatan" | "tidak_sesuai";
+
+export type LeaderItemScore = 0 | 1 | 2;
+
+export type LeaderFollowUpStatus = "open" | "on_progress" | "selesai";
+
+export type LeaderPhotoMode = "required" | "optional" | "required_if_issue";
+
+export interface LeaderMonitorChecklistItem {
+  id: string;
+  item_text: string;
+  sort_order: number;
+}
+
+export interface LeaderMonitorTemplate {
+  id: string;
+  kind: LeaderMonitorKind;
+  title: string;
+  menu_label: string;
+  description: string;
+  standard_result: string;
+  outlet_id: string | null;
+  target_time_start?: string | null;
+  target_time_end?: string | null;
+  photo_mode: LeaderPhotoMode;
+  checklist: LeaderMonitorChecklistItem[];
+  active: boolean;
+  sort_order: number;
+}
+
+export interface LeaderMonitorChecklistScore {
+  item_id: string;
+  score: LeaderItemScore;
+  item_text?: string;
+}
+
+export interface LeaderMonitorSubmission {
+  id: string;
+  template_id: string;
+  kind: LeaderMonitorKind;
+  report_date: string;
+  outlet_id: string;
+  shift: string;
+  leader_id: string;
+  leader_name: string;
+  area: string;
+  status: LeaderMonitorStatus;
+  score_total: number;
+  score_max: number;
+  checklist_scores: LeaderMonitorChecklistScore[];
+  related_staff_ids: string[];
+  related_staff_names: string;
+  problem_note: string;
+  fix_instruction: string;
+  fix_deadline?: string | null;
+  photo_url?: string | null;
+  follow_up_status: LeaderFollowUpStatus;
+  staff_submission_id?: string | null;
+  staff_validation?: StaffReportValidationStatus | null;
+  created_at: string;
+  updated_at: string;
+  title?: string;
+}
+
+export interface SubmitLeaderMonitorPayload {
+  template_id: string;
+  outlet_id: string;
+  shift?: string;
+  leader_id?: string;
+  leader_name?: string;
+  area?: string;
+  status: LeaderMonitorStatus;
+  checklist_scores: { item_id: string; score: LeaderItemScore }[];
+  related_staff_ids?: string[];
+  related_staff_names?: string;
+  problem_note?: string;
+  fix_instruction?: string;
+  fix_deadline?: string | null;
+  photo_base64?: string;
+  follow_up_status?: LeaderFollowUpStatus;
+  staff_submission_id?: string | null;
+  staff_validation?: StaffReportValidationStatus | null;
+  report_date?: string;
+}
+
+export interface ValidateStaffReportPayload {
+  submission_id: string;
+  validation: StaffReportValidationStatus;
+  note?: string;
+  leader_id?: string;
+  leader_name?: string;
+  photo_base64?: string;
+}
+
+export interface LeaderMonitorFilters {
+  date?: string;
+  outlet?: string;
+  kind?: LeaderMonitorKind | "ALL";
+  follow_up?: LeaderFollowUpStatus | "ALL";
+}
+
+export interface LeaderMonitorDashboardSummary {
+  total_today: number;
+  area_aman: number;
+  area_bermasalah: number;
+  staff_perlu_perbaikan: number;
+  issue_open: number;
+  issue_selesai: number;
+  staff_revisi_count: number;
+}
+
+export interface LeaderMonitorDashboardData {
+  summary: LeaderMonitorDashboardSummary;
+  templates: LeaderMonitorTemplate[];
+  submissions: LeaderMonitorSubmission[];
+  staff_need_fix: DailyReportSubmission[];
+}
+
+export const LEADER_MONITOR_KIND_META: {
+  kind: LeaderMonitorKind;
+  label: string;
+  short: string;
+}[] = [
+  { kind: "opening_control", label: "Opening Control", short: "Opening" },
+  { kind: "jam_ramai_control", label: "Jam Ramai Control", short: "Jam Ramai" },
+  { kind: "spot_check_area", label: "Spot Check Area", short: "Spot Check" },
+  { kind: "closing_control", label: "Closing Control", short: "Closing" },
+  {
+    kind: "issue_log",
+    label: "Issue Log / Catatan Masalah",
+    short: "Issue Log",
+  },
+];
+
+export const LEADER_MONITOR_STATUS_OPTIONS: {
+  value: LeaderMonitorStatus;
+  label: string;
+  color: string;
+}[] = [
+  { value: "aman", label: "Aman / Siap", color: "green" },
+  { value: "ada_catatan", label: "Ada catatan", color: "yellow" },
+  {
+    value: "tidak_sesuai",
+    label: "Tidak sesuai / belum siap",
+    color: "red",
+  },
+];
+
+export const LEADER_ITEM_SCORE_OPTIONS: {
+  value: LeaderItemScore;
+  label: string;
+}[] = [
+  { value: 2, label: "Aman" },
+  { value: 1, label: "Catatan" },
+  { value: 0, label: "Gagal" },
+];
+
+/** @deprecated use LEADER_ITEM_SCORE_OPTIONS */
+export const LEADER_SCORE_OPTIONS = LEADER_ITEM_SCORE_OPTIONS;
+
+export const STAFF_REPORT_VALIDATION_OPTIONS: {
+  value: StaffReportValidationStatus;
+  label: string;
+}[] = [
+  { value: "valid", label: "Valid — sesuai lapangan" },
+  { value: "revisi", label: "Revisi — staff wajib ulang" },
+  { value: "tidak_valid", label: "Tidak valid" },
+  { value: "manipulasi", label: "Diduga manipulasi" },
+];
+
+/** @deprecated use STAFF_REPORT_VALIDATION_OPTIONS */
+export const STAFF_VALIDATION_OPTIONS = STAFF_REPORT_VALIDATION_OPTIONS;
+
+export const LEADER_FOLLOW_UP_OPTIONS: {
+  value: LeaderFollowUpStatus;
+  label: string;
+}[] = [
+  { value: "open", label: "Open" },
+  { value: "on_progress", label: "On Progress" },
+  { value: "selesai", label: "Selesai" },
+];
+
+export const LEADER_SHIFTS = ["Pagi", "Siang", "Malam"] as const;

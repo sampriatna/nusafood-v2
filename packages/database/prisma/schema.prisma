@@ -79,6 +79,39 @@ enum ReportConditionStatus {
   perlu_belanja
 }
 
+enum StaffReportValidationStatus {
+  valid
+  revisi
+  tidak_valid
+  manipulasi
+}
+
+enum LeaderMonitorKind {
+  opening_control
+  jam_ramai_control
+  spot_check_area
+  closing_control
+  issue_log
+}
+
+enum LeaderMonitorStatus {
+  aman
+  ada_catatan
+  tidak_sesuai
+}
+
+enum LeaderFollowUpStatus {
+  open
+  on_progress
+  selesai
+}
+
+enum LeaderPhotoMode {
+  required
+  optional
+  required_if_issue
+}
+
 model Outlet {
   id        String   @id @default(uuid()) @db.Uuid
   code      String   @unique @db.VarChar(50)
@@ -463,6 +496,12 @@ model DailyReportSubmission {
   note             String?
   photoUrl         String?               @map("photo_url")
   submittedAt      DateTime              @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  leaderValidation StaffReportValidationStatus? @map("leader_validation")
+  leaderValidationNote String?           @map("leader_validation_note")
+  leaderValidatedAt DateTime?            @map("leader_validated_at") @db.Timestamptz(6)
+  leaderValidatedBy String?              @map("leader_validated_by") @db.VarChar(50)
+  leaderValidatedByName String?          @map("leader_validated_by_name") @db.VarChar(200)
+  leaderValidationPhotoUrl String?       @map("leader_validation_photo_url")
   createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -488,4 +527,60 @@ model DailyReportChecklistAnswer {
 
   @@unique([submissionId, checklistItemId])
   @@map("daily_report_checklist_answers")
+}
+
+/// Leader Monitoring — checklist keliling leader (di atas daily report staff)
+model LeaderMonitorTemplate {
+  id              String           @id @default(uuid()) @db.Uuid
+  kind            LeaderMonitorKind
+  title           String           @db.VarChar(500)
+  menuLabel       String           @map("menu_label") @db.VarChar(200)
+  description     String           @default("")
+  standardResult  String           @map("standard_result")
+  outletCode      String?          @map("outlet_code") @db.VarChar(50)
+  targetTimeStart String?          @map("target_time_start") @db.VarChar(10)
+  targetTimeEnd   String?          @map("target_time_end") @db.VarChar(10)
+  photoMode       LeaderPhotoMode  @default(required) @map("photo_mode")
+  checklist       Json             @default("[]")
+  active          Boolean          @default(true)
+  sortOrder       Int              @default(0) @map("sort_order")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  submissions LeaderMonitorSubmission[]
+
+  @@index([active, sortOrder], map: "idx_leader_monitor_templates_active")
+  @@map("leader_monitor_templates")
+}
+
+model LeaderMonitorSubmission {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  templateId         String                     @map("template_id") @db.Uuid
+  kind               LeaderMonitorKind
+  reportDate         DateTime                   @map("report_date") @db.Date
+  outletCode         String                     @map("outlet_code") @db.VarChar(50)
+  shift              String                     @db.VarChar(50)
+  leaderId           String                     @map("leader_id") @db.VarChar(50)
+  leaderName         String                     @map("leader_name") @db.VarChar(200)
+  area               String                     @db.VarChar(100)
+  status             LeaderMonitorStatus
+  scoreTotal         Int                        @map("score_total")
+  scoreMax           Int                        @map("score_max")
+  checklistScores    Json                       @default("[]") @map("checklist_scores")
+  relatedStaffIds    Json                       @default("[]") @map("related_staff_ids")
+  relatedStaffNames  String                     @default("") @map("related_staff_names")
+  problemNote        String                     @default("") @map("problem_note")
+  fixInstruction     String                     @default("") @map("fix_instruction")
+  fixDeadline        String?                    @map("fix_deadline") @db.VarChar(20)
+  photoUrl           String?                    @map("photo_url")
+  followUpStatus     LeaderFollowUpStatus       @default(open) @map("follow_up_status")
+  staffSubmissionId  String?                    @map("staff_submission_id") @db.Uuid
+  staffValidation    StaffReportValidationStatus? @map("staff_validation")
+  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  template LeaderMonitorTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([reportDate, outletCode], map: "idx_leader_monitor_submissions_date_outlet")
+  @@map("leader_monitor_submissions")
 }

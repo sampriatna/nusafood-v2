@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import {
@@ -470,6 +471,42 @@ export function DashboardClient() {
         )}
 
         <div className="grid grid-cols-2 gap-3">
+          <Link href="/dashboard/daily-reports">
+            <Card className="cursor-pointer transition-colors hover:border-primary/50">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="rounded-lg bg-primary/10 p-2">
+                  <ClipboardList className="size-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Daily Reports
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Laporan kegiatan harian staff
+                  </p>
+                </div>
+                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/leader-monitoring">
+            <Card className="cursor-pointer transition-colors hover:border-primary/50">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="rounded-lg bg-primary/10 p-2">
+                  <ShieldCheck className="size-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Leader Monitoring
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Kontrol lapangan & validasi
+                  </p>
+                </div>
+                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
           <Link href="/settings/recurring-tasks">
             <Card className="cursor-pointer transition-colors hover:border-primary/50">
               <CardContent className="flex items-center gap-3 p-4">

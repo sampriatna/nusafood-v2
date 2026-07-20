@@ -133,7 +133,8 @@ export type DailyReportRowLabel =
   | "selesai_lengkap"
   | "selesai_kendala"
   | "belum_submit"
-  | "tidak_wajib";
+  | "tidak_wajib"
+  | "perlu_perbaikan";
 
 export interface DailyReportDashboardRow {
   staff_id: string;

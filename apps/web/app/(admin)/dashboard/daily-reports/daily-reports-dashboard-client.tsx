@@ -88,6 +88,11 @@ function labelMeta(label: DailyReportRowLabel): {
         text: "Tidak wajib",
         className: "border-slate-200 bg-slate-100 text-slate-600",
       };
+    case "perlu_perbaikan":
+      return {
+        text: "Perlu perbaikan (leader)",
+        className: "border-orange-200 bg-orange-100 text-orange-900",
+      };
   }
 }
 
