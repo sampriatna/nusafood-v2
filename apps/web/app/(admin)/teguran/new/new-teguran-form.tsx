@@ -12,6 +12,7 @@ import {
   type DisciplinaryTaskPrefill,
 } from "@nusafood/types";
 import { AdminPage } from "@/components/admin-page";
+import { PhotoUploader } from "@/components/photo-uploader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -53,7 +54,6 @@ export default function NewTeguranForm() {
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [integrityWarning, setIntegrityWarning] = useState(false);
   const [evidenceNote, setEvidenceNote] = useState("");
-  const [evidenceUrl, setEvidenceUrl] = useState("");
   const [loadingPrefill, setLoadingPrefill] = useState(false);
 
   const taskId = search.get("task_id");
@@ -210,26 +210,39 @@ export default function NewTeguranForm() {
     }
   }
 
-  function addEvidence() {
-    if (!evidenceNote.trim() && !evidenceUrl.trim()) {
-      toast({
-        title: "Bukti kosong",
-        description: "Isi catatan atau URL bukti.",
-        variant: "destructive",
-      });
-      return;
-    }
+  function addEvidenceFromUpload(url: string | undefined) {
+    if (!url) return;
     const item: DisciplinaryEvidenceInput = {
-      evidence_type: evidenceUrl.trim() ? "LINK" : "NOTE",
-      file_url: evidenceUrl.trim() || null,
-      text_note: evidenceNote.trim() || null,
+      evidence_type: "PHOTO",
+      file_url: url,
+      text_note: evidenceNote.trim() || "Foto bukti teguran",
     };
     setForm((prev) => ({
       ...prev,
       evidence: [...(prev.evidence || []), item],
     }));
     setEvidenceNote("");
-    setEvidenceUrl("");
+    toast({ title: "Bukti foto ditambahkan" });
+  }
+
+  function addEvidenceNoteOnly() {
+    if (!evidenceNote.trim()) {
+      toast({
+        title: "Catatan kosong",
+        description: "Isi catatan bukti, atau upload foto di bawah.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const item: DisciplinaryEvidenceInput = {
+      evidence_type: "NOTE",
+      text_note: evidenceNote.trim(),
+    };
+    setForm((prev) => ({
+      ...prev,
+      evidence: [...(prev.evidence || []), item],
+    }));
+    setEvidenceNote("");
   }
 
   function save(submitForApproval = false) {
@@ -504,34 +517,52 @@ export default function NewTeguranForm() {
               disimpan.
             </p>
           ) : (
-            <ul className="space-y-1 text-sm">
+            <ul className="space-y-2 text-sm">
               {(form.evidence || []).map((e, idx) => (
                 <li key={`${e.evidence_type}-${idx}`} className="rounded border p-2">
                   <span className="font-medium">{e.evidence_type}</span>
                   {e.text_note ? ` — ${e.text_note}` : ""}
                   {e.file_url ? (
-                    <div className="truncate text-xs text-muted-foreground">
-                      {e.file_url}
+                    <div className="mt-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={e.file_url}
+                        alt="Bukti"
+                        className="max-h-40 rounded object-cover"
+                      />
                     </div>
                   ) : null}
                 </li>
               ))}
             </ul>
           )}
-          <div className="grid gap-2 sm:grid-cols-2">
+
+          <div className="space-y-1.5">
+            <Label>Catatan bukti (opsional)</Label>
             <Input
-              placeholder="Catatan bukti"
+              placeholder="Misal: foto area kotor / laporan tidak sesuai"
               value={evidenceNote}
               onChange={(e) => setEvidenceNote(e.target.value)}
             />
-            <Input
-              placeholder="URL foto / link laporan"
-              value={evidenceUrl}
-              onChange={(e) => setEvidenceUrl(e.target.value)}
-            />
           </div>
-          <Button type="button" variant="outline" onClick={addEvidence}>
-            Tambah bukti
+
+          <PhotoUploader
+            label="Upload foto bukti"
+            upload={{
+              taskId: form.related_task_id || `teguran-${Date.now()}`,
+              context: "disciplinary",
+            }}
+            onChange={(url) => {
+              if (url) addEvidenceFromUpload(url);
+            }}
+          />
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addEvidenceNoteOnly}
+          >
+            Tambah catatan saja (tanpa foto)
           </Button>
         </CardContent>
       </Card>

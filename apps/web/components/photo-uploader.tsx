@@ -17,8 +17,13 @@ interface PhotoUploaderProps {
   /** Jika diisi, foto di-upload ke /api/uploads/photo setelah compress */
   upload?: {
     taskId: string;
-    token: string;
-    context?: "before" | "after" | "checklist_item" | "daily_report";
+    token?: string;
+    context?:
+      | "before"
+      | "after"
+      | "checklist_item"
+      | "daily_report"
+      | "disciplinary";
   };
 }
 
@@ -69,12 +74,13 @@ export function PhotoUploader({
         const form = new FormData();
         form.append("file", blob, "photo.jpg");
         form.append("task_id", upload.taskId);
-        form.append("token", upload.token);
+        if (upload.token) form.append("token", upload.token);
         form.append("context", upload.context ?? "after");
 
         const res = await fetch("/api/uploads/photo", {
           method: "POST",
           body: form,
+          credentials: "include",
         });
         const json = (await res.json()) as {
           success: boolean;

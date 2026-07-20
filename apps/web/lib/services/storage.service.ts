@@ -13,7 +13,8 @@ export type UploadContext =
   | "before"
   | "after"
   | "checklist_item"
-  | "daily_report";
+  | "daily_report"
+  | "disciplinary";
 
 export interface UploadResult {
   url: string;
