@@ -66,5 +66,7 @@ Health check: [http://localhost:3000/api/health](http://localhost:3000/api/healt
 ## Catatan
 
 - URL staff tetap: `/report/[taskId]?token=...` dan `/checklist/[taskId]?token=...`
+- Daily Activity SOP (lapisan terpisah): `/r/[token]` atau `/r/nama` — tidak mengganti task lama
+- Sync dari v1 PR #18–#21 (satu branch bertingkat; tip PR #21 sudah mencakup #18+#19+#20)
 - Dual-write & GAS fallback dikontrol via env (`DUAL_WRITE_*`, `GAS_FALLBACK_ENABLED`)
 - Jangan push perubahan ke `v0-field-task-app` dari pekerjaan v2

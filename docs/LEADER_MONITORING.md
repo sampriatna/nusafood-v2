@@ -1,4 +1,6 @@
 > Ported to nusafood-v2 from v1 PR #18–#21.
+>
+> **Catatan v2:** store in-memory (parity v1) + schema Prisma `leader_monitor_*` siap untuk persistensi penuh.
 
 # Leader Monitoring — Kontrol Lapangan
 

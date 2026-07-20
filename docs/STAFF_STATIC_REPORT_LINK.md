@@ -1,4 +1,6 @@
 > Ported to nusafood-v2 from v1 PR #18–#21.
+>
+> **Catatan v2:** runtime store saat ini masih in-memory (sama seperti v1) + sync Master Staff dari PostgreSQL. Schema Prisma (`daily_report_*`, `staff_report_links`) sudah disiapkan untuk persistensi penuh berikutnya.
 
 # Staff Static Report Link — Kegiatan Standar (SOP)
 
