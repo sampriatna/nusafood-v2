@@ -6,12 +6,26 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+type LoginOk = {
+  success: true
+  data: {
+    role?: string
+    app_role?: string
+    is_owner?: boolean
+    staff_id?: string | null
+  }
+  error: null
+}
+
 export function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const next = searchParams.get("next") || "/dashboard"
+  const requestedNext = searchParams.get("next")
+  const forbidden = searchParams.get("error") === "forbidden"
   const [pending, startTransition] = useTransition()
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    forbidden ? "Akses ditolak untuk halaman tersebut." : null,
+  )
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -27,15 +41,39 @@ export function LoginForm() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username, password }),
         })
-        const json = (await res.json()) as {
-          success?: boolean
-          error?: string
-        }
+        const json = (await res.json()) as
+          | LoginOk
+          | { success?: boolean; error?: string }
         if (!res.ok || json.success === false) {
-          setError(json.error || "Login gagal")
+          setError(
+            "error" in json && json.error ? json.error : "Login gagal",
+          )
           return
         }
-        router.push(next.startsWith("/") ? next : "/dashboard")
+
+        const data = "data" in json && json.data ? json.data : null
+        const role = data?.role
+        const isStaffLogin = role === "STAFF"
+        const defaultHome = isStaffLogin ? "/letters" : "/dashboard"
+        // Jika next mengarah ke admin tapi user STAFF → /letters
+        let next =
+          requestedNext && requestedNext.startsWith("/")
+            ? requestedNext
+            : defaultHome
+        if (
+          isStaffLogin &&
+          (next.startsWith("/dashboard") ||
+            next.startsWith("/settings") ||
+            next.startsWith("/teguran") ||
+            next.startsWith("/tasks"))
+        ) {
+          next = "/letters"
+        }
+        if (!isStaffLogin && next.startsWith("/letters") && !data?.staff_id) {
+          next = "/dashboard"
+        }
+
+        router.push(next)
         router.refresh()
       } catch {
         setError("Tidak bisa menghubungi server")
@@ -56,6 +94,7 @@ export function LoginForm() {
         />
         <p className="text-xs text-muted-foreground">
           Kosongkan username untuk login owner via ADMIN_PASSWORD.
+          Staff login diarahkan ke portal surat.
         </p>
       </div>
       <div className="space-y-2">

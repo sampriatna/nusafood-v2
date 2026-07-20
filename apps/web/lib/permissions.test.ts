@@ -3,6 +3,7 @@ import type { SessionPayload } from "@/lib/auth";
 import {
   canAccessAdminDashboard,
   canAccessDisciplinaryAction,
+  canAcknowledgeOwnLetter,
   canApproveSP,
   canCancelLetter,
   canGeneratePdfSP,
@@ -150,5 +151,30 @@ describe("permissions RBAC", () => {
     expect(caps.can_approve_sp).toBe(true);
     expect(caps.can_manage_users).toBe(true);
     expect(caps.global_outlet_scope).toBe(true);
+  });
+
+  it("staff can acknowledge own SENT letter only", () => {
+    const staff = session({
+      userId: "usr-staff",
+      userRole: "STAFF",
+      isAdmin: false,
+      staffId: "STF-001",
+    });
+    expect(
+      canAcknowledgeOwnLetter(staff, {
+        employeeId: "STF-001",
+        status: "SENT",
+      }),
+    ).toBe(true);
+    expect(
+      canAcknowledgeOwnLetter(staff, {
+        employeeId: "STF-OTHER",
+        status: "SENT",
+      }),
+    ).toBe(false);
+    expect(
+      canAccessDisciplinaryAction(staff, "acknowledge_letter"),
+    ).toBe(true);
+    expect(canAccessDisciplinaryAction(staff, "approve_sp")).toBe(false);
   });
 });

@@ -135,7 +135,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/checklist-template") ||
     pathname.startsWith("/admin")
 
-  if (protectedUi && !gate.valid) {
+  const staffPortalUi = pathname.startsWith("/letters")
+
+  if ((protectedUi || staffPortalUi) && !gate.valid) {
     const loginUrl = new URL("/login", request.url)
     loginUrl.searchParams.set("next", pathname)
     return NextResponse.redirect(loginUrl)
@@ -143,6 +145,20 @@ export async function middleware(request: NextRequest) {
 
   // STAFF login / role lain tidak boleh masuk UI admin
   if (protectedUi && gate.valid && !canAccessAdminUi(gate)) {
+    // Arahkan STAFF ke portal surat, bukan loop login
+    if (gate.userRole === "STAFF") {
+      return NextResponse.redirect(new URL("/letters", request.url))
+    }
+    return NextResponse.redirect(new URL("/login?error=forbidden", request.url))
+  }
+
+  // Portal staff: STAFF + Owner/Admin/Leader (preview)
+  if (
+    staffPortalUi &&
+    gate.valid &&
+    !canAccessAdminUi(gate) &&
+    gate.userRole !== "STAFF"
+  ) {
     return NextResponse.redirect(new URL("/login?error=forbidden", request.url))
   }
 

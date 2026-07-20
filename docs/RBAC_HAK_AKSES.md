@@ -73,7 +73,9 @@ OWNER **tidak** disamakan mentah dengan semua ADMIN: Owner punya `session.isOwne
 | `/tasks/*` | OWNER, ADMIN, LEADER | Outlet scope di API |
 | `/teguran/*` | OWNER, ADMIN, LEADER | Action SP dibatasi backend |
 | `/settings` | OWNER, ADMIN, LEADER | Menu disaring |
+| `/settings/audit-logs` | OWNER, ADMIN, LEADER | Leader: filter outlet sendiri |
 | `/settings/users` | OWNER, ADMIN | Middleware redirect leader |
+| `/letters` | STAFF (+ admin preview) | Portal acknowledge surat |
 | `/recurring`, `/checklist-template/*` | OWNER, ADMIN, LEADER | |
 
 ## 5. API yang Dilindungi
@@ -84,6 +86,9 @@ OWNER **tidak** disamakan mentah dengan semua ADMIN: Owner punya `session.isOwne
 | `/api/checklist-*` | ADMIN, LEADER | Ya |
 | `/api/staff` | ADMIN, LEADER | Ya (list) |
 | `/api/users*` | OWNER/ADMIN only | N/A |
+| `/api/audit-logs` | OWNER/ADMIN/LEADER | Leader: outlet sendiri |
+| `/api/disciplinary/mine` | STAFF (+ admin dgn staffId) | Own staff only |
+| `/api/disciplinary/:id/acknowledge` | STAFF own / ADMIN/LEADER | Ownership check |
 | `/api/disciplinary*` | ADMIN, LEADER | **Ya (baru)** |
 | `/api/disciplinary/:id/actions` approve/generate_pdf/cancel | Permission matrix | Ya |
 | `/api/staff-reports/dashboard` | ADMIN, LEADER | **Ya (baru)** |
@@ -129,7 +134,8 @@ OWNER **tidak** disamakan mentah dengan semua ADMIN: Owner punya `session.isOwne
 | **P0** | Verifikasi manual login Owner + Leader multi-outlet di staging |
 | **P1** ~~Kolom DB isOwner/canApproveSp~~ **DONE** |
 | **P1** ~~Filter staff report links leader~~ **DONE** (API layer) |
+| **P2** ~~UI audit log viewer~~ **DONE** — `/settings/audit-logs` + `GET /api/audit-logs` |
+| **P2** ~~Portal STAFF + acknowledge~~ **DONE** — `/letters`, `/api/disciplinary/mine`, `/acknowledge` |
 | **P2** | Enum `OWNER` di Prisma jika product butuh role selectable |
-| **P2** | Portal STAFF login + acknowledge surat sendiri |
-| **P2** | UI audit log viewer untuk Owner |
 | **P2** | Persist leader-monitoring ke DB (bukan in-memory) |
+| **P2** | Staff portal tugas/checklist sendiri (bukan hanya surat) |

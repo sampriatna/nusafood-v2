@@ -205,7 +205,14 @@ export function canAccessDisciplinaryAction(
     outletName?: string | null;
   },
 ): boolean {
-  if (!session || !canAccessAdminDashboard(session)) return false;
+  if (!session) return false;
+
+  // STAFF hanya untuk acknowledge surat sendiri (ownership dicek di service).
+  if (action === "acknowledge_letter" && isStaff(session)) {
+    return Boolean(session.staffId);
+  }
+
+  if (!canAccessAdminDashboard(session)) return false;
 
   const type = letter?.type;
   const isSp = type === "PERINGATAN";
@@ -238,11 +245,26 @@ export function canAccessDisciplinaryAction(
       if (isLeader(session) && (isSt || !type)) return true;
       return false;
     case "acknowledge_letter":
-      // Portal staff belum ada — admin/owner/leader boleh tandai operasional.
       return isOwner(session) || isAdminRole(session) || isLeader(session);
     default:
       return false;
   }
+}
+
+/** Staff hanya boleh acknowledge surat miliknya sendiri. */
+export function canAcknowledgeOwnLetter(
+  session: SessionPayload | null | undefined,
+  letter: { employeeId?: string | null; status?: string },
+): boolean {
+  if (!session) return false;
+  if (isOwner(session) || isAdminRole(session) || isLeader(session)) {
+    return true;
+  }
+  if (!isStaff(session) || !session.staffId) return false;
+  return (
+    letter.employeeId === session.staffId &&
+    (!letter.status || letter.status === "SENT")
+  );
 }
 
 export interface SessionCapabilities {

@@ -21,6 +21,7 @@ import { authRequired, getSession } from "@/lib/auth";
 import {
   canManageSystemSettings,
   canManageUsers,
+  canViewAuditLog,
   getAppRole,
   isLeader,
 } from "@/lib/permissions";
@@ -38,6 +39,7 @@ export default async function SettingsPage() {
 
   const canManage = !authRequired() || canManageSystemSettings(session);
   const canUsers = !authRequired() || canManageUsers(session);
+  const canAudit = !authRequired() || canViewAuditLog(session);
   const leaderOnly = Boolean(session && isLeader(session) && !canManage);
   const appRole = getAppRole(session);
 
@@ -174,6 +176,19 @@ export default async function SettingsPage() {
           icon={ShieldCheck}
           title="Manajemen User Login"
           description="Akun owner/admin & leader — ubah role"
+        />
+      ) : null}
+
+      {canAudit ? (
+        <SettingsLinkCard
+          href="/settings/audit-logs"
+          icon={History}
+          title="Audit Log"
+          description={
+            leaderOnly
+              ? "Riwayat aksi outlet sendiri"
+              : "Login, ubah role, ST/SP, settings, aksi sensitif"
+          }
         />
       ) : null}
 

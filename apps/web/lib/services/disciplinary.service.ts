@@ -21,6 +21,8 @@ import {
 } from "@/lib/outlet-scope";
 import {
   canAccessDisciplinaryAction,
+  canAcknowledgeOwnLetter,
+  isStaff,
   ownerOrAdminDeniedMessage,
 } from "@/lib/permissions";
 import { writeRbacAuditLog } from "@/lib/rbac-audit";
@@ -941,12 +943,34 @@ export async function sendLetter(
   return mapLetter(updated);
 }
 
+export async function listMyDisciplinaryLetters(
+  staffId: string,
+): Promise<DisciplinaryLetter[]> {
+  return listDisciplinaryLetters({ employee_id: staffId });
+}
+
 export async function acknowledgeLetter(
   id: string,
   session: SessionPayload | null,
 ): Promise<DisciplinaryLetter> {
   const letter = await prisma.disciplinaryLetter.findUnique({ where: { id } });
   if (!letter) throw new DisciplinaryError("Surat tidak ditemukan.", "NOT_FOUND", 404);
+
+  if (
+    !canAcknowledgeOwnLetter(session, {
+      employeeId: letter.employeeId,
+      status: letter.status,
+    })
+  ) {
+    throw new DisciplinaryError(
+      isStaff(session)
+        ? "Akses ditolak. Surat ini bukan milik kamu."
+        : ownerOrAdminDeniedMessage(),
+      "FORBIDDEN",
+      403,
+    );
+  }
+
   if (letter.status !== "SENT") {
     throw new DisciplinaryError(
       "Hanya surat terkirim yang bisa ditandai dibaca.",
@@ -960,6 +984,15 @@ export async function acknowledgeLetter(
     include: includeAll,
   });
   await addEvent(id, "ACKNOWLEDGED", session, letter.status, "ACKNOWLEDGED");
+  await writeRbacAuditLog({
+    session,
+    action: "acknowledge_letter",
+    entityType: "disciplinary_letter",
+    entityId: id,
+    outletId: letter.outletId,
+    oldValue: { status: letter.status },
+    newValue: { status: "ACKNOWLEDGED" },
+  });
   return mapLetter(updated);
 }
 
