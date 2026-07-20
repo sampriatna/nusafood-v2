@@ -29,6 +29,11 @@ function supabaseConfigured() {
   return Boolean(url && key && !url.includes("xxx"));
 }
 
+/** True jika upload cloud Supabase siap dipakai (bukan placeholder). */
+export function isSupabaseStorageConfigured(): boolean {
+  return supabaseConfigured();
+}
+
 export async function checkStorageHealth(): Promise<StorageHealth> {
   if (!supabaseConfigured()) {
     return "skipped";
@@ -137,4 +142,41 @@ export async function uploadPhoto(input: {
   }
 
   return uploadLocal(input.bytes, objectPath);
+}
+
+/**
+ * Arsip surat teguran/SP ke Supabase Storage.
+ * Path: disciplinary/{year}/{ST|SP}/{letterNumber}-{id}.html
+ * Tidak fallback ke local Vercel (bukan arsip permanen).
+ */
+export async function uploadDisciplinaryArchive(input: {
+  html: string;
+  letterId: string;
+  letterNumber: string;
+  type: "TEGURAN" | "PERINGATAN";
+  outletName?: string | null;
+}): Promise<UploadResult> {
+  if (!supabaseConfigured()) {
+    throw new Error(
+      "Supabase Storage belum dikonfigurasi. Set NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY.",
+    );
+  }
+
+  const year = new Date().getFullYear();
+  const kind = input.type === "PERINGATAN" ? "SP" : "ST";
+  const outlet = safeSegment(input.outletName || "ALL");
+  const letterNo = safeSegment(input.letterNumber.replace(/\//g, "-"));
+  const objectPath = `disciplinary/${year}/${kind}/${outlet}/${letterNo}-${safeSegment(input.letterId)}.html`;
+  const bytes = Buffer.from(input.html, "utf8");
+
+  return uploadToSupabase(bytes, "text/html", objectPath);
+}
+
+/** Deteksi apakah URL adalah arsip cloud Supabase. */
+export function isPermanentStorageUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return (
+    /\/storage\/v1\/object\//i.test(url) ||
+    /\.supabase\.co\//i.test(url)
+  );
 }

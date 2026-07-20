@@ -19,6 +19,7 @@ import {
   buildLetterPreviewText,
   generateDisciplinaryPdfArchive,
 } from "@/lib/services/disciplinary-pdf.service";
+import { isPermanentStorageUrl } from "@/lib/services/storage.service";
 
 export class DisciplinaryError extends TaskWriteError {}
 
@@ -167,6 +168,11 @@ function mapLetter(
     consequence: row.consequence,
     internal_note: row.internalNote,
     pdf_url: row.pdfUrl,
+    pdf_storage: row.pdfUrl
+      ? isPermanentStorageUrl(row.pdfUrl)
+        ? "supabase"
+        : "temporary"
+      : null,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
     evidence: row.evidence?.map(mapEvidence),
@@ -751,13 +757,32 @@ export async function generatePdf(
     );
   }
 
-  const { url } = await generateDisciplinaryPdfArchive(letter, origin);
+  let archive;
+  try {
+    archive = await generateDisciplinaryPdfArchive(letter, origin);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Gagal mengarsipkan surat ke storage cloud.";
+    throw new DisciplinaryError(message, "PDF_ARCHIVE_FAILED", 500);
+  }
+
   const updated = await prisma.disciplinaryLetter.update({
     where: { id },
-    data: { pdfUrl: url },
+    data: { pdfUrl: archive.url },
     include: includeAll,
   });
-  await addEvent(id, "PDF_GENERATED", session, letter.status, letter.status, url);
+  await addEvent(
+    id,
+    "PDF_GENERATED",
+    session,
+    letter.status,
+    letter.status,
+    archive.storage === "supabase"
+      ? `Arsip permanen Supabase: ${archive.url}`
+      : `Preview sementara (Supabase belum dikonfigurasi): ${archive.url}`,
+  );
   return mapLetter(updated);
 }
 
@@ -783,7 +808,7 @@ export async function sendLetter(
     }
     if (!letter.pdfUrl) {
       throw new DisciplinaryError(
-        "Preview surat belum dibuat. Buat preview sementara dulu sebelum menandai terkirim.",
+        "Arsip surat belum dibuat. Generate & arsipkan surat dulu sebelum menandai terkirim.",
         "PDF_REQUIRED",
         400,
       );
