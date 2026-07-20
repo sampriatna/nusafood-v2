@@ -1,5 +1,6 @@
 import type { StaffRole } from "@nusafood/types"
 import { ok, fail } from "@/lib/api/response"
+import { isOwner } from "@/lib/permissions"
 import { requireUserManagement } from "@/lib/require-auth"
 import { writeRbacAuditLog } from "@/lib/rbac-audit"
 import { getUserById, updateUser, deleteUser } from "@/lib/users.service"
@@ -41,10 +42,28 @@ export async function PATCH(
       login_enabled?: boolean
       loginEnabled?: boolean
       password?: string
+      is_owner?: boolean
+      isOwner?: boolean
+      can_approve_sp?: boolean
+      canApproveSp?: boolean
     }
 
     if (body.role && !ROLES.includes(body.role)) {
       return fail("role tidak valid", { code: "INVALID_ROLE", status: 400 })
+    }
+
+    const wantOwner =
+      body.is_owner !== undefined
+        ? Boolean(body.is_owner)
+        : body.isOwner !== undefined
+          ? Boolean(body.isOwner)
+          : undefined
+
+    if (wantOwner !== undefined && !isOwner(auth.session)) {
+      return fail("Hanya Owner yang boleh mengubah flag Owner.", {
+        code: "OWNER_REQUIRED",
+        status: 403,
+      })
     }
 
     const user = await updateUser(id, {
@@ -57,6 +76,8 @@ export async function PATCH(
             : undefined,
       loginEnabled: body.login_enabled ?? body.loginEnabled,
       password: body.password,
+      isOwner: wantOwner,
+      canApproveSp: body.can_approve_sp ?? body.canApproveSp,
     })
     if (!user) {
       return fail("User tidak ditemukan", { code: "NOT_FOUND", status: 404 })
@@ -64,14 +85,24 @@ export async function PATCH(
 
     await writeRbacAuditLog({
       session: auth.session,
-      action: body.role ? "change_role" : "update_user",
+      action:
+        wantOwner !== undefined || body.role
+          ? "change_role"
+          : "update_user",
       entityType: "user_account",
       entityId: user.userId,
       oldValue: existing
-        ? { role: existing.role, login_enabled: existing.loginEnabled }
+        ? {
+            role: existing.role,
+            is_owner: existing.isOwner,
+            can_approve_sp: existing.canApproveSp,
+            login_enabled: existing.loginEnabled,
+          }
         : undefined,
       newValue: {
         role: user.role,
+        is_owner: user.isOwner,
+        can_approve_sp: user.canApproveSp,
         login_enabled: user.loginEnabled,
       },
     })
@@ -94,6 +125,13 @@ export async function DELETE(
 
   const { id } = await context.params
   const existing = await getUserById(id)
+  if (existing?.isOwner && !isOwner(auth.session)) {
+    return fail("Hanya Owner yang boleh menghapus akun Owner.", {
+      code: "OWNER_REQUIRED",
+      status: 403,
+    })
+  }
+
   const deleted = await deleteUser(id)
   if (!deleted) {
     return fail("User tidak ditemukan", { code: "NOT_FOUND", status: 404 })
@@ -105,7 +143,11 @@ export async function DELETE(
     entityType: "user_account",
     entityId: id,
     oldValue: existing
-      ? { username: existing.username, role: existing.role }
+      ? {
+          username: existing.username,
+          role: existing.role,
+          is_owner: existing.isOwner,
+        }
       : undefined,
   })
 

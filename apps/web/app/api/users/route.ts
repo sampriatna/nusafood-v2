@@ -1,5 +1,6 @@
 import type { StaffRole } from "@nusafood/types"
 import { ok, fail } from "@/lib/api/response"
+import { isOwner } from "@/lib/permissions"
 import { requireUserManagement } from "@/lib/require-auth"
 import { writeRbacAuditLog } from "@/lib/rbac-audit"
 import { createUser, listUsers } from "@/lib/users.service"
@@ -30,6 +31,10 @@ export async function POST(request: Request) {
       staffId?: string | null
       login_enabled?: boolean
       loginEnabled?: boolean
+      is_owner?: boolean
+      isOwner?: boolean
+      can_approve_sp?: boolean
+      canApproveSp?: boolean
     }
 
     if (!body.username || !body.password || !body.role) {
@@ -42,12 +47,22 @@ export async function POST(request: Request) {
       return fail("role tidak valid", { code: "INVALID_ROLE", status: 400 })
     }
 
+    const wantOwner = Boolean(body.is_owner ?? body.isOwner)
+    if (wantOwner && !isOwner(auth.session)) {
+      return fail("Hanya Owner yang boleh menandai user sebagai Owner.", {
+        code: "OWNER_REQUIRED",
+        status: 403,
+      })
+    }
+
     const user = await createUser({
       username: body.username,
       password: body.password,
       role: body.role,
       staffId: body.staff_id ?? body.staffId,
       loginEnabled: body.login_enabled ?? body.loginEnabled,
+      isOwner: wantOwner,
+      canApproveSp: body.can_approve_sp ?? body.canApproveSp,
     })
 
     await writeRbacAuditLog({
@@ -55,7 +70,12 @@ export async function POST(request: Request) {
       action: "create_user",
       entityType: "user_account",
       entityId: user.userId,
-      newValue: { username: user.username, role: user.role },
+      newValue: {
+        username: user.username,
+        role: user.role,
+        is_owner: user.isOwner,
+        can_approve_sp: user.canApproveSp,
+      },
     })
 
     return ok(user, undefined, { status: 201 })

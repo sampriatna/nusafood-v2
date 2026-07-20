@@ -11,6 +11,7 @@ import {
   getSessionCapabilities,
   hasGlobalOutletScope,
 } from "@/lib/permissions";
+import { resolveIsOwner } from "@/lib/owner";
 
 function session(
   partial: Partial<SessionPayload> &
@@ -19,6 +20,7 @@ function session(
   return {
     isAdmin: true,
     isOwner: false,
+    canApproveSp: false,
     loginAt: Date.now(),
     expiresAt: Date.now() + 3600_000,
     userName: "Test",
@@ -43,6 +45,7 @@ describe("permissions RBAC", () => {
       userId: "env-admin",
       userRole: "ADMIN",
       isOwner: true,
+      canApproveSp: true,
     });
     const admin = session({ userId: "usr-admin", userRole: "ADMIN" });
     expect(getAppRole(owner)).toBe("OWNER");
@@ -86,21 +89,62 @@ describe("permissions RBAC", () => {
     ).toBe(true);
   });
 
-  it("owner can approve SP even if ADMIN_CAN_APPROVE_SP=false", () => {
-    process.env.ADMIN_CAN_APPROVE_SP = "false";
+  it("admin without canApproveSp cannot approve (default owner-only)", () => {
+    const admin = session({ userId: "usr-admin", userRole: "ADMIN" });
+    expect(canApproveSP(admin)).toBe(false);
+  });
+
+  it("admin with DB canApproveSp can approve", () => {
+    const admin = session({
+      userId: "usr-admin",
+      userRole: "ADMIN",
+      canApproveSp: true,
+    });
+    expect(canApproveSP(admin)).toBe(true);
+    expect(canGeneratePdfSP(admin)).toBe(true);
+  });
+
+  it("ADMIN_CAN_APPROVE_SP=true allows all admins as fallback", () => {
+    process.env.ADMIN_CAN_APPROVE_SP = "true";
+    const admin = session({ userId: "usr-admin", userRole: "ADMIN" });
+    expect(canApproveSP(admin)).toBe(true);
+  });
+
+  it("owner can approve SP even without admin flag", () => {
     const owner = session({
       userId: "env-admin",
       userRole: "ADMIN",
       isOwner: true,
+      canApproveSp: true,
     });
-    const admin = session({ userId: "usr-admin", userRole: "ADMIN" });
     expect(canApproveSP(owner)).toBe(true);
-    expect(canApproveSP(admin)).toBe(false);
+  });
+
+  it("resolveIsOwner reads DB flag", () => {
+    expect(
+      resolveIsOwner({
+        userId: "usr-1",
+        username: "bos",
+        isOwnerDb: true,
+      }),
+    ).toBe(true);
+    expect(
+      resolveIsOwner({
+        userId: "usr-1",
+        username: "bos",
+        isOwnerDb: false,
+      }),
+    ).toBe(false);
   });
 
   it("capabilities payload exposes matrix flags", () => {
     const caps = getSessionCapabilities(
-      session({ userId: "env-admin", userRole: "ADMIN", isOwner: true }),
+      session({
+        userId: "env-admin",
+        userRole: "ADMIN",
+        isOwner: true,
+        canApproveSp: true,
+      }),
     );
     expect(caps.app_role).toBe("OWNER");
     expect(caps.can_approve_sp).toBe(true);

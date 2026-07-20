@@ -76,18 +76,18 @@ export function getAppRole(
   return "PUBLIC";
 }
 
-/** ADMIN boleh approve SP hanya jika diizinkan env (default true = kompatibel). */
-export function adminCanApproveSp(): boolean {
-  if (process.env.ADMIN_CAN_APPROVE_SP === "false") return false;
-  if (process.env.ADMIN_CAN_APPROVE_SP === "true") return true;
-  // Default: ADMIN masih boleh (hindari breaking); set false untuk owner-only.
-  return true;
+/**
+ * Fallback env untuk ADMIN tanpa flag DB.
+ * Default false = Owner-only (lebih aman). Set ADMIN_CAN_APPROVE_SP=true untuk semua ADMIN.
+ */
+export function adminCanApproveSpEnvFallback(): boolean {
+  return process.env.ADMIN_CAN_APPROVE_SP === "true";
 }
 
-export function adminCanGeneratePdfSp(): boolean {
-  if (process.env.ADMIN_CAN_GENERATE_PDF_SP === "false") return false;
+export function adminCanGeneratePdfSpEnvFallback(): boolean {
   if (process.env.ADMIN_CAN_GENERATE_PDF_SP === "true") return true;
-  return adminCanApproveSp();
+  if (process.env.ADMIN_CAN_GENERATE_PDF_SP === "false") return false;
+  return adminCanApproveSpEnvFallback();
 }
 
 export function leaderCanSendSt(): boolean {
@@ -99,8 +99,11 @@ export function canApproveSP(
 ): boolean {
   if (!session) return false;
   if (isOwner(session)) return true;
-  if (isAdminRole(session) && adminCanApproveSp()) return true;
-  return false;
+  if (!isAdminRole(session)) return false;
+  // Permission eksplisit dari DB (session claim)
+  if (session.canApproveSp === true) return true;
+  // Fallback env global (opsional)
+  return adminCanApproveSpEnvFallback();
 }
 
 export function canGeneratePdfSP(
@@ -108,8 +111,9 @@ export function canGeneratePdfSP(
 ): boolean {
   if (!session) return false;
   if (isOwner(session)) return true;
-  if (isAdminRole(session) && adminCanGeneratePdfSp()) return true;
-  return false;
+  if (!isAdminRole(session)) return false;
+  if (session.canApproveSp === true) return true;
+  return adminCanGeneratePdfSpEnvFallback();
 }
 
 export function canCancelLetter(

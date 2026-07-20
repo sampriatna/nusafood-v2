@@ -4,17 +4,23 @@
 
 Role DB tetap: `STAFF` | `LEADER` | `ADMIN` (enum Prisma, **tidak diubah**).
 
+Kolom tambahan `user_accounts`:
+- `is_owner` — Owner app-level
+- `can_approve_sp` — permission eksplisit Admin/HR untuk approve SP
+
 Role efektif aplikasi (session):
 
 | App role | Cara ditentukan | Bedanya |
 |----------|-----------------|---------|
-| **OWNER** | Login username kosong + `ADMIN_PASSWORD` (`env-admin`), atau `OWNER_USER_IDS` / `OWNER_USERNAMES` | Full akses semua outlet + approve SP + user management + settings sensitif |
-| **ADMIN** | `UserAccount.role = ADMIN` tanpa flag owner | Operasional global; approve SP hanya jika `ADMIN_CAN_APPROVE_SP` (default true) |
+| **OWNER** | `env-admin`, `UserAccount.is_owner`, atau `OWNER_USER_IDS` / `OWNER_USERNAMES` | Full akses semua outlet + approve SP + user management + settings sensitif |
+| **ADMIN** | `UserAccount.role = ADMIN` tanpa `is_owner` | Operasional global; approve SP hanya jika `can_approve_sp=true` (atau env fallback) |
 | **LEADER** | `UserAccount.role = LEADER` + staff.outlet | Hanya outlet sendiri; draft ST/SP; **tidak** approve/generate PDF SP / cancel / user mgmt |
 | **STAFF** | Role STAFF (jika login nanti) | Tidak masuk dashboard admin |
 | **PUBLIC** | Token `/report`, `/checklist`, `/r` | Submit saja, token wajib valid |
 
 OWNER **tidak** disamakan mentah dengan semua ADMIN: Owner punya `session.isOwner = true`.
+
+**Default approve SP:** Owner-only (Admin butuh `can_approve_sp` di DB, atau `ADMIN_CAN_APPROVE_SP=true`).
 
 ## 2. File yang Diubah
 
@@ -57,7 +63,7 @@ OWNER **tidak** disamakan mentah dengan semua ADMIN: Owner punya `session.isOwne
 | Audit log (aksi) | Dicatat | Dicatat | Dicatat outlet | — | — |
 | Export global | Full | Ya | Tidak (belum ada API export khusus) | Tidak | Tidak |
 
-\*Admin approve SP dikontrol env `ADMIN_CAN_APPROVE_SP` (default `true` agar tidak breaking).
+\*Admin approve SP: flag DB `can_approve_sp`, atau env `ADMIN_CAN_APPROVE_SP=true` (default OFF).
 
 ## 4. Route yang Dilindungi
 
@@ -108,22 +114,22 @@ OWNER **tidak** disamakan mentah dengan semua ADMIN: Owner punya `session.isOwne
 
 ## 8. Risiko yang Masih Ada
 
-1. **Session JWT lama** tanpa `isOwner`: masih di-resolve via `userId === env-admin` / env OWNER_* saat verify — OK, tapi login ulang disarankan.
-2. **ADMIN masih bisa approve SP by default** — set `ADMIN_CAN_APPROVE_SP=false` jika ingin owner-only.
-3. **Belum ada field DB `can_approve_sp` / `is_owner`** — permission Admin masih env-level.
-4. **Staff report links GET** masih bisa list semua link untuk ADMIN; leader melihat list tanpa filter ketat di service (dashboard sudah di-scope).
-5. **Upload `/api/uploads/photo`** masih public (pre-existing); bukan fokus PR ini.
-6. **`AUTH_REQUIRED=false`** tetap bypass semua gate — jangan dipakai production.
-7. **UI saja tidak cukup dianggap aman** — klaim keamanan untuk gap di atas: API disciplinary/users/dashboard **sudah** dijaga backend; sisanya dicatat di sini.
+1. **Session JWT lama** tanpa `canApproveSp`: login ulang agar claim DB terbaru masuk cookie.
+2. **Migrasi wajib:** `pnpm db:migrate:deploy` untuk kolom `is_owner` / `can_approve_sp`.
+3. Admin lama tanpa flag = **tidak** bisa approve SP sampai Owner menandai `can_approve_sp` (breaking sengaja / lebih aman).
+4. **Upload `/api/uploads/photo`** masih public (pre-existing).
+5. **`AUTH_REQUIRED=false`** tetap bypass semua gate — jangan dipakai production.
+6. Leader-monitoring still in-memory store — outlet assert sudah ada di API.
 
 ## 9. Next Step
 
 | Prioritas | Item |
 |-----------|------|
-| **P0** | Set `ADMIN_CAN_APPROVE_SP=false` di production jika hanya Owner yang boleh approve |
+| **P0** | Deploy migrasi `is_owner` / `can_approve_sp` + tandai Owner di Settings Users |
 | **P0** | Verifikasi manual login Owner + Leader multi-outlet di staging |
-| **P1** | Kolom `UserAccount.isOwner` / `canApproveSp` di DB (ganti env) |
-| **P1** | Filter outlet pada `listStaffReportLinks` untuk LEADER |
+| **P1** ~~Kolom DB isOwner/canApproveSp~~ **DONE** |
+| **P1** ~~Filter staff report links leader~~ **DONE** (API layer) |
 | **P2** | Enum `OWNER` di Prisma jika product butuh role selectable |
 | **P2** | Portal STAFF login + acknowledge surat sendiri |
 | **P2** | UI audit log viewer untuk Owner |
+| **P2** | Persist leader-monitoring ke DB (bukan in-memory) |

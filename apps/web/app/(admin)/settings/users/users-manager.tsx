@@ -39,6 +39,8 @@ export type UserRow = {
   displayName: string;
   role: string;
   staffId: string | null;
+  isOwner?: boolean;
+  canApproveSp?: boolean;
   loginEnabled: boolean;
   lastLogin: string | null;
 };
@@ -47,9 +49,15 @@ type Props = {
   users: UserRow[];
   staff: Staff[];
   canManage: boolean;
+  canGrantOwner?: boolean;
 };
 
-export function UsersManager({ users, staff, canManage }: Props) {
+export function UsersManager({
+  users,
+  staff,
+  canManage,
+  canGrantOwner = false,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +66,8 @@ export function UsersManager({ users, staff, canManage }: Props) {
   const [editRole, setEditRole] = useState("LEADER");
   const [editStaffId, setEditStaffId] = useState("");
   const [editPassword, setEditPassword] = useState("");
+  const [editIsOwner, setEditIsOwner] = useState(false);
+  const [editCanApproveSp, setEditCanApproveSp] = useState(false);
 
   function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,6 +86,10 @@ export function UsersManager({ users, staff, canManage }: Props) {
             password: String(formData.get("password") || ""),
             role: String(formData.get("role") || "LEADER"),
             staff_id: String(formData.get("staff_id") || "") || null,
+            is_owner: canGrantOwner
+              ? formData.get("is_owner") === "on"
+              : false,
+            can_approve_sp: formData.get("can_approve_sp") === "on",
           }),
         });
         const json = (await res.json()) as {
@@ -117,6 +131,8 @@ export function UsersManager({ users, staff, canManage }: Props) {
     setEditRole(user.role);
     setEditStaffId(user.staffId ?? "");
     setEditPassword("");
+    setEditIsOwner(Boolean(user.isOwner));
+    setEditCanApproveSp(Boolean(user.canApproveSp || user.isOwner));
   }
 
   function saveEdit() {
@@ -130,6 +146,8 @@ export function UsersManager({ users, staff, canManage }: Props) {
           role: editRole,
           staff_id: editStaffId || null,
           password: editPassword || undefined,
+          ...(canGrantOwner ? { is_owner: editIsOwner } : {}),
+          can_approve_sp: editCanApproveSp,
         }),
       });
       const json = (await res.json()) as { success?: boolean; error?: string };
@@ -176,6 +194,8 @@ export function UsersManager({ users, staff, canManage }: Props) {
               </p>
               <p className="text-xs text-muted-foreground">
                 {user.userId} · {user.role}
+                {user.isOwner ? " · OWNER" : ""}
+                {user.canApproveSp && !user.isOwner ? " · can_approve_sp" : ""}
                 {user.staffId ? ` · ${user.staffId}` : ""}
                 {user.loginEnabled ? "" : " · disabled"}
               </p>
@@ -297,6 +317,20 @@ export function UsersManager({ users, staff, canManage }: Props) {
                   ))}
               </select>
             </div>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input
+                type="checkbox"
+                name="can_approve_sp"
+                disabled={pending}
+              />
+              Boleh approve SP (Admin/HR)
+            </label>
+            {canGrantOwner ? (
+              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                <input type="checkbox" name="is_owner" disabled={pending} />
+                Tandai sebagai Owner (akses penuh)
+              </label>
+            ) : null}
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           {message ? <p className="text-sm text-accent">{message}</p> : null}
@@ -306,7 +340,7 @@ export function UsersManager({ users, staff, canManage }: Props) {
         </form>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Hanya ADMIN yang bisa mengelola user.
+          Hanya Owner/Admin yang bisa mengelola user.
         </p>
       )}
 
@@ -365,6 +399,29 @@ export function UsersManager({ users, staff, canManage }: Props) {
                   minLength={6}
                 />
               </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editCanApproveSp}
+                  onChange={(e) => setEditCanApproveSp(e.target.checked)}
+                  disabled={pending || editIsOwner}
+                />
+                Boleh approve SP
+              </label>
+              {canGrantOwner ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editIsOwner}
+                    onChange={(e) => {
+                      setEditIsOwner(e.target.checked);
+                      if (e.target.checked) setEditCanApproveSp(true);
+                    }}
+                    disabled={pending}
+                  />
+                  Owner (akses penuh)
+                </label>
+              ) : null}
               <Button onClick={saveEdit} disabled={pending}>
                 {pending ? (
                   <Loader2 className="mr-2 size-4 animate-spin" />

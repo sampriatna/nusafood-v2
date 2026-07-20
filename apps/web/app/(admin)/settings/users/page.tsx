@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AdminPage } from "@/components/admin-page";
 import { authRequired, getSession } from "@/lib/auth";
-import { canManageUsers, getAppRole } from "@/lib/permissions";
+import { canManageUsers, getAppRole, isOwner } from "@/lib/permissions";
 import { listStaff } from "@/lib/services/staff.service";
 import { listUsers } from "@/lib/users.service";
 import { UsersManager } from "./users-manager";
@@ -26,7 +26,12 @@ export default async function UsersSettingsPage() {
         RBAC: OWNER / ADMIN / LEADER / STAFF · role kamu: {getAppRole(session)} ·{" "}
         {users.length} akun
       </p>
-      <UsersManager users={users} staff={staff} canManage={canManage} />
+      <UsersManager
+        users={users}
+        staff={staff}
+        canManage={canManage}
+        canGrantOwner={!authRequired() || isOwner(session)}
+      />
     </AdminPage>
   );
 }

@@ -9,6 +9,8 @@ export type PublicUser = {
   displayName: string
   role: StaffRole
   staffId: string | null
+  isOwner: boolean
+  canApproveSp: boolean
   loginEnabled: boolean
   lastLogin: string | null
   createdAt: string
@@ -21,6 +23,8 @@ type UserRow = {
   username: string
   role: StaffRole
   staffId: string | null
+  isOwner: boolean
+  canApproveSp: boolean
   loginEnabled: boolean
   lastLogin: Date | null
   createdAt: Date
@@ -36,6 +40,8 @@ function toPublic(user: UserRow): PublicUser {
     displayName: user.staff?.name || user.username,
     role: user.role,
     staffId: user.staffId,
+    isOwner: user.isOwner,
+    canApproveSp: user.canApproveSp,
     loginEnabled: user.loginEnabled,
     lastLogin: user.lastLogin?.toISOString() ?? null,
     createdAt: user.createdAt.toISOString(),
@@ -98,6 +104,8 @@ export async function createUser(input: {
   staffId?: string | null
   loginEnabled?: boolean
   userId?: string
+  isOwner?: boolean
+  canApproveSp?: boolean
 }) {
   const username = input.username.trim().toLowerCase()
   if (!username || !input.password) {
@@ -117,6 +125,9 @@ export async function createUser(input: {
     if (!staff) throw new Error("staffId tidak ditemukan")
   }
 
+  const isOwner = Boolean(input.isOwner)
+  const canApproveSp = isOwner || Boolean(input.canApproveSp)
+
   const row = await prisma.userAccount.create({
     data: {
       userId: input.userId || generateUserId(),
@@ -125,6 +136,8 @@ export async function createUser(input: {
       role: input.role,
       staffId: input.staffId || null,
       loginEnabled: input.loginEnabled ?? true,
+      isOwner,
+      canApproveSp,
     },
     include: withStaff,
   })
@@ -138,6 +151,8 @@ export async function updateUser(
     staffId?: string | null
     loginEnabled?: boolean
     password?: string
+    isOwner?: boolean
+    canApproveSp?: boolean
   }
 ) {
   const existing = await prisma.userAccount.findFirst({
@@ -156,12 +171,26 @@ export async function updateUser(
     throw new Error("password minimal 6 karakter")
   }
 
+  const nextIsOwner =
+    input.isOwner !== undefined ? Boolean(input.isOwner) : existing.isOwner
+  let nextCanApprove =
+    input.canApproveSp !== undefined
+      ? Boolean(input.canApproveSp)
+      : existing.canApproveSp
+  // Owner selalu punya capability approve
+  if (nextIsOwner) nextCanApprove = true
+
   const row = await prisma.userAccount.update({
     where: { id: existing.id },
     data: {
       role: input.role,
       staffId: input.staffId === undefined ? undefined : input.staffId || null,
       loginEnabled: input.loginEnabled,
+      isOwner: input.isOwner !== undefined ? nextIsOwner : undefined,
+      canApproveSp:
+        input.canApproveSp !== undefined || input.isOwner !== undefined
+          ? nextCanApprove
+          : undefined,
       passwordHash: input.password
         ? await hashPassword(input.password)
         : undefined,
@@ -198,5 +227,7 @@ export async function ensureBootstrapAdmin() {
     password,
     role: "ADMIN",
     userId: "USR-BOOTSTRAP-001",
+    isOwner: true,
+    canApproveSp: true,
   })
 }

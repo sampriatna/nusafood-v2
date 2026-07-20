@@ -11,6 +11,7 @@ import {
 const adminSession: SessionPayload = {
   isAdmin: true,
   isOwner: false,
+  canApproveSp: false,
   loginAt: Date.now(),
   expiresAt: Date.now() + 3600_000,
   userId: "admin",
@@ -21,6 +22,7 @@ const adminSession: SessionPayload = {
 const ownerSession: SessionPayload = {
   isAdmin: true,
   isOwner: true,
+  canApproveSp: true,
   loginAt: Date.now(),
   expiresAt: Date.now() + 3600_000,
   userId: "env-admin",
@@ -32,6 +34,7 @@ const ownerSession: SessionPayload = {
 const leaderKbu: SessionPayload = {
   isAdmin: true,
   isOwner: false,
+  canApproveSp: false,
   loginAt: Date.now(),
   expiresAt: Date.now() + 3600_000,
   userId: "leader-1",

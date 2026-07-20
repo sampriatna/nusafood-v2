@@ -30,6 +30,8 @@ export interface SessionPayload {
   isAdmin: boolean;
   /** Session-level owner flag — bukan enum DB StaffRole. */
   isOwner: boolean;
+  /** Permission eksplisit approve SP (dari DB can_approve_sp). */
+  canApproveSp: boolean;
   loginAt: number;
   expiresAt: number;
   userId: string;
@@ -44,11 +46,13 @@ export interface SessionPayload {
 export async function createSessionToken(
   payload: Omit<
     SessionPayload,
-    "isAdmin" | "isOwner" | "loginAt" | "expiresAt"
+    "isAdmin" | "isOwner" | "canApproveSp" | "loginAt" | "expiresAt"
   > & {
     isAdmin?: boolean;
     isOwner?: boolean;
+    canApproveSp?: boolean;
     username?: string;
+    isOwnerDb?: boolean;
   },
 ): Promise<string> {
   const duration = sessionDurationSeconds();
@@ -58,6 +62,7 @@ export async function createSessionToken(
     resolveIsOwner({
       userId: payload.userId,
       username: payload.username,
+      isOwnerDb: payload.isOwnerDb,
     });
 
   const full: SessionPayload = {
@@ -65,6 +70,7 @@ export async function createSessionToken(
       payload.isAdmin ??
       (isOwner || ["ADMIN", "LEADER"].includes(payload.userRole)),
     isOwner,
+    canApproveSp: Boolean(payload.canApproveSp) || isOwner,
     loginAt: Date.now(),
     expiresAt,
     userId: payload.userId,
@@ -105,10 +111,15 @@ export async function verifySessionToken(
       typeof payload.isOwner === "boolean"
         ? payload.isOwner
         : resolveIsOwner({ userId, username });
+    const canApproveSp =
+      typeof payload.canApproveSp === "boolean"
+        ? payload.canApproveSp
+        : isOwner;
 
     return {
       isAdmin: payload.isAdmin as boolean,
       isOwner,
+      canApproveSp,
       loginAt: Number(payload.loginAt ?? Date.now()),
       expiresAt: payload.expiresAt as number,
       userId,

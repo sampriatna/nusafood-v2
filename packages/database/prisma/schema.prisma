@@ -193,16 +193,20 @@ model Staff {
 }
 
 model UserAccount {
-  id           String    @id @default(uuid()) @db.Uuid
-  userId       String    @unique @map("user_id") @db.VarChar(50)
-  staffId      String?   @unique @map("staff_id") @db.VarChar(50)
-  username     String    @unique @db.VarChar(100)
-  passwordHash String    @map("password_hash") @db.VarChar(255)
-  role         StaffRole
-  loginEnabled Boolean   @default(true) @map("login_enabled")
-  lastLogin    DateTime? @map("last_login") @db.Timestamptz(6)
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @unique @map("user_id") @db.VarChar(50)
+  staffId       String?   @unique @map("staff_id") @db.VarChar(50)
+  username      String    @unique @db.VarChar(100)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  role          StaffRole
+  /// Owner app-level (bukan enum StaffRole) — akses penuh sensitif
+  isOwner       Boolean   @default(false) @map("is_owner")
+  /// ADMIN/HR permission eksplisit untuk approve SP (OWNER selalu boleh)
+  canApproveSp  Boolean   @default(false) @map("can_approve_sp")
+  loginEnabled  Boolean   @default(true) @map("login_enabled")
+  lastLogin     DateTime? @map("last_login") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   staff Staff? @relation(fields: [staffId], references: [staffId])
 

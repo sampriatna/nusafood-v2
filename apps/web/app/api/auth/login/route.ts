@@ -78,10 +78,12 @@ export async function POST(request: Request) {
         userRole: "ADMIN",
         username: "owner",
         isOwner: true,
+        canApproveSp: true,
       })
       const ownerSession = {
         isAdmin: true,
         isOwner: true,
+        canApproveSp: true,
         loginAt: Date.now(),
         expiresAt: Date.now() + 12 * 60 * 60 * 1000,
         userId: "env-admin",
@@ -133,6 +135,14 @@ export async function POST(request: Request) {
 
     const displayName = user.staff?.name || user.username
     const outlet = user.staff?.outlet
+    const { resolveIsOwner } = await import("@/lib/owner")
+    const isOwner = resolveIsOwner({
+      userId: user.userId,
+      username: user.username,
+      isOwnerDb: user.isOwner,
+    })
+    const canApproveSp = isOwner || Boolean(user.canApproveSp)
+
     const token = await createSessionToken({
       userId: user.userId,
       userName: displayName,
@@ -141,11 +151,15 @@ export async function POST(request: Request) {
       userOutlet: outlet?.code,
       userOutletId: outlet?.id,
       username: user.username,
+      isOwner,
+      canApproveSp,
+      isOwnerDb: user.isOwner,
     })
 
     const sessionPreview = {
-      isAdmin: ["ADMIN", "LEADER"].includes(user.role),
-      isOwner: false as boolean,
+      isAdmin: isOwner || ["ADMIN", "LEADER"].includes(user.role),
+      isOwner,
+      canApproveSp,
       loginAt: Date.now(),
       expiresAt: Date.now() + 12 * 60 * 60 * 1000,
       userId: user.userId,
@@ -156,14 +170,6 @@ export async function POST(request: Request) {
       staffId: user.staffId ?? undefined,
       username: user.username,
     }
-    // Recompute isOwner from token path (env OWNER_*)
-    const { resolveIsOwner } = await import("@/lib/owner")
-    sessionPreview.isOwner = resolveIsOwner({
-      userId: user.userId,
-      username: user.username,
-    })
-    sessionPreview.isAdmin =
-      sessionPreview.isOwner || ["ADMIN", "LEADER"].includes(user.role)
 
     await writeRbacAuditLog({
       session: sessionPreview,
@@ -182,6 +188,7 @@ export async function POST(request: Request) {
       role: user.role,
       app_role: caps.app_role,
       is_owner: caps.is_owner,
+      can_approve_sp: canApproveSp,
       outlet: outlet?.code ?? null,
       capabilities: caps,
     })

@@ -351,6 +351,12 @@ export async function submitLeaderMonitor(
   return { success: true, data: submission };
 }
 
+export function getLeaderMonitorSubmissionById(
+  id: string,
+): LeaderMonitorSubmission | null {
+  return getState().submissions.find((s) => s.id === id) || null;
+}
+
 export function updateLeaderMonitorFollowUp(
   id: string,
   follow_up_status: LeaderFollowUpStatus,
