@@ -390,9 +390,20 @@ export async function buildLeaderMonitorDashboard(
   const submissions = listLeaderMonitorSubmissions({ ...filters, date });
   const templates = listLeaderMonitorTemplates(outlet);
 
-  const staff_need_fix = (await listSubmissionsNeedingFix(date)).filter(
-    (s) => !outlet || outlet === "ALL" || s.outlet_id === outlet || s.outlet === outlet,
-  );
+  // Prisma path may fail if daily SOP / leader_validation migration belum deploy.
+  // Keep in-memory leader monitoring usable; staff_need_fix is optional enrichment.
+  let staff_need_fix: DailyReportSubmission[] = [];
+  try {
+    staff_need_fix = (await listSubmissionsNeedingFix(date)).filter(
+      (s) =>
+        !outlet || outlet === "ALL" || s.outlet_id === outlet || s.outlet === outlet,
+    );
+  } catch (error) {
+    console.error(
+      "[buildLeaderMonitorDashboard] listSubmissionsNeedingFix failed",
+      error,
+    );
+  }
 
   const summary: LeaderMonitorDashboardSummary = {
     total_today: submissions.length,
