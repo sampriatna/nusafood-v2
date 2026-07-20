@@ -31,9 +31,22 @@ export async function GET(request: Request) {
       return fail(error.message, { code: error.code, status: error.status });
     }
     console.error("[GET /api/staff-reports/dashboard]", error);
-    return fail("Gagal memuat dashboard daily report", {
-      code: "DAILY_DASHBOARD_FAILED",
-      status: 500,
-    });
+    const message =
+      error instanceof Error ? error.message : String(error ?? "");
+    const looksLikeMissingSchema =
+      /does not exist|P2021|P2022|relation .* does not exist|column .* does not exist/i.test(
+        message,
+      );
+    return fail(
+      looksLikeMissingSchema
+        ? "Gagal memuat dashboard daily report — jalankan pnpm db:migrate:deploy (SOP + leader columns)"
+        : "Gagal memuat dashboard daily report",
+      {
+        code: looksLikeMissingSchema
+          ? "DAILY_DASHBOARD_SCHEMA_MISSING"
+          : "DAILY_DASHBOARD_FAILED",
+        status: 500,
+      },
+    );
   }
 }

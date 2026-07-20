@@ -114,9 +114,16 @@ export interface DailyReportChecklistAnswer {
   checked: boolean;
 }
 
+export type StaffReportValidationStatus =
+  | "valid"
+  | "revisi"
+  | "tidak_valid"
+  | "manipulasi";
+
 export interface DailyReportSubmission {
   id: string;
   staff_id: string;
+  outlet_id?: string;
   report_template_id: string;
   report_date?: string;
   status_condition: ReportConditionStatus;
@@ -127,6 +134,18 @@ export interface DailyReportSubmission {
   checklist_total?: number | null;
   checklist_percent?: number | null;
   submitted_at?: string;
+  created_at?: string;
+  /** Validasi leader — null/undefined = belum dicek fisik */
+  leader_validation?: StaffReportValidationStatus | null;
+  leader_validation_note?: string | null;
+  leader_validated_at?: string | null;
+  leader_validated_by?: string | null;
+  leader_validated_by_name?: string | null;
+  leader_validation_photo_url?: string | null;
+  staff_name?: string;
+  outlet?: string;
+  report_title?: string;
+  position?: string;
 }
 
 export type DailyReportRowLabel =
@@ -144,8 +163,10 @@ export interface DailyReportDashboardRow {
   position_group?: string | null;
   report_template_id: string;
   report_title: string;
+  category?: string;
   is_required_daily: boolean;
   submitted: boolean;
+  submission?: DailyReportSubmission | null;
   submitted_at?: string | null;
   status_condition?: ReportConditionStatus | null;
   note?: string | null;
@@ -172,8 +193,10 @@ export interface DailyReportDashboardData {
     not_submitted: number;
     staff_submitted: number;
     staff_not_submitted: number;
+    reports_with_issue?: number;
   };
   rows: DailyReportDashboardRow[];
+  submissions?: DailyReportSubmission[];
   missing_required: DailyReportMissingRequired[];
 }
 
