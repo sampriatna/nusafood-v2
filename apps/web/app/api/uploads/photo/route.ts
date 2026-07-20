@@ -1,6 +1,10 @@
 import { fail, ok } from "@/lib/api/response";
 import { prisma } from "@/lib/db";
 import {
+  DailyActivityError,
+  assertDailyReportUploadToken,
+} from "@/lib/services/daily-activity.service";
+import {
   uploadPhoto,
   type UploadContext,
 } from "@/lib/services/storage.service";
@@ -33,15 +37,35 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!["before", "after", "checklist_item"].includes(context)) {
+    if (
+      !["before", "after", "checklist_item", "daily_report"].includes(context)
+    ) {
       return fail("context tidak valid", {
         code: "VALIDATION_ERROR",
         status: 400,
       });
     }
 
-    // Staff uploads require valid task token; before (admin) may omit when AUTH off
-    if (context !== "before") {
+    // Staff uploads require valid token; before (admin) may omit when AUTH off
+    if (context === "daily_report") {
+      if (!token) {
+        return fail("Token tidak valid", {
+          code: "INVALID_TOKEN",
+          status: 403,
+        });
+      }
+      try {
+        await assertDailyReportUploadToken(taskId, token);
+      } catch (error) {
+        if (error instanceof DailyActivityError) {
+          return fail(error.message, {
+            code: error.code,
+            status: error.status,
+          });
+        }
+        throw error;
+      }
+    } else if (context !== "before") {
       if (!token) {
         return fail("Token tidak valid", {
           code: "INVALID_TOKEN",
@@ -84,25 +108,29 @@ export async function POST(request: Request) {
       originalName: file.name,
     });
 
-    const taskMeta = await prisma.task.findUnique({
-      where: { taskId },
-      select: { outletId: true },
-    });
-
-    if (context === "before") {
-      await prisma.task.update({
+    let outletId: string | undefined;
+    if (context !== "daily_report") {
+      const taskMeta = await prisma.task.findUnique({
         where: { taskId },
-        data: { beforePhotoUrl: result.url },
+        select: { outletId: true },
       });
+      outletId = taskMeta?.outletId;
+
+      if (context === "before") {
+        await prisma.task.update({
+          where: { taskId },
+          data: { beforePhotoUrl: result.url },
+        });
+      }
     }
 
     const { logSyncOperation } = await import("@/lib/services/dual-write.service");
     await logSyncOperation({
       operation: "upload_photo",
-      entityType: "task",
+      entityType: context === "daily_report" ? "daily_report" : "task",
       entityId: taskId,
-      taskId,
-      outletId: taskMeta?.outletId,
+      taskId: context === "daily_report" ? undefined : taskId,
+      outletId,
       v2Status: "success",
       v2Response: {
         context,

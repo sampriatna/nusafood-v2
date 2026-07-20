@@ -13,6 +13,7 @@ const PUBLIC_PATHS = [
   "/login",
   "/report",
   "/checklist",
+  "/r",
   "/api/health",
   "/api/auth/login",
   "/api/auth/logout",
@@ -33,7 +34,9 @@ function isPublicTaskApi(pathname: string) {
     Boolean(pathname.match(/^\/api\/tasks\/[^/]+\/open/)) ||
     Boolean(pathname.match(/^\/api\/tasks\/[^/]+\/submit/)) ||
     Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/public/)) ||
-    Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/submit/))
+    Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/submit/)) ||
+    Boolean(pathname.match(/^\/api\/staff-reports\/by-token\//)) ||
+    pathname === "/api/staff-reports/submit"
   )
 }
 
