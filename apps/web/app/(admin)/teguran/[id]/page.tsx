@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import type { DisciplinaryLetter } from "@nusafood/types";
+import type {
+  DisciplinaryEvidenceInput,
+  DisciplinaryLetter,
+} from "@nusafood/types";
 import { AdminPage } from "@/components/admin-page";
+import { PhotoUploader } from "@/components/photo-uploader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -71,7 +75,44 @@ export default function TeguranDetailPage() {
       }
       setLetter(json.data);
       toast({ title: successTitle });
+      if (action === "generate_pdf" && json.data.pdf_url) {
+        window.open(json.data.pdf_url, "_blank", "noopener,noreferrer");
+      }
     });
+  }
+
+  async function appendEvidencePhoto(url: string) {
+    if (!letter) return;
+    const evidence: DisciplinaryEvidenceInput[] = [
+      ...(letter.evidence || []).map((e) => ({
+        evidence_type: e.evidence_type,
+        file_url: e.file_url,
+        text_note: e.text_note,
+        related_task_photo_id: e.related_task_photo_id,
+      })),
+      {
+        evidence_type: "PHOTO" as const,
+        file_url: url,
+        text_note: "Foto bukti teguran",
+      },
+    ];
+    const res = await fetch(`/api/disciplinary/${id}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ evidence }),
+    });
+    const json = (await res.json()) as ApiResponse<DisciplinaryLetter>;
+    if (!json.success || !json.data) {
+      toast({
+        title: "Gagal menambah bukti",
+        description: json.error || "Coba lagi",
+        variant: "destructive",
+      });
+      return;
+    }
+    setLetter(json.data);
+    toast({ title: "Bukti foto ditambahkan" });
   }
 
   if (loading) {
@@ -98,6 +139,8 @@ export default function TeguranDetailPage() {
 
   const preview = getLetterPreview(letter);
   const isSp = letter.type === "PERINGATAN";
+  const canEditEvidence =
+    letter.status === "DRAFT" || letter.status === "WAITING_APPROVAL";
 
   return (
     <AdminPage title="Detail Teguran / SP" backHref="/teguran" maxWidth="2xl">
@@ -113,8 +156,8 @@ export default function TeguranDetailPage() {
             <Badge variant="secondary">{letter.status}</Badge>
           </div>
           <p className="text-sm">
-            {isSp ? "SP" : "ST"} {letter.level} · {letter.employee_name_snapshot} ·{" "}
-            {letter.outlet_name_snapshot}
+            {isSp ? "SP" : "ST"} {letter.level} · {letter.employee_name_snapshot}{" "}
+            · {letter.outlet_name_snapshot}
           </p>
           <p className="text-sm text-muted-foreground">
             Jabatan: {letter.employee_position_snapshot || "-"} · Kejadian:{" "}
@@ -131,21 +174,8 @@ export default function TeguranDetailPage() {
               </Link>
             </p>
           ) : null}
-          {typeof letter.employee_history_count === "number" ? (
-            <p className="text-sm text-muted-foreground">
-              Riwayat surat karyawan ini: {letter.employee_history_count}
-            </p>
-          ) : null}
         </CardContent>
       </Card>
-
-      {letter.source_type === "FAKE_REPORT" ? (
-        <Card className="border-red-300 bg-red-50">
-          <CardContent className="p-4 text-sm text-red-900">
-            Peringatan integritas: kasus laporan/foto palsu.
-          </CardContent>
-        </Card>
-      ) : null}
 
       <Card>
         <CardContent className="space-y-3 p-4 text-sm">
@@ -167,27 +197,11 @@ export default function TeguranDetailPage() {
               {letter.correction_instruction}
             </p>
           </div>
-          {letter.sop_reference ? (
-            <div>
-              <p className="font-medium">SOP / pasal</p>
-              <p className="whitespace-pre-wrap text-muted-foreground">
-                {letter.sop_reference}
-              </p>
-            </div>
-          ) : null}
-          {letter.consequence ? (
-            <div>
-              <p className="font-medium">Konsekuensi</p>
-              <p className="whitespace-pre-wrap text-muted-foreground">
-                {letter.consequence}
-              </p>
-            </div>
-          ) : null}
         </CardContent>
       </Card>
 
       <Card>
-        <CardContent className="space-y-2 p-4">
+        <CardContent className="space-y-3 p-4">
           <h3 className="font-semibold">Bukti</h3>
           {(letter.evidence || []).length === 0 ? (
             <p className="text-sm text-amber-800">
@@ -200,21 +214,32 @@ export default function TeguranDetailPage() {
                   <span className="font-medium">{e.evidence_type}</span>
                   {e.text_note ? ` — ${e.text_note}` : ""}
                   {e.file_url ? (
-                    <div>
-                      <a
-                        href={e.file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="break-all text-xs text-primary underline"
-                      >
-                        {e.file_url}
-                      </a>
+                    <div className="mt-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={e.file_url}
+                        alt="Bukti"
+                        className="max-h-40 rounded object-cover"
+                      />
                     </div>
                   ) : null}
                 </li>
               ))}
             </ul>
           )}
+          {canEditEvidence ? (
+            <PhotoUploader
+              label="Tambah foto bukti (kamera / galeri)"
+              size="large"
+              upload={{
+                taskId: letter.related_task_id || `teguran-${letter.id}`,
+                context: "disciplinary",
+              }}
+              onChange={(url) => {
+                if (url) void appendEvidencePhoto(url);
+              }}
+            />
+          ) : null}
         </CardContent>
       </Card>
 
@@ -231,7 +256,7 @@ export default function TeguranDetailPage() {
               rel="noreferrer"
               className="text-sm text-primary underline"
             >
-              Buka arsip PDF/HTML
+              Buka surat resmi (cetak / Save as PDF)
             </a>
           ) : null}
         </CardContent>
@@ -250,7 +275,8 @@ export default function TeguranDetailPage() {
                     : ""}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {ev.actor_name_snapshot} · {new Date(ev.created_at).toLocaleString("id-ID")}
+                  {ev.actor_name_snapshot} ·{" "}
+                  {new Date(ev.created_at).toLocaleString("id-ID")}
                 </p>
                 {ev.note ? <p className="text-xs">{ev.note}</p> : null}
               </li>
@@ -287,7 +313,7 @@ export default function TeguranDetailPage() {
         <Button
           variant="secondary"
           disabled={pending}
-          onClick={() => act("generate_pdf", "PDF/arsip dibuat")}
+          onClick={() => act("generate_pdf", "Surat resmi dibuat")}
         >
           Generate PDF
         </Button>

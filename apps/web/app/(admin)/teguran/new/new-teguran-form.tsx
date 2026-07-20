@@ -510,16 +510,41 @@ export default function NewTeguranForm() {
 
       <Card>
         <CardContent className="space-y-3 p-4">
-          <h3 className="font-semibold">Bukti</h3>
+          <h3 className="font-semibold">Bukti foto (kamera / galeri)</h3>
+          <p className="text-sm text-muted-foreground">
+            Ambil foto langsung atau pilih dari galeri. Tidak perlu isi link.
+          </p>
+          <PhotoUploader
+            label="Ambil / pilih foto bukti"
+            size="large"
+            upload={{
+              taskId: form.related_task_id || `teguran-${Date.now()}`,
+              context: "disciplinary",
+            }}
+            onChange={(url) => {
+              if (url) addEvidenceFromUpload(url);
+            }}
+          />
+          <div className="space-y-1.5">
+            <Label>Catatan bukti (opsional)</Label>
+            <Input
+              placeholder="Misal: area kotor / foto tidak sesuai"
+              value={evidenceNote}
+              onChange={(e) => setEvidenceNote(e.target.value)}
+            />
+          </div>
           {(form.evidence || []).length === 0 ? (
             <p className="text-sm text-amber-800">
-              Bukti belum lengkap, surat belum layak dikirim. Draft tetap bisa
-              disimpan.
+              Belum ada bukti. Draft tetap bisa disimpan; kirim surat wajib ada
+              bukti.
             </p>
           ) : (
             <ul className="space-y-2 text-sm">
               {(form.evidence || []).map((e, idx) => (
-                <li key={`${e.evidence_type}-${idx}`} className="rounded border p-2">
+                <li
+                  key={`${e.evidence_type}-${idx}`}
+                  className="rounded border p-2"
+                >
                   <span className="font-medium">{e.evidence_type}</span>
                   {e.text_note ? ` — ${e.text_note}` : ""}
                   {e.file_url ? (
@@ -536,32 +561,7 @@ export default function NewTeguranForm() {
               ))}
             </ul>
           )}
-
-          <div className="space-y-1.5">
-            <Label>Catatan bukti (opsional)</Label>
-            <Input
-              placeholder="Misal: foto area kotor / laporan tidak sesuai"
-              value={evidenceNote}
-              onChange={(e) => setEvidenceNote(e.target.value)}
-            />
-          </div>
-
-          <PhotoUploader
-            label="Upload foto bukti"
-            upload={{
-              taskId: form.related_task_id || `teguran-${Date.now()}`,
-              context: "disciplinary",
-            }}
-            onChange={(url) => {
-              if (url) addEvidenceFromUpload(url);
-            }}
-          />
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={addEvidenceNoteOnly}
-          >
+          <Button type="button" variant="outline" onClick={addEvidenceNoteOnly}>
             Tambah catatan saja (tanpa foto)
           </Button>
         </CardContent>
