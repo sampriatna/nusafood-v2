@@ -448,7 +448,7 @@ export function TaskDetailClient({ task: initialTask }: Props) {
                       className="w-full sm:w-auto"
                     >
                       <Bell className="mr-2 size-4" />
-                      Buat Teguran
+                      Buat Draft Teguran
                     </Button>
                   </Link>
                 ) : null}

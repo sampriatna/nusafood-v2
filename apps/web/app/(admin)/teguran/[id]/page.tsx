@@ -19,6 +19,14 @@ type ApiResponse<T> =
   | { success: true; data: T; error: null }
   | { success: false; data: null; error: string };
 
+type MeResponse = {
+  authenticated?: boolean;
+  user?: {
+    role?: string;
+    name?: string;
+  };
+};
+
 async function runAction(id: string, action: string, note?: string) {
   const res = await fetch(`/api/disciplinary/${id}/actions`, {
     method: "POST",
@@ -29,6 +37,14 @@ async function runAction(id: string, action: string, note?: string) {
   return (await res.json()) as ApiResponse<DisciplinaryLetter>;
 }
 
+function isFormalEmployeeId(value: string | null | undefined): boolean {
+  const id = (value || "").trim();
+  if (!id || id === "UNKNOWN" || id === "UNASSIGNED") return false;
+  const digits = id.replace(/\D/g, "");
+  if (digits.length >= 8 && digits === id.replace(/[\s+-]/g, "")) return false;
+  return true;
+}
+
 export default function TeguranDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -36,6 +52,7 @@ export default function TeguranDetailPage() {
   const [letter, setLetter] = useState<DisciplinaryLetter | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +78,19 @@ export default function TeguranDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const json = (await res.json()) as ApiResponse<MeResponse>;
+        const role = json.data?.user?.role || "";
+        setIsAdmin(role === "ADMIN");
+      } catch {
+        setIsAdmin(false);
+      }
+    })();
+  }, []);
 
   function act(action: string, successTitle: string) {
     startTransition(async () => {
@@ -141,6 +171,20 @@ export default function TeguranDetailPage() {
   const isSp = letter.type === "PERINGATAN";
   const canEditEvidence =
     letter.status === "DRAFT" || letter.status === "WAITING_APPROVAL";
+  const hasEvidence = (letter.evidence || []).length > 0;
+  const employeeValid = isFormalEmployeeId(letter.employee_id);
+  const spApproved =
+    letter.status === "APPROVED" ||
+    letter.status === "SENT" ||
+    letter.status === "ACKNOWLEDGED" ||
+    letter.status === "RESOLVED";
+  const canGeneratePdf = !isSp || spApproved;
+  const canSend =
+    employeeValid &&
+    hasEvidence &&
+    (!isSp || (letter.status === "APPROVED" && Boolean(letter.pdf_url)));
+  const canApproveSp =
+    isAdmin && isSp && letter.status === "WAITING_APPROVAL";
 
   return (
     <AdminPage title="Detail Teguran / SP" backHref="/teguran" maxWidth="2xl">
@@ -177,6 +221,24 @@ export default function TeguranDetailPage() {
         </CardContent>
       </Card>
 
+      {!employeeValid ? (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 text-sm text-amber-950">
+            Karyawan belum valid. Edit draft dan pilih karyawan dari daftar
+            sebelum kirim / approval formal.
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {letter.source_type === "FAKE_REPORT" ? (
+        <Card className="border-red-300 bg-red-50">
+          <CardContent className="p-4 text-sm text-red-900">
+            Kasus laporan/foto tidak valid termasuk pelanggaran integritas.
+            Pastikan bukti lengkap sebelum diproses sebagai SP.
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardContent className="space-y-3 p-4 text-sm">
           <div>
@@ -203,9 +265,10 @@ export default function TeguranDetailPage() {
       <Card>
         <CardContent className="space-y-3 p-4">
           <h3 className="font-semibold">Bukti</h3>
-          {(letter.evidence || []).length === 0 ? (
-            <p className="text-sm text-amber-800">
-              Bukti belum lengkap, surat belum layak dikirim.
+          {!hasEvidence ? (
+            <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Bukti belum lengkap. Draft boleh disimpan; kirim surat wajib ada
+              bukti.
             </p>
           ) : (
             <ul className="space-y-2 text-sm">
@@ -256,9 +319,13 @@ export default function TeguranDetailPage() {
               rel="noreferrer"
               className="text-sm text-primary underline"
             >
-              Buka surat resmi (cetak / Save as PDF)
+              Buka preview surat (sementara — cetak / Save as PDF)
             </a>
           ) : null}
+          <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+            PDF/preview ini masih sementara. Belum disimpan ke storage permanen
+            (cloud). Jangan anggap sebagai arsip resmi final.
+          </p>
         </CardContent>
       </Card>
 
@@ -293,33 +360,77 @@ export default function TeguranDetailPage() {
             </Button>
           </Link>
         )}
-        {letter.status === "DRAFT" && (
+        {letter.status === "DRAFT" && isSp && (
           <Button
-            disabled={pending}
+            disabled={pending || !employeeValid || !hasEvidence}
             onClick={() => act("submit_approval", "Diajukan approval")}
           >
-            Ajukan Approval
+            Ajukan Approval SP
           </Button>
         )}
-        {(letter.status === "WAITING_APPROVAL" ||
-          (letter.type === "TEGURAN" && letter.status === "DRAFT")) && (
+        {canApproveSp ? (
           <Button
             disabled={pending}
-            onClick={() => act("approve", "Disetujui")}
+            onClick={() => act("approve", "SP disetujui")}
           >
-            Approve {isSp ? "SP" : "ST"}
+            Approve SP
           </Button>
-        )}
-        <Button
-          variant="secondary"
-          disabled={pending}
-          onClick={() => act("generate_pdf", "Surat resmi dibuat")}
-        >
-          Generate PDF
-        </Button>
-        <Button disabled={pending} onClick={() => act("send", "Surat dikirim")}>
-          Kirim Surat
-        </Button>
+        ) : null}
+        {isSp && letter.status === "WAITING_APPROVAL" && !isAdmin ? (
+          <p className="col-span-full text-xs text-muted-foreground">
+            Menunggu approval Admin/Owner. Leader tidak bisa approve SP.
+          </p>
+        ) : null}
+        <div className="space-y-1">
+          <Button
+            variant="secondary"
+            className="w-full"
+            disabled={pending || !canGeneratePdf}
+            onClick={() =>
+              act("generate_pdf", "Preview surat sementara dibuat")
+            }
+          >
+            Generate Preview Surat
+          </Button>
+          {!canGeneratePdf ? (
+            <p className="text-xs text-amber-800">
+              SP belum di-approve. Preview formal belum boleh dibuat.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Preview sementara — belum arsip permanen.
+            </p>
+          )}
+        </div>
+        <div className="space-y-1">
+          <Button
+            className="w-full"
+            disabled={pending || !canSend}
+            onClick={() =>
+              act("send", "Ditandai terkirim di sistem (bukan WA/email)")
+            }
+          >
+            Kirim Surat
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Menandai surat sebagai terkirim di sistem. Belum mengirim WA/email.
+          </p>
+          {!hasEvidence ? (
+            <p className="text-xs text-amber-800">
+              Tambahkan bukti dulu sebelum menandai terkirim.
+            </p>
+          ) : null}
+          {!employeeValid ? (
+            <p className="text-xs text-amber-800">
+              Pilih karyawan valid dulu sebelum menandai terkirim.
+            </p>
+          ) : null}
+          {isSp && letter.status !== "APPROVED" ? (
+            <p className="text-xs text-amber-800">
+              SP harus di-approve Admin/Owner dulu.
+            </p>
+          ) : null}
+        </div>
         {letter.status === "SENT" && (
           <Button
             variant="outline"

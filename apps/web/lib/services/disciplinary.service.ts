@@ -217,14 +217,19 @@ async function nextLetterNumber(
   return `${base}${seq}`;
 }
 
+function looksLikePhoneId(value: string): boolean {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length >= 8 && digits === value.replace(/[\s+-]/g, "");
+}
+
+function isFormalEmployeeId(value: string | null | undefined): boolean {
+  const id = (value || "").trim();
+  if (!id || id === "UNKNOWN" || id === "UNASSIGNED") return false;
+  if (looksLikePhoneId(id)) return false;
+  return true;
+}
+
 function validateDraftBasics(payload: CreateDisciplinaryLetterPayload) {
-  if (!payload.employee_id?.trim()) {
-    throw new DisciplinaryError(
-      "Data karyawan belum lengkap.",
-      "EMPLOYEE_REQUIRED",
-      400,
-    );
-  }
   if (![1, 2, 3].includes(payload.level)) {
     throw new DisciplinaryError("Level harus 1, 2, atau 3.", "INVALID_LEVEL", 400);
   }
@@ -251,8 +256,22 @@ function validateDraftBasics(payload: CreateDisciplinaryLetterPayload) {
   }
 }
 
+function assertFormalEmployee(
+  employeeId: string | null | undefined,
+  context: "send" | "approval" | "sp",
+) {
+  if (isFormalEmployeeId(employeeId)) return;
+  const messages = {
+    send: "Karyawan belum valid. Pilih karyawan dari daftar sebelum surat dikirim.",
+    approval:
+      "Karyawan belum valid. Pilih karyawan dari daftar sebelum ajukan approval.",
+    sp: "SP formal membutuhkan karyawan valid. Pilih karyawan dari daftar dulu.",
+  } as const;
+  throw new DisciplinaryError(messages[context], "EMPLOYEE_INVALID", 400);
+}
+
 function assertEvidenceReady(
-  evidence: { id?: string }[] | undefined,
+  evidence: Array<{ id?: string } | DisciplinaryEvidenceInput> | undefined,
   forSend: boolean,
 ) {
   if (forSend && (!evidence || evidence.length === 0)) {
@@ -385,32 +404,53 @@ export async function createDisciplinaryLetter(
   validateDraftBasics(payload);
   const a = actor(session);
 
+  const requestedEmployeeId = payload.employee_id?.trim() || "";
+  let employeeValid = isFormalEmployeeId(requestedEmployeeId);
+  let employeeId = employeeValid ? requestedEmployeeId : "UNASSIGNED";
   let employeeName = payload.employee_name?.trim() || "";
   let employeePosition = payload.employee_position?.trim() || null;
   let outletId = payload.outlet_id || null;
   let outletName = payload.outlet_name?.trim() || "";
 
-  const staff = await prisma.staff.findUnique({
-    where: { staffId: payload.employee_id },
-    include: { outlet: true },
-  });
-  if (staff) {
-    employeeName = employeeName || staff.name;
-    employeePosition = employeePosition || staff.position;
-    outletId = outletId || staff.outletId;
-    outletName = outletName || staff.outlet?.code || staff.outlet?.name || "";
+  if (employeeValid) {
+    const staff = await prisma.staff.findUnique({
+      where: { staffId: requestedEmployeeId },
+      include: { outlet: true },
+    });
+    if (!staff) {
+      employeeValid = false;
+      employeeId = "UNASSIGNED";
+    } else {
+      employeeName = employeeName || staff.name;
+      employeePosition = employeePosition || staff.position;
+      outletId = outletId || staff.outletId;
+      outletName = outletName || staff.outlet?.code || staff.outlet?.name || "";
+    }
   }
-  if (!employeeName) {
-    throw new DisciplinaryError(
-      "Data karyawan belum lengkap.",
-      "EMPLOYEE_REQUIRED",
-      400,
+
+  const wantsApproval = payload.submit_for_approval === true;
+
+  // Draft boleh tanpa karyawan valid / bukti; ajukan approval formal wajib lengkap.
+  if (wantsApproval) {
+    assertFormalEmployee(
+      employeeValid ? employeeId : "",
+      payload.type === "PERINGATAN" ? "sp" : "approval",
     );
+    assertEvidenceReady(payload.evidence, true);
+  }
+
+  if (!employeeName) {
+    if (wantsApproval) {
+      throw new DisciplinaryError(
+        "Nama karyawan wajib diisi.",
+        "EMPLOYEE_REQUIRED",
+        400,
+      );
+    }
+    employeeName = "Belum dipilih";
   }
   if (!outletName) outletName = "ALL";
 
-  const wantsApproval =
-    payload.submit_for_approval || payload.type === "PERINGATAN";
   const initialStatus: DisciplinaryLetterStatus =
     payload.type === "PERINGATAN" && wantsApproval
       ? "WAITING_APPROVAL"
@@ -427,7 +467,7 @@ export async function createDisciplinaryLetter(
       type: payload.type,
       level: payload.level,
       status: initialStatus,
-      employeeId: payload.employee_id,
+      employeeId,
       employeeNameSnapshot: employeeName,
       employeePositionSnapshot: employeePosition,
       outletId,
@@ -463,15 +503,20 @@ export async function createDisciplinaryLetter(
     include: includeAll,
   });
 
+  const integrityNote =
+    payload.source_type === "FAKE_REPORT"
+      ? "Kasus laporan/foto tidak valid termasuk pelanggaran integritas. Pastikan bukti lengkap sebelum diproses sebagai SP."
+      : !employeeValid
+        ? "Draft dibuat — karyawan belum valid, wajib dipilih sebelum kirim."
+        : undefined;
+
   await addEvent(
     created.id,
     "CREATED",
     session,
     null,
     initialStatus,
-    payload.source_type === "FAKE_REPORT"
-      ? "Peringatan integritas: laporan/foto palsu adalah pelanggaran serius."
-      : undefined,
+    integrityNote,
   );
 
   return mapLetter(created);
@@ -527,12 +572,24 @@ export async function updateDisciplinaryLetter(
   };
   validateDraftBasics(merged);
 
+  let nextEmployeeId = merged.employee_id?.trim() || existing.employeeId;
+  if (!isFormalEmployeeId(nextEmployeeId)) {
+    // Jangan simpan nomor WA sebagai ID formal; draft boleh UNASSIGNED.
+    nextEmployeeId = "UNASSIGNED";
+  } else {
+    const staff = await prisma.staff.findUnique({
+      where: { staffId: nextEmployeeId },
+      select: { staffId: true },
+    });
+    if (!staff) nextEmployeeId = "UNASSIGNED";
+  }
+
   const updated = await prisma.disciplinaryLetter.update({
     where: { id: payload.id },
     data: {
       type: merged.type,
       level: merged.level,
-      employeeId: merged.employee_id,
+      employeeId: nextEmployeeId,
       employeeNameSnapshot: merged.employee_name || existing.employeeNameSnapshot,
       employeePositionSnapshot:
         merged.employee_position || existing.employeePositionSnapshot,
@@ -597,6 +654,7 @@ export async function submitForApproval(
       400,
     );
   }
+  assertFormalEmployee(letter.employeeId, "approval");
   assertEvidenceReady(letter.evidence, true);
   if (!letter.chronology.trim() || !letter.violationDetail.trim()) {
     throw new DisciplinaryError(
@@ -632,12 +690,16 @@ export async function approveLetter(
     include: includeAll,
   });
   if (!letter) throw new DisciplinaryError("Surat tidak ditemukan.", "NOT_FOUND", 404);
-  if (letter.status !== "WAITING_APPROVAL" && letter.type !== "TEGURAN") {
+  if (letter.status !== "WAITING_APPROVAL") {
     throw new DisciplinaryError(
       "SP belum dalam status menunggu approval.",
       "INVALID_STATUS",
       400,
     );
+  }
+  if (letter.type === "PERINGATAN") {
+    assertFormalEmployee(letter.employeeId, "sp");
+    assertEvidenceReady(letter.evidence, true);
   }
 
   const updated = await prisma.disciplinaryLetter.update({
@@ -708,6 +770,7 @@ export async function sendLetter(
     include: includeAll,
   });
   if (!letter) throw new DisciplinaryError("Surat tidak ditemukan.", "NOT_FOUND", 404);
+  assertFormalEmployee(letter.employeeId, "send");
   assertEvidenceReady(letter.evidence, true);
 
   if (letter.type === "PERINGATAN") {
@@ -719,7 +782,11 @@ export async function sendLetter(
       );
     }
     if (!letter.pdfUrl) {
-      throw new DisciplinaryError("PDF belum dibuat.", "PDF_REQUIRED", 400);
+      throw new DisciplinaryError(
+        "Preview surat belum dibuat. Buat preview sementara dulu sebelum menandai terkirim.",
+        "PDF_REQUIRED",
+        400,
+      );
     }
   } else if (!["DRAFT", "APPROVED", "WAITING_APPROVAL"].includes(letter.status)) {
     throw new DisciplinaryError(
@@ -729,12 +796,20 @@ export async function sendLetter(
     );
   }
 
+  // Status-only: tidak mengirim WA/email. Hanya menandai SENT di sistem.
   const updated = await prisma.disciplinaryLetter.update({
     where: { id },
     data: { status: "SENT", sentAt: new Date() },
     include: includeAll,
   });
-  await addEvent(id, "SENT", session, letter.status, "SENT");
+  await addEvent(
+    id,
+    "SENT",
+    session,
+    letter.status,
+    "SENT",
+    "Ditandai terkirim di sistem. Belum mengirim WA/email.",
+  );
   return mapLetter(updated);
 }
 
@@ -809,6 +884,101 @@ export function getLetterPreview(letter: DisciplinaryLetter): string {
   return buildLetterPreviewText(letter);
 }
 
+function normalizeWaDigits(value: string | null | undefined): string {
+  return String(value || "").replace(/\D/g, "");
+}
+
+async function resolveEmployeeForTask(task: {
+  staffId: string | null;
+  picName: string;
+  picWa: string;
+  outletId: string;
+  staff?: { staffId: string; name: string; position: string | null } | null;
+}): Promise<{
+  employee_id: string;
+  employee_name: string;
+  employee_position: string | null;
+  employee_valid: boolean;
+  employee_warning: string | null;
+}> {
+  if (task.staffId) {
+    const linked =
+      task.staff ||
+      (await prisma.staff.findUnique({
+        where: { staffId: task.staffId },
+        select: { staffId: true, name: true, position: true },
+      }));
+    if (linked) {
+      return {
+        employee_id: linked.staffId,
+        employee_name: linked.name,
+        employee_position: linked.position,
+        employee_valid: true,
+        employee_warning: null,
+      };
+    }
+  }
+
+  const waDigits = normalizeWaDigits(task.picWa);
+  if (waDigits.length >= 8) {
+    const byWa = await prisma.staff.findMany({
+      where: {
+        outletId: task.outletId,
+        status: "ACTIVE",
+        OR: [
+          { waNumber: task.picWa },
+          { waNumber: { contains: waDigits.slice(-10) } },
+        ],
+      },
+      take: 5,
+    });
+    const exact = byWa.filter(
+      (s) => normalizeWaDigits(s.waNumber) === waDigits,
+    );
+    if (exact.length === 1) {
+      const s = exact[0]!;
+      return {
+        employee_id: s.staffId,
+        employee_name: s.name,
+        employee_position: s.position,
+        employee_valid: true,
+        employee_warning: null,
+      };
+    }
+  }
+
+  const name = task.picName.trim();
+  if (name) {
+    const byName = await prisma.staff.findMany({
+      where: {
+        outletId: task.outletId,
+        status: "ACTIVE",
+        name: { equals: name, mode: "insensitive" },
+      },
+      take: 3,
+    });
+    if (byName.length === 1) {
+      const s = byName[0]!;
+      return {
+        employee_id: s.staffId,
+        employee_name: s.name,
+        employee_position: s.position,
+        employee_valid: true,
+        employee_warning: null,
+      };
+    }
+  }
+
+  return {
+    employee_id: "",
+    employee_name: task.picName || "",
+    employee_position: null,
+    employee_valid: false,
+    employee_warning:
+      "Task belum punya relasi karyawan valid. Pilih karyawan dulu sebelum surat dikirim.",
+  };
+}
+
 export async function buildPrefillFromTask(
   taskId: string,
 ): Promise<DisciplinaryTaskPrefill> {
@@ -824,15 +994,17 @@ export async function buildPrefillFromTask(
     );
   }
 
-  const employeeId = task.staffId || task.picWa || "UNKNOWN";
-  const previousCount = await prisma.disciplinaryLetter.count({
-    where: {
-      employeeId,
-      status: { not: "CANCELLED" },
-    },
-  });
+  const resolved = await resolveEmployeeForTask(task);
+  const previousCount = resolved.employee_valid
+    ? await prisma.disciplinaryLetter.count({
+        where: {
+          employeeId: resolved.employee_id,
+          status: { not: "CANCELLED" },
+        },
+      })
+    : 0;
 
-  let suggestedType: DisciplinaryLetterType = "TEGURAN";
+  // Prefill selalu ST draft-level suggestion; SP formal hanya setelah karyawan valid + approval.
   let suggestedLevel: DisciplinaryLetterLevel = 1;
   if (previousCount >= 2) suggestedLevel = 3;
   else if (previousCount === 1) suggestedLevel = 2;
@@ -875,9 +1047,9 @@ export async function buildPrefillFromTask(
   const deadlineStr = task.deadline.toISOString();
   return {
     related_task_id: task.taskId,
-    employee_id: employeeId,
-    employee_name: task.staff?.name || task.picName,
-    employee_position: task.staff?.position || null,
+    employee_id: resolved.employee_id,
+    employee_name: resolved.employee_name,
+    employee_position: resolved.employee_position,
     outlet_id: task.outletId,
     outlet_name: task.outlet?.code || task.outletName || "ALL",
     source_type: isLate ? "TASK_LATE" : "TASK_INCOMPLETE",
@@ -889,9 +1061,11 @@ export async function buildPrefillFromTask(
       : `Task "${task.taskTitle}" belum selesai sesuai standar.`,
     correction_instruction:
       "Selesaikan tugas sesuai standar, kirim laporan dengan foto asli dan jelas, serta laporkan kendala ke leader sebelum deadline.",
-    suggested_type: suggestedType,
+    suggested_type: "TEGURAN",
     suggested_level: suggestedLevel,
     integrity_warning: false,
+    employee_valid: resolved.employee_valid,
+    employee_warning: resolved.employee_warning,
     evidence,
     task_link: task.reportLink,
     previous_letter_count: previousCount,
