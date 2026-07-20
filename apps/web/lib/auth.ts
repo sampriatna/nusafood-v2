@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import type { StaffRole } from "@nusafood/types";
+import { resolveIsOwner } from "@/lib/owner";
 
 export const SESSION_COOKIE_NAME = "nusa_session";
 /** Alias untuk kompatibilitas route handlers */
@@ -27,6 +28,8 @@ function getSecretKey(): Uint8Array {
 
 export interface SessionPayload {
   isAdmin: boolean;
+  /** Session-level owner flag — bukan enum DB StaffRole. */
+  isOwner: boolean;
   loginAt: number;
   expiresAt: number;
   userId: string;
@@ -35,18 +38,33 @@ export interface SessionPayload {
   userOutlet?: string;
   userOutletId?: string;
   staffId?: string;
+  username?: string;
 }
 
 export async function createSessionToken(
-  payload: Omit<SessionPayload, "isAdmin" | "loginAt" | "expiresAt"> & {
+  payload: Omit<
+    SessionPayload,
+    "isAdmin" | "isOwner" | "loginAt" | "expiresAt"
+  > & {
     isAdmin?: boolean;
+    isOwner?: boolean;
+    username?: string;
   },
 ): Promise<string> {
   const duration = sessionDurationSeconds();
   const expiresAt = Date.now() + duration * 1000;
+  const isOwner =
+    payload.isOwner ??
+    resolveIsOwner({
+      userId: payload.userId,
+      username: payload.username,
+    });
 
   const full: SessionPayload = {
-    isAdmin: payload.isAdmin ?? ["ADMIN", "LEADER"].includes(payload.userRole),
+    isAdmin:
+      payload.isAdmin ??
+      (isOwner || ["ADMIN", "LEADER"].includes(payload.userRole)),
+    isOwner,
     loginAt: Date.now(),
     expiresAt,
     userId: payload.userId,
@@ -55,6 +73,7 @@ export async function createSessionToken(
     userOutlet: payload.userOutlet,
     userOutletId: payload.userOutletId,
     staffId: payload.staffId,
+    username: payload.username,
   };
 
   return new SignJWT({ ...full })
@@ -79,16 +98,26 @@ export async function verifySessionToken(
     }
     if ((payload.expiresAt as number) < Date.now()) return null;
 
+    const userId = payload.userId as string;
+    const username =
+      typeof payload.username === "string" ? payload.username : undefined;
+    const isOwner =
+      typeof payload.isOwner === "boolean"
+        ? payload.isOwner
+        : resolveIsOwner({ userId, username });
+
     return {
       isAdmin: payload.isAdmin as boolean,
+      isOwner,
       loginAt: Number(payload.loginAt ?? Date.now()),
       expiresAt: payload.expiresAt as number,
-      userId: payload.userId as string,
+      userId,
       userName: String(payload.userName ?? ""),
       userRole: payload.userRole as StaffRole,
       userOutlet: payload.userOutlet as string | undefined,
       userOutletId: payload.userOutletId as string | undefined,
       staffId: payload.staffId as string | undefined,
+      username,
     };
   } catch {
     return null;

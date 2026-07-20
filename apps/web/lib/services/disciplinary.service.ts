@@ -14,11 +14,28 @@ import type {
 } from "@nusafood/types";
 import type { SessionPayload } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {
+  assertCreateOutletAllowed,
+  assertOutletAccess,
+  OutletAccessError,
+} from "@/lib/outlet-scope";
+import {
+  canAccessDisciplinaryAction,
+  ownerOrAdminDeniedMessage,
+} from "@/lib/permissions";
+import { writeRbacAuditLog } from "@/lib/rbac-audit";
 import { TaskWriteError } from "@/lib/services/task-errors";
 import {
   buildLetterPreviewText,
   generateDisciplinaryPdfArchive,
 } from "@/lib/services/disciplinary-pdf.service";
+
+function mapOutletError(error: unknown): never {
+  if (error instanceof OutletAccessError) {
+    throw new DisciplinaryError(error.message, error.code, error.status);
+  }
+  throw error;
+}
 
 export class DisciplinaryError extends TaskWriteError {}
 
@@ -385,6 +402,15 @@ export async function createDisciplinaryLetter(
   validateDraftBasics(payload);
   const a = actor(session);
 
+  const createAction =
+    payload.type === "PERINGATAN" ? "create_draft_sp" : "create_draft_st";
+  if (
+    session &&
+    !canAccessDisciplinaryAction(session, createAction, { type: payload.type })
+  ) {
+    throw new DisciplinaryError(ownerOrAdminDeniedMessage(), "FORBIDDEN", 403);
+  }
+
   let employeeName = payload.employee_name?.trim() || "";
   let employeePosition = payload.employee_position?.trim() || null;
   let outletId = payload.outlet_id || null;
@@ -408,6 +434,21 @@ export async function createDisciplinaryLetter(
     );
   }
   if (!outletName) outletName = "ALL";
+
+  if (session) {
+    try {
+      if (outletName && outletName !== "ALL") {
+        assertCreateOutletAllowed(session, outletName);
+      }
+      assertOutletAccess(session, {
+        outletId,
+        outletCode: outletName,
+        outletName,
+      });
+    } catch (error) {
+      mapOutletError(error);
+    }
+  }
 
   const wantsApproval =
     payload.submit_for_approval || payload.type === "PERINGATAN";
@@ -473,6 +514,16 @@ export async function createDisciplinaryLetter(
       ? "Peringatan integritas: laporan/foto palsu adalah pelanggaran serius."
       : undefined,
   );
+
+  await writeRbacAuditLog({
+    session,
+    action: createAction,
+    entityType: "disciplinary_letter",
+    entityId: created.id,
+    outletId,
+    note: created.letterNumber,
+    newValue: { type: created.type, status: created.status },
+  });
 
   return mapLetter(created);
 }
@@ -590,6 +641,27 @@ export async function submitForApproval(
     include: includeAll,
   });
   if (!letter) throw new DisciplinaryError("Surat tidak ditemukan.", "NOT_FOUND", 404);
+
+  if (session) {
+    try {
+      assertOutletAccess(session, {
+        outletId: letter.outletId,
+        outletCode: letter.outletNameSnapshot,
+        outletName: letter.outletNameSnapshot,
+      });
+    } catch (error) {
+      mapOutletError(error);
+    }
+  }
+
+  if (
+    !canAccessDisciplinaryAction(session, "submit_approval_sp", {
+      type: letter.type,
+    })
+  ) {
+    throw new DisciplinaryError(ownerOrAdminDeniedMessage(), "FORBIDDEN", 403);
+  }
+
   if (letter.status !== "DRAFT" && letter.status !== "WAITING_APPROVAL") {
     throw new DisciplinaryError(
       "Status surat tidak bisa diajukan approval.",
@@ -612,6 +684,15 @@ export async function submitForApproval(
     include: includeAll,
   });
   await addEvent(id, "SUBMIT_APPROVAL", session, letter.status, "WAITING_APPROVAL");
+  await writeRbacAuditLog({
+    session,
+    action: "submit_approval_sp",
+    entityType: "disciplinary_letter",
+    entityId: id,
+    outletId: letter.outletId,
+    oldValue: { status: letter.status },
+    newValue: { status: "WAITING_APPROVAL" },
+  });
   return mapLetter(updated);
 }
 
@@ -620,18 +701,44 @@ export async function approveLetter(
   session: SessionPayload | null,
 ): Promise<DisciplinaryLetter> {
   const a = actor(session);
-  if (a.role !== "ADMIN" && session?.userId !== "env-admin") {
-    throw new DisciplinaryError(
-      "Hanya Owner/Admin yang boleh approve SP.",
-      "FORBIDDEN",
-      403,
-    );
-  }
   const letter = await prisma.disciplinaryLetter.findUnique({
     where: { id },
     include: includeAll,
   });
   if (!letter) throw new DisciplinaryError("Surat tidak ditemukan.", "NOT_FOUND", 404);
+
+  if (session) {
+    try {
+      assertOutletAccess(session, {
+        outletId: letter.outletId,
+        outletCode: letter.outletNameSnapshot,
+        outletName: letter.outletNameSnapshot,
+      });
+    } catch (error) {
+      mapOutletError(error);
+    }
+  }
+
+  if (letter.type === "PERINGATAN") {
+    if (!canAccessDisciplinaryAction(session, "approve_sp", { type: "PERINGATAN" })) {
+      throw new DisciplinaryError(
+        "Hanya Owner (atau Admin dengan permission) yang boleh approve SP.",
+        "FORBIDDEN",
+        403,
+      );
+    }
+  } else {
+    // Approve ST: OWNER / ADMIN / LEADER (outlet sudah dicek)
+    if (
+      !session ||
+      (!session.isOwner &&
+        session.userRole !== "ADMIN" &&
+        session.userRole !== "LEADER")
+    ) {
+      throw new DisciplinaryError(ownerOrAdminDeniedMessage(), "FORBIDDEN", 403);
+    }
+  }
+
   if (letter.status !== "WAITING_APPROVAL" && letter.type !== "TEGURAN") {
     throw new DisciplinaryError(
       "SP belum dalam status menunggu approval.",
@@ -651,6 +758,15 @@ export async function approveLetter(
     include: includeAll,
   });
   await addEvent(id, "APPROVED", session, letter.status, "APPROVED");
+  await writeRbacAuditLog({
+    session,
+    action: letter.type === "PERINGATAN" ? "approve_sp" : "approve_st",
+    entityType: "disciplinary_letter",
+    entityId: id,
+    outletId: letter.outletId,
+    oldValue: { status: letter.status },
+    newValue: { status: "APPROVED" },
+  });
   return mapLetter(updated);
 }
 
@@ -661,6 +777,37 @@ export async function generatePdf(
 ): Promise<DisciplinaryLetter> {
   const letter = await getDisciplinaryLetter(id);
   if (!letter) throw new DisciplinaryError("Surat tidak ditemukan.", "NOT_FOUND", 404);
+
+  if (session) {
+    try {
+      assertOutletAccess(session, {
+        outletId: letter.outlet_id,
+        outletCode: letter.outlet_name_snapshot,
+        outletName: letter.outlet_name_snapshot,
+      });
+    } catch (error) {
+      mapOutletError(error);
+    }
+  }
+
+  if (letter.type === "PERINGATAN") {
+    if (
+      !canAccessDisciplinaryAction(session, "generate_pdf_sp", {
+        type: "PERINGATAN",
+        status: letter.status,
+      })
+    ) {
+      throw new DisciplinaryError(
+        "Leader tidak boleh generate PDF SP final. Hanya Owner/Admin dengan permission.",
+        "FORBIDDEN",
+        403,
+      );
+    }
+  } else if (
+    !canAccessDisciplinaryAction(session, "generate_pdf_st", { type: "TEGURAN" })
+  ) {
+    throw new DisciplinaryError(ownerOrAdminDeniedMessage(), "FORBIDDEN", 403);
+  }
 
   if (letter.type === "PERINGATAN" && letter.status === "DRAFT") {
     throw new DisciplinaryError(
@@ -688,6 +835,16 @@ export async function generatePdf(
       400,
     );
   }
+  if (
+    letter.type === "PERINGATAN" &&
+    !["APPROVED", "SENT", "ACKNOWLEDGED", "RESOLVED"].includes(letter.status)
+  ) {
+    throw new DisciplinaryError(
+      "SP belum disetujui owner/admin.",
+      "NOT_APPROVED",
+      400,
+    );
+  }
 
   const { url } = await generateDisciplinaryPdfArchive(letter, origin);
   const updated = await prisma.disciplinaryLetter.update({
@@ -696,6 +853,15 @@ export async function generatePdf(
     include: includeAll,
   });
   await addEvent(id, "PDF_GENERATED", session, letter.status, letter.status, url);
+  await writeRbacAuditLog({
+    session,
+    action:
+      letter.type === "PERINGATAN" ? "generate_pdf_sp" : "generate_pdf_st",
+    entityType: "disciplinary_letter",
+    entityId: id,
+    outletId: letter.outlet_id,
+    newValue: { pdf_url: url },
+  });
   return mapLetter(updated);
 }
 
@@ -708,6 +874,34 @@ export async function sendLetter(
     include: includeAll,
   });
   if (!letter) throw new DisciplinaryError("Surat tidak ditemukan.", "NOT_FOUND", 404);
+
+  if (session) {
+    try {
+      assertOutletAccess(session, {
+        outletId: letter.outletId,
+        outletCode: letter.outletNameSnapshot,
+        outletName: letter.outletNameSnapshot,
+      });
+    } catch (error) {
+      mapOutletError(error);
+    }
+  }
+
+  if (
+    !canAccessDisciplinaryAction(session, "send_letter", {
+      type: letter.type,
+      status: letter.status,
+    })
+  ) {
+    throw new DisciplinaryError(
+      letter.type === "PERINGATAN"
+        ? "Leader tidak boleh kirim SP. Hanya Owner/Admin."
+        : ownerOrAdminDeniedMessage(),
+      "FORBIDDEN",
+      403,
+    );
+  }
+
   assertEvidenceReady(letter.evidence, true);
 
   if (letter.type === "PERINGATAN") {
@@ -735,6 +929,15 @@ export async function sendLetter(
     include: includeAll,
   });
   await addEvent(id, "SENT", session, letter.status, "SENT");
+  await writeRbacAuditLog({
+    session,
+    action: "send_letter",
+    entityType: "disciplinary_letter",
+    entityId: id,
+    outletId: letter.outletId,
+    oldValue: { status: letter.status },
+    newValue: { status: "SENT" },
+  });
   return mapLetter(updated);
 }
 
@@ -766,6 +969,31 @@ export async function resolveLetter(
 ): Promise<DisciplinaryLetter> {
   const letter = await prisma.disciplinaryLetter.findUnique({ where: { id } });
   if (!letter) throw new DisciplinaryError("Surat tidak ditemukan.", "NOT_FOUND", 404);
+
+  if (session) {
+    try {
+      assertOutletAccess(session, {
+        outletId: letter.outletId,
+        outletCode: letter.outletNameSnapshot,
+        outletName: letter.outletNameSnapshot,
+      });
+    } catch (error) {
+      mapOutletError(error);
+    }
+  }
+
+  if (
+    !canAccessDisciplinaryAction(session, "resolve_letter", {
+      type: letter.type,
+    })
+  ) {
+    throw new DisciplinaryError(
+      "Leader hanya boleh resolve ST outlet sendiri.",
+      "FORBIDDEN",
+      403,
+    );
+  }
+
   if (!["SENT", "ACKNOWLEDGED"].includes(letter.status)) {
     throw new DisciplinaryError(
       "Surat belum dalam status yang bisa diselesaikan.",
@@ -779,6 +1007,15 @@ export async function resolveLetter(
     include: includeAll,
   });
   await addEvent(id, "RESOLVED", session, letter.status, "RESOLVED");
+  await writeRbacAuditLog({
+    session,
+    action: "resolve_letter",
+    entityType: "disciplinary_letter",
+    entityId: id,
+    outletId: letter.outletId,
+    oldValue: { status: letter.status },
+    newValue: { status: "RESOLVED" },
+  });
   return mapLetter(updated);
 }
 
@@ -789,6 +1026,27 @@ export async function cancelLetter(
 ): Promise<DisciplinaryLetter> {
   const letter = await prisma.disciplinaryLetter.findUnique({ where: { id } });
   if (!letter) throw new DisciplinaryError("Surat tidak ditemukan.", "NOT_FOUND", 404);
+
+  if (session) {
+    try {
+      assertOutletAccess(session, {
+        outletId: letter.outletId,
+        outletCode: letter.outletNameSnapshot,
+        outletName: letter.outletNameSnapshot,
+      });
+    } catch (error) {
+      mapOutletError(error);
+    }
+  }
+
+  if (!canAccessDisciplinaryAction(session, "cancel_letter", { type: letter.type })) {
+    throw new DisciplinaryError(
+      "Leader tidak boleh batalkan surat. Hanya Owner/Admin.",
+      "FORBIDDEN",
+      403,
+    );
+  }
+
   if (["RESOLVED", "CANCELLED"].includes(letter.status)) {
     throw new DisciplinaryError(
       "Surat sudah selesai/dibatalkan.",
@@ -802,6 +1060,16 @@ export async function cancelLetter(
     include: includeAll,
   });
   await addEvent(id, "CANCELLED", session, letter.status, "CANCELLED", note);
+  await writeRbacAuditLog({
+    session,
+    action: "cancel_letter",
+    entityType: "disciplinary_letter",
+    entityId: id,
+    outletId: letter.outletId,
+    note,
+    oldValue: { status: letter.status },
+    newValue: { status: "CANCELLED" },
+  });
   return mapLetter(updated);
 }
 

@@ -1,4 +1,5 @@
 import { fail, ok } from "@/lib/api/response";
+import { resolveListOutletFilter, OutletAccessError } from "@/lib/outlet-scope";
 import { requireAuth } from "@/lib/require-auth";
 import {
   DailyActivityError,
@@ -10,12 +11,19 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const auth = await requireAuth(["ADMIN", "LEADER"]);
   if (!auth.ok) return auth.response;
+  if (!auth.session) {
+    return fail("Unauthorized", { code: "UNAUTHORIZED", status: 401 });
+  }
 
   try {
     const { searchParams } = new URL(request.url);
+    const outlet = resolveListOutletFilter(
+      auth.session,
+      searchParams.get("outlet"),
+    );
     const data = await buildDailyReportDashboard({
       date: searchParams.get("date") ?? undefined,
-      outlet: searchParams.get("outlet") ?? undefined,
+      outlet,
       staff_id: searchParams.get("staff_id") ?? undefined,
       report_template_id: searchParams.get("report_template_id") ?? undefined,
       submit_status:
@@ -27,6 +35,9 @@ export async function GET(request: Request) {
     });
     return ok(data);
   } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     if (error instanceof DailyActivityError) {
       return fail(error.message, { code: error.code, status: error.status });
     }

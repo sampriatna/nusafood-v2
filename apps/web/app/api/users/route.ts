@@ -1,6 +1,7 @@
 import type { StaffRole } from "@nusafood/types"
 import { ok, fail } from "@/lib/api/response"
-import { requireAuth } from "@/lib/require-auth"
+import { requireUserManagement } from "@/lib/require-auth"
+import { writeRbacAuditLog } from "@/lib/rbac-audit"
 import { createUser, listUsers } from "@/lib/users.service"
 
 export const runtime = "nodejs"
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic"
 const ROLES: StaffRole[] = ["ADMIN", "LEADER", "STAFF"]
 
 export async function GET() {
-  const auth = await requireAuth(["ADMIN", "LEADER"])
+  const auth = await requireUserManagement()
   if (!auth.ok) return auth.response
 
   const data = await listUsers()
@@ -17,7 +18,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAuth(["ADMIN"])
+  const auth = await requireUserManagement()
   if (!auth.ok) return auth.response
 
   try {
@@ -48,6 +49,15 @@ export async function POST(request: Request) {
       staffId: body.staff_id ?? body.staffId,
       loginEnabled: body.login_enabled ?? body.loginEnabled,
     })
+
+    await writeRbacAuditLog({
+      session: auth.session,
+      action: "create_user",
+      entityType: "user_account",
+      entityId: user.userId,
+      newValue: { username: user.username, role: user.role },
+    })
+
     return ok(user, undefined, { status: 201 })
   } catch (error) {
     return fail(error instanceof Error ? error.message : "Gagal membuat user", {

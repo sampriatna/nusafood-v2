@@ -1,6 +1,11 @@
 import type { Prisma } from "@nusafood/database";
 import type { SessionPayload } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import {
+  hasGlobalOutletScope,
+  isLeader,
+  outletDeniedMessage,
+} from "@/lib/permissions";
 
 export class OutletAccessError extends Error {
   code: string;
@@ -13,9 +18,9 @@ export class OutletAccessError extends Error {
   }
 }
 
-/** ADMIN melihat semua outlet; LEADER terikat session outlet. */
+/** OWNER/ADMIN melihat semua outlet; LEADER terikat session outlet. */
 export function isGlobalAdmin(session: SessionPayload): boolean {
-  return session.userRole === "ADMIN";
+  return hasGlobalOutletScope(session);
 }
 
 export function requireLeaderOutlet(session: SessionPayload): {
@@ -35,7 +40,7 @@ export function requireLeaderOutlet(session: SessionPayload): {
   return { code: session.userOutlet, id: session.userOutletId };
 }
 
-/** Filter list: LEADER selalu outlet sendiri; ADMIN boleh pilih atau semua. */
+/** Filter list: LEADER selalu outlet sendiri; OWNER/ADMIN boleh pilih atau semua. */
 export function resolveListOutletFilter(
   session: SessionPayload,
   requested?: string | null,
@@ -43,7 +48,7 @@ export function resolveListOutletFilter(
   if (isGlobalAdmin(session)) {
     return requested?.trim() || undefined;
   }
-  if (session.userRole === "LEADER") {
+  if (isLeader(session)) {
     return requireLeaderOutlet(session).code;
   }
   return requested?.trim() || undefined;
@@ -115,7 +120,7 @@ function matchesOutlet(
 ): boolean {
   if (isGlobalAdmin(session)) return true;
 
-  if (session.userRole !== "LEADER") return false;
+  if (!isLeader(session)) return false;
 
   const leader = requireLeaderOutlet(session);
 
@@ -140,7 +145,7 @@ export function assertOutletAccess(
 ): void {
   if (matchesOutlet(session, resource)) return;
   throw new OutletAccessError(
-    "Akses outlet ditolak",
+    outletDeniedMessage(),
     "OUTLET_FORBIDDEN",
     403,
   );
@@ -251,18 +256,56 @@ export async function assertChecklistReportOutletAccess(
   });
 }
 
+export async function assertDisciplinaryLetterOutletAccess(
+  session: SessionPayload,
+  letterId: string,
+): Promise<{
+  outletId: string | null;
+  outletCode: string | null;
+  outletName: string | null;
+  type: string;
+  status: string;
+}> {
+  const letter = await prisma.disciplinaryLetter.findUnique({
+    where: { id: letterId },
+    select: {
+      outletId: true,
+      outletNameSnapshot: true,
+      type: true,
+      status: true,
+    },
+  });
+  if (!letter) {
+    throw new OutletAccessError("Surat tidak ditemukan", "NOT_FOUND", 404);
+  }
+
+  assertOutletAccess(session, {
+    outletId: letter.outletId,
+    outletCode: letter.outletNameSnapshot,
+    outletName: letter.outletNameSnapshot,
+  });
+
+  return {
+    outletId: letter.outletId,
+    outletCode: letter.outletNameSnapshot,
+    outletName: letter.outletNameSnapshot,
+    type: letter.type,
+    status: letter.status,
+  };
+}
+
 /** LEADER hanya boleh membuat/mengubah data untuk outlet sendiri. */
 export function assertCreateOutletAllowed(
   session: SessionPayload,
   outletCode: string,
 ): void {
   if (isGlobalAdmin(session)) return;
-  if (session.userRole !== "LEADER") return;
+  if (!isLeader(session)) return;
 
   const leader = requireLeaderOutlet(session);
   if (outletCode.toLowerCase() !== leader.code.toLowerCase()) {
     throw new OutletAccessError(
-      "Leader hanya boleh membuat data untuk outlet sendiri",
+      outletDeniedMessage(),
       "OUTLET_FORBIDDEN",
       403,
     );

@@ -10,6 +10,7 @@ import {
 
 const adminSession: SessionPayload = {
   isAdmin: true,
+  isOwner: false,
   loginAt: Date.now(),
   expiresAt: Date.now() + 3600_000,
   userId: "admin",
@@ -17,8 +18,20 @@ const adminSession: SessionPayload = {
   userRole: "ADMIN",
 };
 
+const ownerSession: SessionPayload = {
+  isAdmin: true,
+  isOwner: true,
+  loginAt: Date.now(),
+  expiresAt: Date.now() + 3600_000,
+  userId: "env-admin",
+  userName: "Owner",
+  userRole: "ADMIN",
+  username: "owner",
+};
+
 const leaderKbu: SessionPayload = {
   isAdmin: true,
+  isOwner: false,
   loginAt: Date.now(),
   expiresAt: Date.now() + 3600_000,
   userId: "leader-1",
@@ -73,5 +86,30 @@ describe("outlet-scope", () => {
         outletCode: "Kisamen",
       }),
     ).not.toThrow();
+  });
+
+  it("owner is global like admin", () => {
+    expect(isGlobalAdmin(ownerSession)).toBe(true);
+    expect(() =>
+      assertOutletAccess(ownerSession, {
+        outletId: "any",
+        outletCode: "Kisamen",
+      }),
+    ).not.toThrow();
+  });
+
+  it("leader denial message is human-readable", () => {
+    try {
+      assertOutletAccess(leaderKbu, {
+        outletId: "other",
+        outletCode: "Kisamen",
+      });
+      throw new Error("should throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(OutletAccessError);
+      expect((error as OutletAccessError).message).toContain(
+        "bukan outlet kamu",
+      );
+    }
   });
 });

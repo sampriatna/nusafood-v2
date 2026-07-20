@@ -1,5 +1,9 @@
 import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
+import {
+  OutletAccessError,
+  resolveListOutletFilter,
+} from "@/lib/outlet-scope";
 import type {
   CreateDisciplinaryLetterPayload,
   DisciplinaryFilters,
@@ -18,11 +22,18 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const auth = await requireAuth(["ADMIN", "LEADER"]);
   if (!auth.ok) return auth.response;
+  if (!auth.session) {
+    return fail("Unauthorized", { code: "UNAUTHORIZED", status: 401 });
+  }
 
   try {
     const { searchParams } = new URL(request.url);
+    const outlet = resolveListOutletFilter(
+      auth.session,
+      searchParams.get("outlet"),
+    );
     const filters: DisciplinaryFilters = {
-      outlet: searchParams.get("outlet") || undefined,
+      outlet,
       employee_id: searchParams.get("employee_id") || undefined,
       type: (searchParams.get("type") as DisciplinaryLetterType | "ALL") || undefined,
       level:
@@ -36,6 +47,9 @@ export async function GET(request: Request) {
     };
     return ok(await getDisciplinaryDashboard(filters));
   } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     if (error instanceof DisciplinaryError) {
       return fail(error.message, { code: error.code, status: error.status });
     }
@@ -56,6 +70,9 @@ export async function POST(request: Request) {
     const letter = await createDisciplinaryLetter(body, auth.session);
     return ok(letter);
   } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     if (error instanceof DisciplinaryError) {
       return fail(error.message, { code: error.code, status: error.status });
     }

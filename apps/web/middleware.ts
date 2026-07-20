@@ -63,20 +63,40 @@ function getSecretKey(): Uint8Array | null {
   return new TextEncoder().encode(secret)
 }
 
-async function hasValidSession(request: NextRequest): Promise<boolean> {
+type SessionGate = {
+  valid: boolean
+  /** ADMIN | LEADER | STAFF; owner via isOwner claim or env-admin */
+  userRole?: string
+  isOwner?: boolean
+  userId?: string
+}
+
+async function readSessionGate(request: NextRequest): Promise<SessionGate> {
   const token = request.cookies.get(SESSION_COOKIE)?.value
-  if (!token) return false
+  if (!token) return { valid: false }
   const key = getSecretKey()
-  if (!key) return Boolean(token)
+  if (!key) return { valid: Boolean(token), userRole: "ADMIN", isOwner: true }
   try {
     const { payload } = await jwtVerify(token, key)
     if (typeof payload.expiresAt === "number" && payload.expiresAt < Date.now()) {
-      return false
+      return { valid: false }
     }
-    return true
+    const userId = typeof payload.userId === "string" ? payload.userId : undefined
+    const isOwner =
+      payload.isOwner === true ||
+      userId === "env-admin"
+    const userRole =
+      typeof payload.userRole === "string" ? payload.userRole : undefined
+    return { valid: true, userRole, isOwner, userId }
   } catch {
-    return false
+    return { valid: false }
   }
+}
+
+function canAccessAdminUi(gate: SessionGate): boolean {
+  if (!gate.valid) return false
+  if (gate.isOwner) return true
+  return gate.userRole === "ADMIN" || gate.userRole === "LEADER"
 }
 
 export async function middleware(request: NextRequest) {
@@ -103,7 +123,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const valid = await hasValidSession(request)
+  const gate = await readSessionGate(request)
 
   const protectedUi =
     pathname.startsWith("/dashboard") ||
@@ -115,13 +135,28 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/checklist-template") ||
     pathname.startsWith("/admin")
 
-  if (protectedUi && !valid) {
+  if (protectedUi && !gate.valid) {
     const loginUrl = new URL("/login", request.url)
     loginUrl.searchParams.set("next", pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  if (pathname.startsWith("/api/") && !valid) {
+  // STAFF login / role lain tidak boleh masuk UI admin
+  if (protectedUi && gate.valid && !canAccessAdminUi(gate)) {
+    return NextResponse.redirect(new URL("/login?error=forbidden", request.url))
+  }
+
+  // Settings sensitif: user management — OWNER/ADMIN saja (UI gate)
+  if (
+    pathname.startsWith("/settings/users") &&
+    gate.valid &&
+    !gate.isOwner &&
+    gate.userRole !== "ADMIN"
+  ) {
+    return NextResponse.redirect(new URL("/settings?error=forbidden", request.url))
+  }
+
+  if (pathname.startsWith("/api/") && !gate.valid) {
     if (isInternalAuthorized(request, pathname)) {
       return NextResponse.next();
     }

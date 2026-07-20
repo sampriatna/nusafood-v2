@@ -31,6 +31,7 @@ import {
 } from "@/lib/daily-activity-types";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useSessionCapabilities } from "@/hooks/use-session-capabilities";
 
 function todayLocal(): string {
   const date = new Date();
@@ -100,6 +101,8 @@ function labelMeta(label: DailyReportRowLabel): {
 
 export function DailyReportsDashboardClient() {
   const { toast } = useToast();
+  const { capabilities } = useSessionCapabilities();
+  const canManageTemplates = capabilities.can_manage_system_settings;
   const [data, setData] = useState<DailyReportDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -317,24 +320,35 @@ export function DailyReportsDashboardClient() {
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <Link href="/settings/daily-activity">
-          <Button variant="outline" size="sm">
-            Super Admin Hub
-            <ExternalLink className="ml-1 size-3.5" />
-          </Button>
-        </Link>
-        <Link href="/settings/report-links">
-          <Button variant="outline" size="sm">
-            Kelola Link Staff
-            <ExternalLink className="ml-1 size-3.5" />
-          </Button>
-        </Link>
-        <Link href="/settings/report-templates">
-          <Button variant="outline" size="sm">
-            Edit Template
-            <ExternalLink className="ml-1 size-3.5" />
-          </Button>
-        </Link>
+        {canManageTemplates ? (
+          <>
+            <Link href="/settings/daily-activity">
+              <Button variant="outline" size="sm">
+                Super Admin Hub
+                <ExternalLink className="ml-1 size-3.5" />
+              </Button>
+            </Link>
+            <Link href="/settings/report-links">
+              <Button variant="outline" size="sm">
+                Kelola Link Staff
+                <ExternalLink className="ml-1 size-3.5" />
+              </Button>
+            </Link>
+            <Link href="/settings/report-templates">
+              <Button variant="outline" size="sm">
+                Edit Template
+                <ExternalLink className="ml-1 size-3.5" />
+              </Button>
+            </Link>
+          </>
+        ) : (
+          <Link href="/settings/daily-activity">
+            <Button variant="outline" size="sm">
+              Daily Activity outlet
+              <ExternalLink className="ml-1 size-3.5" />
+            </Button>
+          </Link>
+        )}
       </div>
 
       <section className="space-y-2">

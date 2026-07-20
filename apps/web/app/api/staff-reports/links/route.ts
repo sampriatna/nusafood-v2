@@ -1,4 +1,5 @@
 import { fail, ok } from "@/lib/api/response";
+import { hasGlobalOutletScope } from "@/lib/permissions";
 import { requireAuth } from "@/lib/require-auth";
 import {
   DailyActivityError,
@@ -15,10 +16,21 @@ function originFromRequest(request: Request): string {
 export async function GET(request: Request) {
   const auth = await requireAuth(["ADMIN", "LEADER"]);
   if (!auth.ok) return auth.response;
+  if (!auth.session) {
+    return fail("Unauthorized", { code: "UNAUTHORIZED", status: 401 });
+  }
 
   try {
     const data = await listStaffReportLinks(originFromRequest(request));
-    return ok(data, { total: data.length });
+    const filtered = hasGlobalOutletScope(auth.session)
+      ? data
+      : data.filter(
+          (row) =>
+            row.outlet &&
+            auth.session!.userOutlet &&
+            row.outlet.toLowerCase() === auth.session!.userOutlet.toLowerCase(),
+        );
+    return ok(filtered, { total: filtered.length });
   } catch (error) {
     console.error("[GET /api/staff-reports/links]", error);
     return fail("Gagal mengambil link", {

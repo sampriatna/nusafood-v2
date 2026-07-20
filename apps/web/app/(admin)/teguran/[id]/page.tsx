@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useSessionCapabilities } from "@/hooks/use-session-capabilities";
 import { getLetterPreview } from "@/lib/services/disciplinary-preview";
 
 type ApiResponse<T> =
@@ -29,6 +30,7 @@ export default function TeguranDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const { toast } = useToast();
+  const { capabilities } = useSessionCapabilities();
   const [letter, setLetter] = useState<DisciplinaryLetter | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
@@ -98,6 +100,17 @@ export default function TeguranDetailPage() {
 
   const preview = getLetterPreview(letter);
   const isSp = letter.type === "PERINGATAN";
+  const canApprove = isSp
+    ? capabilities.can_approve_sp
+    : capabilities.can_access_dashboard;
+  const canGeneratePdf = isSp
+    ? capabilities.can_generate_pdf_sp
+    : capabilities.can_access_dashboard;
+  const canCancel = capabilities.can_cancel_letter;
+  const canSendSp = isSp
+    ? capabilities.is_owner || capabilities.app_role === "ADMIN"
+    : true;
+  const isLeader = capabilities.app_role === "LEADER";
 
   return (
     <AdminPage title="Detail Teguran / SP" backHref="/teguran" maxWidth="2xl">
@@ -276,7 +289,8 @@ export default function TeguranDetailPage() {
           </Button>
         )}
         {(letter.status === "WAITING_APPROVAL" ||
-          (letter.type === "TEGURAN" && letter.status === "DRAFT")) && (
+          (letter.type === "TEGURAN" && letter.status === "DRAFT")) &&
+          canApprove && (
           <Button
             disabled={pending}
             onClick={() => act("approve", "Disetujui")}
@@ -284,16 +298,29 @@ export default function TeguranDetailPage() {
             Approve {isSp ? "SP" : "ST"}
           </Button>
         )}
-        <Button
-          variant="secondary"
-          disabled={pending}
-          onClick={() => act("generate_pdf", "PDF/arsip dibuat")}
-        >
-          Generate PDF
-        </Button>
-        <Button disabled={pending} onClick={() => act("send", "Surat dikirim")}>
-          Kirim Surat
-        </Button>
+        {isSp && isLeader && letter.status === "WAITING_APPROVAL" ? (
+          <p className="col-span-full text-sm text-muted-foreground">
+            Menunggu approval Owner/Admin. Leader tidak bisa approve SP.
+          </p>
+        ) : null}
+        {canGeneratePdf ? (
+          <Button
+            variant="secondary"
+            disabled={pending}
+            onClick={() => act("generate_pdf", "PDF/arsip dibuat")}
+          >
+            Generate PDF
+          </Button>
+        ) : null}
+        {canSendSp ? (
+          <Button disabled={pending} onClick={() => act("send", "Surat dikirim")}>
+            Kirim Surat
+          </Button>
+        ) : (
+          <p className="col-span-full text-sm text-muted-foreground">
+            Kirim SP hanya Owner/Admin setelah approved + PDF.
+          </p>
+        )}
         {letter.status === "SENT" && (
           <Button
             variant="outline"
@@ -312,7 +339,9 @@ export default function TeguranDetailPage() {
             Selesaikan
           </Button>
         )}
-        {letter.status !== "CANCELLED" && letter.status !== "RESOLVED" && (
+        {letter.status !== "CANCELLED" &&
+          letter.status !== "RESOLVED" &&
+          canCancel && (
           <Button
             variant="destructive"
             disabled={pending}

@@ -1,0 +1,110 @@
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import type { SessionPayload } from "@/lib/auth";
+import {
+  canAccessAdminDashboard,
+  canAccessDisciplinaryAction,
+  canApproveSP,
+  canCancelLetter,
+  canGeneratePdfSP,
+  canManageUsers,
+  getAppRole,
+  getSessionCapabilities,
+  hasGlobalOutletScope,
+} from "@/lib/permissions";
+
+function session(
+  partial: Partial<SessionPayload> &
+    Pick<SessionPayload, "userId" | "userRole">,
+): SessionPayload {
+  return {
+    isAdmin: true,
+    isOwner: false,
+    loginAt: Date.now(),
+    expiresAt: Date.now() + 3600_000,
+    userName: "Test",
+    ...partial,
+  };
+}
+
+const prevApprove = process.env.ADMIN_CAN_APPROVE_SP;
+
+describe("permissions RBAC", () => {
+  beforeEach(() => {
+    delete process.env.ADMIN_CAN_APPROVE_SP;
+  });
+
+  afterEach(() => {
+    if (prevApprove === undefined) delete process.env.ADMIN_CAN_APPROVE_SP;
+    else process.env.ADMIN_CAN_APPROVE_SP = prevApprove;
+  });
+
+  it("owner is distinct app role from admin", () => {
+    const owner = session({
+      userId: "env-admin",
+      userRole: "ADMIN",
+      isOwner: true,
+    });
+    const admin = session({ userId: "usr-admin", userRole: "ADMIN" });
+    expect(getAppRole(owner)).toBe("OWNER");
+    expect(getAppRole(admin)).toBe("ADMIN");
+    expect(hasGlobalOutletScope(owner)).toBe(true);
+    expect(hasGlobalOutletScope(admin)).toBe(true);
+  });
+
+  it("staff cannot access admin dashboard", () => {
+    const staff = session({
+      userId: "usr-staff",
+      userRole: "STAFF",
+      isAdmin: false,
+    });
+    expect(canAccessAdminDashboard(staff)).toBe(false);
+    expect(canManageUsers(staff)).toBe(false);
+  });
+
+  it("leader cannot approve SP or cancel letter", () => {
+    const leader = session({
+      userId: "usr-leader",
+      userRole: "LEADER",
+      userOutlet: "KBU",
+    });
+    expect(canApproveSP(leader)).toBe(false);
+    expect(canGeneratePdfSP(leader)).toBe(false);
+    expect(canCancelLetter(leader)).toBe(false);
+    expect(
+      canAccessDisciplinaryAction(leader, "approve_sp", { type: "PERINGATAN" }),
+    ).toBe(false);
+    expect(
+      canAccessDisciplinaryAction(leader, "create_draft_sp", {
+        type: "PERINGATAN",
+      }),
+    ).toBe(true);
+    expect(
+      canAccessDisciplinaryAction(leader, "send_letter", { type: "PERINGATAN" }),
+    ).toBe(false);
+    expect(
+      canAccessDisciplinaryAction(leader, "send_letter", { type: "TEGURAN" }),
+    ).toBe(true);
+  });
+
+  it("owner can approve SP even if ADMIN_CAN_APPROVE_SP=false", () => {
+    process.env.ADMIN_CAN_APPROVE_SP = "false";
+    const owner = session({
+      userId: "env-admin",
+      userRole: "ADMIN",
+      isOwner: true,
+    });
+    const admin = session({ userId: "usr-admin", userRole: "ADMIN" });
+    expect(canApproveSP(owner)).toBe(true);
+    expect(canApproveSP(admin)).toBe(false);
+  });
+
+  it("capabilities payload exposes matrix flags", () => {
+    const caps = getSessionCapabilities(
+      session({ userId: "env-admin", userRole: "ADMIN", isOwner: true }),
+    );
+    expect(caps.app_role).toBe("OWNER");
+    expect(caps.can_approve_sp).toBe(true);
+    expect(caps.can_manage_users).toBe(true);
+    expect(caps.global_outlet_scope).toBe(true);
+  });
+});

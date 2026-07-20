@@ -1,4 +1,8 @@
 import { fail, ok } from "@/lib/api/response";
+import {
+  assertDisciplinaryLetterOutletAccess,
+  OutletAccessError,
+} from "@/lib/outlet-scope";
 import { requireAuth } from "@/lib/require-auth";
 import {
   DisciplinaryError,
@@ -30,9 +34,13 @@ type ActionBody = {
 export async function POST(request: Request, { params }: Params) {
   const auth = await requireAuth(["ADMIN", "LEADER"]);
   if (!auth.ok) return auth.response;
+  if (!auth.session) {
+    return fail("Unauthorized", { code: "UNAUTHORIZED", status: 401 });
+  }
 
   try {
     const { id } = await params;
+    await assertDisciplinaryLetterOutletAccess(auth.session, id);
     const body = (await request.json()) as ActionBody;
     const origin = new URL(request.url).origin;
 
@@ -55,6 +63,9 @@ export async function POST(request: Request, { params }: Params) {
         return fail("Aksi tidak dikenal.", { code: "INVALID_ACTION", status: 400 });
     }
   } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     if (error instanceof DisciplinaryError) {
       return fail(error.message, { code: error.code, status: error.status });
     }
