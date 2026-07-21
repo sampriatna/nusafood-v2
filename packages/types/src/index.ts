@@ -1,5 +1,7 @@
 /** Shared domain types for Nusa Food Task System v2 */
 
+export * from "./position-groups";
+
 export type TaskStatus =
   | "CREATED"
   | "SENT"
@@ -557,24 +559,6 @@ export const REPORT_CONDITION_OPTIONS: {
   { value: "perlu_belanja", label: "Perlu belanja/perbaikan", requiresNote: true },
 ];
 
-export const REPORT_POSITION_GROUPS = [
-  "Waiters",
-  "Bar",
-  "Dapur",
-  "PA",
-  "Kasir",
-  "Purchasing",
-  "Gudang",
-  "ProduksiFnB",
-  "ProduksiNF",
-  "Advertising",
-  "AdminMP",
-  "CSNF",
-  "Finance",
-  "Design",
-] as const;
-
-export type ReportPositionGroup = (typeof REPORT_POSITION_GROUPS)[number];
 
 /* ─── Leader Monitoring (kontrol lapangan di atas Daily Report) ─── */
 

@@ -1,6 +1,7 @@
 import { ClipboardList, FileText, Info, Layers, Link2 } from "lucide-react";
 import { AdminPage } from "@/components/admin-page";
 import { DailyActivitySeedButton } from "@/components/daily-activity-seed-button";
+import { StaffPositionNormalizeButton } from "@/components/staff-position-normalize-button";
 import { SettingsLinkCard } from "@/components/settings-link-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { authRequired, getSession } from "@/lib/auth";
@@ -17,6 +18,7 @@ export default async function DailyActivitySettingsPage() {
   return (
     <AdminPage title="Daily Activity SOP" backHref="/settings">
       <DailyActivitySeedButton canManage={canManage} />
+      <StaffPositionNormalizeButton canManage={canManage} />
 
       <Card className="border-blue-200 bg-blue-50">
         <CardContent className="flex gap-3 p-4">
@@ -64,7 +66,7 @@ export default async function DailyActivitySettingsPage() {
             Cara pakai cepat
           </div>
           <ol className="list-inside list-decimal space-y-1">
-            <li>Klik Seed Template Kegiatan (sekali setelah deploy)</li>
+            <li>Klik Seed Template Kegiatan + Normalisasi Jabatan Staff</li>
             <li>Edit / tambah template kegiatan + checklist jika perlu</li>
             <li>Generate link untuk tiap staff aktif</li>
             <li>Bagikan link satu kali - staff pakai tiap hari</li>
