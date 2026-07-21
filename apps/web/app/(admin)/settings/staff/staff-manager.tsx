@@ -23,6 +23,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import {
+  POSITION_GROUP_LABELS,
+  REPORT_POSITION_GROUPS,
+  getPositionGroupLabel,
+  resolveStaffPositionGroup,
+} from "@/lib/position-groups";
 
 type Option = { value: string; label: string; outlet?: string | null };
 
@@ -44,7 +50,7 @@ type FormState = {
 
 const emptyForm = (outlet: string, area: string): FormState => ({
   name: "",
-  position: "",
+  position: REPORT_POSITION_GROUPS[0],
   outlet,
   area,
   wa_number: "",
@@ -91,7 +97,9 @@ export function StaffManager({ staff, outlets, areas, canManage }: Props) {
     setEditing(member);
     setForm({
       name: member.name,
-      position: member.position ?? "",
+      position:
+        resolveStaffPositionGroup(member.position ?? "") ||
+        REPORT_POSITION_GROUPS[0],
       outlet: outletValue,
       area: String(member.area ?? ""),
       wa_number: member.wa_number,
@@ -202,7 +210,9 @@ export function StaffManager({ staff, outlets, areas, canManage }: Props) {
                     <p className="text-sm text-muted-foreground">
                       {member.outlet}
                       {member.area ? ` · ${member.area}` : ""}
-                      {member.position ? ` · ${member.position}` : ""}
+                      {member.position
+                        ? ` · ${getPositionGroupLabel(member.position)}`
+                        : ""}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {member.staff_id} · {member.wa_number}
@@ -262,13 +272,26 @@ export function StaffManager({ staff, outlets, areas, canManage }: Props) {
               />
             </div>
             <div className="space-y-2">
-              <Label>Jabatan</Label>
-              <Input
+              <Label>Posisi / Jabatan</Label>
+              <Select
                 value={form.position}
-                onChange={(e) =>
-                  setForm({ ...form, position: e.target.value })
-                }
-              />
+                onValueChange={(position) => setForm({ ...form, position })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih posisi" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REPORT_POSITION_GROUPS.map((group) => (
+                    <SelectItem key={group} value={group}>
+                      {POSITION_GROUP_LABELS[group]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Sama dengan posisi di template kegiatan harian (Waiters, Bar,
+                Dapur, PA).
+              </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">

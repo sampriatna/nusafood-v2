@@ -21,7 +21,10 @@ import {
   mapReportTemplate,
   mapStaffReportLink,
 } from "@/lib/mappers/daily-activity";
+import { normalizePositionGroup } from "@/lib/position-groups";
 import { TaskWriteError } from "@/lib/services/task-errors";
+
+export { normalizePositionGroup };
 
 export class DailyActivityError extends TaskWriteError {}
 
@@ -56,42 +59,6 @@ export function slugifyStaffName(name: string): string {
     .replace(/[^a-z0-9]+/g, "")
     .slice(0, 24);
   return raw || "staff";
-}
-
-export function normalizePositionGroup(position: string): string {
-  const p = (position || "").trim().toLowerCase();
-  if (!p) return "";
-  if (
-    [
-      "pa",
-      "ob",
-      "public area",
-      "publicarea",
-      "office boy",
-      "officeboy",
-      "klindingan",
-      "cleaning",
-      "kebersihan",
-    ].some((k) => p === k || p.includes(k))
-  ) {
-    return "PA";
-  }
-  if (
-    ["waiter", "waiters", "server", "floor", "pramusaji", "kasir"].some((k) =>
-      p.includes(k),
-    )
-  ) {
-    return "Waiters";
-  }
-  if (["barista", "bar", "bartender"].some((k) => p.includes(k))) {
-    return "Bar";
-  }
-  if (
-    ["cook", "chef", "dapur", "kitchen", "produksi"].some((k) => p.includes(k))
-  ) {
-    return "Dapur";
-  }
-  return position.trim();
 }
 
 function matchesPositionGroup(

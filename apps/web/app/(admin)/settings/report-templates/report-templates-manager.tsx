@@ -25,7 +25,10 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
+  POSITION_GROUP_LABELS,
   REPORT_POSITION_GROUPS,
+} from "@/lib/position-groups";
+import {
   type DailyActivityApiResponse,
   type ReportTemplate,
   type ReportTemplateCategory,
@@ -420,7 +423,7 @@ export function ReportTemplatesManager() {
                     <SelectItem value="ALL">Semua</SelectItem>
                     {REPORT_POSITION_GROUPS.map((group) => (
                       <SelectItem key={group} value={group}>
-                        {group === "PA" ? "PA / OB (Public Area)" : group}
+                        {POSITION_GROUP_LABELS[group]}
                       </SelectItem>
                     ))}
                   </SelectContent>
