@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 import {
   fetchOutlets,
   fetchTasks,
@@ -194,10 +195,13 @@ function calculateTaskSummary(taskList: Task[]): DashboardSummary {
 
 export function DashboardClient() {
   const listRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [outlets, setOutlets] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [canDeleteTasks, setCanDeleteTasks] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [activeTab, setActiveTab] = useState<"tasks" | "checklists">("tasks");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -242,6 +246,54 @@ export function DashboardClient() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    void fetch("/api/auth/me", { credentials: "include" })
+      .then((res) => res.json())
+      .then((json: { success?: boolean; data?: { role?: string } }) => {
+        const role = json.data?.role;
+        setCanDeleteTasks(
+          json.success === true &&
+            (role === "ADMIN" || role === "LEADER"),
+        );
+      })
+      .catch(() => setCanDeleteTasks(false));
+  }, []);
+
+  async function handleDeleteTask(task: Task) {
+    setDeletingTaskId(task.task_id);
+    try {
+      const res = await fetch(
+        `/api/tasks/${encodeURIComponent(task.task_id)}`,
+        { method: "DELETE", credentials: "include" },
+      );
+      const json = (await res.json()) as {
+        success?: boolean;
+        error?: string;
+      };
+      if (!res.ok || json.success === false) {
+        toast({
+          title: "Gagal menghapus tugas",
+          description: json.error || "Coba lagi",
+          variant: "destructive",
+        });
+        return;
+      }
+      setTasks((prev) => prev.filter((item) => item.task_id !== task.task_id));
+      toast({
+        title: "Tugas dihapus",
+        description: task.task_id,
+      });
+    } catch {
+      toast({
+        title: "Gagal menghapus tugas",
+        description: "Periksa koneksi lalu coba lagi",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingTaskId(null);
+    }
+  }
 
   useEffect(() => {
     setCurrentPage(1);
@@ -692,7 +744,13 @@ export function DashboardClient() {
                 <>
                   <div className="space-y-3">
                     {paginatedTasks.map((task) => (
-                      <TaskCard key={task.task_id} task={task} />
+                      <TaskCard
+                        key={task.task_id}
+                        task={task}
+                        canDelete={canDeleteTasks}
+                        deleting={deletingTaskId === task.task_id}
+                        onDelete={handleDeleteTask}
+                      />
                     ))}
                   </div>
 
@@ -797,7 +855,13 @@ export function DashboardClient() {
               ) : (
                 <div className="space-y-3">
                   {filteredChecklists.map((checklist) => (
-                    <TaskCard key={checklist.task_id} task={checklist} />
+                    <TaskCard
+                      key={checklist.task_id}
+                      task={checklist}
+                      canDelete={canDeleteTasks}
+                      deleting={deletingTaskId === checklist.task_id}
+                      onDelete={handleDeleteTask}
+                    />
                   ))}
                 </div>
               )}
