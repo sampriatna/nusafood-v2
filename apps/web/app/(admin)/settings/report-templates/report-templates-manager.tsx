@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { FileText, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FileText, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   POSITION_GROUP_LABELS,
   REPORT_POSITION_GROUPS,
+  getPositionGroupLabel,
 } from "@/lib/position-groups";
 import {
   type DailyActivityApiResponse,
@@ -86,14 +87,28 @@ const emptyForm: TemplateForm = {
   checklist_draft: [{ item_text: "", is_required: true }],
 };
 
-export function ReportTemplatesManager() {
+type AdminTemplate = Omit<ReportTemplate, "position_group"> & {
+  position_group?: string | null;
+  checklist_item_count?: number;
+};
+
+type Props = {
+  canManage?: boolean;
+  initialTemplates?: AdminTemplate[];
+};
+
+export function ReportTemplatesManager({
+  canManage = true,
+  initialTemplates = [],
+}: Props) {
   const { toast } = useToast();
-  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [templates, setTemplates] = useState<AdminTemplate[]>(initialTemplates);
+  const [isLoading, setIsLoading] = useState(initialTemplates.length === 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<ReportTemplate | null>(null);
+  const [editing, setEditing] = useState<AdminTemplate | null>(null);
   const [form, setForm] = useState<TemplateForm>(emptyForm);
+  const [query, setQuery] = useState("");
 
   const loadTemplates = useCallback(async () => {
     setIsLoading(true);
@@ -124,8 +139,41 @@ export function ReportTemplatesManager() {
   }, [toast]);
 
   useEffect(() => {
+    if (initialTemplates.length > 0) return;
     void loadTemplates();
-  }, [loadTemplates]);
+  }, [initialTemplates.length, loadTemplates]);
+
+  const filteredTemplates = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return templates;
+    return templates.filter((template) => {
+      const position = template.position_group || "Semua";
+      return (
+        template.title.toLowerCase().includes(q) ||
+        (template.category || "").toLowerCase().includes(q) ||
+        getPositionGroupLabel(position).toLowerCase().includes(q) ||
+        position.toLowerCase().includes(q)
+      );
+    });
+  }, [templates, query]);
+
+  const groupedTemplates = useMemo(() => {
+    const groups = new Map<string, AdminTemplate[]>();
+    for (const template of filteredTemplates) {
+      const key = template.position_group || "Semua";
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(template);
+      else groups.set(key, [template]);
+    }
+    return [...groups.entries()].sort(([a], [b]) => {
+      if (a === "Semua") return 1;
+      if (b === "Semua") return -1;
+      return getPositionGroupLabel(a).localeCompare(
+        getPositionGroupLabel(b),
+        "id",
+      );
+    });
+  }, [filteredTemplates]);
 
   function openCreate() {
     setEditing(null);
@@ -136,25 +184,54 @@ export function ReportTemplatesManager() {
     setDialogOpen(true);
   }
 
-  function openEdit(template: ReportTemplate) {
-    setEditing(template);
+  async function openEdit(template: AdminTemplate) {
+    let full: AdminTemplate = template;
+
+    if (!template.checklist_items?.length) {
+      try {
+        const res = await fetch(
+          `/api/staff-reports/templates/${encodeURIComponent(template.id)}`,
+          { credentials: "include" },
+        );
+        const json =
+          (await res.json()) as DailyActivityApiResponse<ReportTemplate>;
+        if (!json.success || !json.data) {
+          toast({
+            title: "Gagal memuat detail template",
+            description: json.error || "Coba lagi",
+            variant: "destructive",
+          });
+          return;
+        }
+        full = json.data;
+      } catch {
+        toast({
+          title: "Gagal memuat detail template",
+          description: "Periksa koneksi lalu coba lagi.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    setEditing(full);
     setForm({
-      title: template.title,
-      category: (template.category || "Cleaning") as ReportTemplateCategory,
-      description: template.description || "",
-      standard_result: template.standard_result || "",
-      outlet_id: template.outlet_id || "",
-      position_group: template.position_group || "ALL",
-      requires_photo: template.requires_photo,
-      is_required_daily: template.is_required_daily,
-      kind: (template.kind || "daily_required") as ReportTemplateKind,
-      target_time_start: template.target_time_start || "",
-      target_time_end: template.target_time_end || "",
-      active: template.active,
-      sort_order: template.sort_order ?? 10,
+      title: full.title,
+      category: (full.category || "Cleaning") as ReportTemplateCategory,
+      description: full.description || "",
+      standard_result: full.standard_result || "",
+      outlet_id: full.outlet_id || "",
+      position_group: full.position_group || "ALL",
+      requires_photo: full.requires_photo,
+      is_required_daily: full.is_required_daily,
+      kind: (full.kind || "daily_required") as ReportTemplateKind,
+      target_time_start: full.target_time_start || "",
+      target_time_end: full.target_time_end || "",
+      active: full.active,
+      sort_order: full.sort_order ?? 10,
       checklist_draft:
-        template.checklist_items && template.checklist_items.length > 0
-          ? template.checklist_items.map((item) => ({
+        full.checklist_items && full.checklist_items.length > 0
+          ? full.checklist_items.map((item) => ({
               item_text: item.item_text,
               is_required: item.is_required,
             }))
@@ -242,7 +319,7 @@ export function ReportTemplatesManager() {
     }
   }
 
-  async function toggleActive(template: ReportTemplate) {
+  async function toggleActive(template: AdminTemplate) {
     try {
       const res = await fetch(
         `/api/staff-reports/templates/${encodeURIComponent(template.id)}`,
@@ -275,17 +352,22 @@ export function ReportTemplatesManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {templates.length} template
-          {templates.length
-            ? ` · ${templates.filter((template) => template.active).length} aktif`
-            : ""}
-        </p>
-        <Button onClick={openCreate}>
-          <Plus className="mr-1 size-4" />
-          Tambah
-        </Button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Cari posisi, kategori, atau nama kegiatan..."
+            className="pl-9"
+          />
+        </div>
+        {canManage ? (
+          <Button onClick={openCreate} className="shrink-0">
+            <Plus className="mr-1 size-4" />
+            Tambah
+          </Button>
+        ) : null}
       </div>
 
       {isLoading ? (
@@ -295,64 +377,83 @@ export function ReportTemplatesManager() {
             Memuat template...
           </CardContent>
         </Card>
-      ) : templates.length === 0 ? (
+      ) : filteredTemplates.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
             <FileText className="mx-auto mb-2 size-10 opacity-40" />
-            Belum ada template
+            {templates.length === 0
+              ? "Belum ada template — buka Daily Activity SOP untuk auto-import"
+              : "Tidak ada template cocok dengan pencarian"}
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {templates.map((template) => (
-            <Card key={template.id} className={!template.active ? "opacity-60" : ""}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-medium">{template.title}</h3>
-                      <Badge variant="outline">{template.category}</Badge>
-                      {template.is_required_daily ? (
-                        <Badge variant="secondary">Wajib harian</Badge>
-                      ) : null}
-                      {template.requires_photo ? (
-                        <Badge variant="outline">Foto</Badge>
-                      ) : null}
-                      <Badge variant={template.active ? "default" : "secondary"}>
-                        {template.active ? "Aktif" : "Nonaktif"}
-                      </Badge>
-                    </div>
-                    <p className="line-clamp-2 text-sm text-muted-foreground">
-                      {template.standard_result || template.description}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Outlet: {template.outlet_id || "Semua"} · Posisi:{" "}
-                      {template.position_group || "Semua"} · Checklist:{" "}
-                      {template.checklist_items?.length || 0}
-                      {template.target_time_start || template.target_time_end
-                        ? ` · Target ${template.target_time_start || "?"}-${template.target_time_end || "?"}`
-                        : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openEdit(template)}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Aktif</span>
-                      <Switch
-                        checked={template.active}
-                        onCheckedChange={() => void toggleActive(template)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        <div className="space-y-5">
+          {groupedTemplates.map(([position, items]) => (
+            <section key={position} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">
+                  {position === "Semua"
+                    ? "Semua posisi"
+                    : getPositionGroupLabel(position)}
+                </h3>
+                <span className="text-xs text-muted-foreground">
+                  {items.length} kegiatan
+                </span>
+              </div>
+              <div className="space-y-2">
+                {items.map((template) => (
+                  <Card
+                    key={template.id}
+                    className={!template.active ? "opacity-60" : ""}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="font-medium">{template.title}</h4>
+                            <Badge variant="outline">{template.category}</Badge>
+                            {template.is_required_daily ? (
+                              <Badge variant="secondary">Wajib</Badge>
+                            ) : null}
+                            {template.requires_photo ? (
+                              <Badge variant="outline">Foto</Badge>
+                            ) : null}
+                          </div>
+                          <p className="line-clamp-2 text-sm text-muted-foreground">
+                            {template.standard_result || template.description}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Checklist{" "}
+                            {template.checklist_items?.length ??
+                              template.checklist_item_count ??
+                              0}{" "}
+                            item
+                            {template.target_time_start || template.target_time_end
+                              ? ` · ${template.target_time_start || "?"}-${template.target_time_end || "?"}`
+                              : ""}
+                          </p>
+                        </div>
+                        {canManage ? (
+                          <div className="flex flex-col items-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => void openEdit(template)}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Switch
+                              checked={template.active}
+                              onCheckedChange={() => void toggleActive(template)}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}

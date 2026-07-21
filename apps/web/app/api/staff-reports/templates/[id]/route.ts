@@ -6,10 +6,37 @@ import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
   DailyActivityError,
+  getReportTemplateById,
   updateReportTemplate,
 } from "@/lib/services/daily-activity.service";
 
 export const dynamic = "force-dynamic";
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
+  try {
+    const { id } = await context.params;
+    const template = await getReportTemplateById(id);
+    if (!template) {
+      return fail("Template tidak ditemukan", {
+        code: "TEMPLATE_NOT_FOUND",
+        status: 404,
+      });
+    }
+    return ok(template);
+  } catch (error) {
+    console.error("[GET /api/staff-reports/templates/:id]", error);
+    return fail("Gagal mengambil template", {
+      code: "TEMPLATE_GET_FAILED",
+      status: 500,
+    });
+  }
+}
 
 export async function PATCH(
   request: Request,

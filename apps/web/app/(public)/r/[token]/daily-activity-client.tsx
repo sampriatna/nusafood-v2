@@ -20,7 +20,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   REPORT_CONDITION_OPTIONS,
   type DailyActivityApiResponse,
-  type DailyReportStaff,
   type DailyReportSubmission,
   type ReportConditionStatus,
   type ReportTemplate,
@@ -29,8 +28,16 @@ import { cn } from "@/lib/utils";
 
 type PageState = "loading" | "error" | "list" | "form" | "submitting";
 
+type DailyReportStaffView = {
+  staff_id: string;
+  name: string;
+  outlet: string;
+  position: string;
+  position_group?: string | null;
+};
+
 type StaffReportTokenData = {
-  staff: DailyReportStaff;
+  staff: DailyReportStaffView;
   templates: ReportTemplate[];
   today_submissions: DailyReportSubmission[];
   link_active: boolean;
@@ -40,7 +47,32 @@ type SubmitResponse = DailyReportSubmission | null;
 
 type Props = {
   token: string;
+  initialData?: StaffReportTokenData;
+  initialError?: string;
 };
+
+function resolveInitialPageState(
+  initialData?: StaffReportTokenData,
+  initialError?: string,
+): PageState {
+  if (initialError) return "error";
+  if (initialData) {
+    if (!initialData.link_active) return "error";
+    return "list";
+  }
+  return "loading";
+}
+
+function resolveInitialError(
+  initialData?: StaffReportTokenData,
+  initialError?: string,
+): string {
+  if (initialError) return initialError;
+  if (initialData && !initialData.link_active) {
+    return "Link report sudah nonaktif.\nHubungi admin.";
+  }
+  return "";
+}
 
 function checklistPercent(submission?: DailyReportSubmission) {
   if (!submission) return null;
@@ -60,15 +92,27 @@ function conditionLabel(value?: ReportConditionStatus | null) {
   );
 }
 
-export function DailyActivityClient({ token }: Props) {
+export function DailyActivityClient({
+  token,
+  initialData,
+  initialError,
+}: Props) {
   const [, startTransition] = useTransition();
-  const [pageState, setPageState] = useState<PageState>("loading");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [staff, setStaff] = useState<DailyReportStaff | null>(null);
-  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
+  const [pageState, setPageState] = useState<PageState>(() =>
+    resolveInitialPageState(initialData, initialError),
+  );
+  const [errorMessage, setErrorMessage] = useState(() =>
+    resolveInitialError(initialData, initialError),
+  );
+  const [staff, setStaff] = useState<DailyReportStaffView | null>(
+    initialData?.staff ?? null,
+  );
+  const [templates, setTemplates] = useState<ReportTemplate[]>(
+    initialData?.templates ?? [],
+  );
   const [todaySubmissions, setTodaySubmissions] = useState<
     DailyReportSubmission[]
-  >([]);
+  >(initialData?.today_submissions ?? []);
   const [flashOk, setFlashOk] = useState<string | null>(null);
 
   const [selectedTemplate, setSelectedTemplate] =
@@ -81,6 +125,8 @@ export function DailyActivityClient({ token }: Props) {
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
 
   useEffect(() => {
+    if (initialData || initialError) return;
+
     if (!token) {
       setErrorMessage("Link tidak valid.\nHubungi atasan Anda.");
       setPageState("error");
@@ -134,7 +180,7 @@ export function DailyActivityClient({ token }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, initialData, initialError]);
 
   const requiredTemplates = useMemo(
     () => templates.filter((template) => template.is_required_daily),

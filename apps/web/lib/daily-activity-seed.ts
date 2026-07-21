@@ -773,3 +773,15 @@ export const DAILY_ACTIVITY_SEED_TEMPLATES: DailyActivitySeedDef[] = [
     ],
   },
 ];
+
+/** Ringkasan template wajib per posisi (untuk tampilan admin, tanpa DB). */
+export function listPositionDailyTemplateSummary() {
+  return DAILY_ACTIVITY_SEED_TEMPLATES.filter(
+    (t) => t.position_group && t.is_required_daily,
+  ).map((t) => ({
+    code: t.code,
+    position: t.position_group!,
+    title: t.title,
+    checklist_count: t.checklist.length,
+  }));
+}
