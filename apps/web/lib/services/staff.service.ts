@@ -9,6 +9,7 @@ import { normalizeOutletCode } from "@nusafood/database/normalizers";
 import { prisma } from "@/lib/db";
 import { generateStaffId } from "@/lib/id";
 import { mapStaffToApi } from "@/lib/mappers/staff";
+import { sanitizeStaffPosition } from "@/lib/position-groups";
 
 export class StaffWriteError extends Error {
   code: string;
@@ -103,7 +104,7 @@ export async function createStaff(input: CreateStaffPayload): Promise<Staff> {
     data: {
       staffId: generateStaffId(),
       name: input.name.trim(),
-      position: input.position?.trim() || null,
+      position: sanitizeStaffPosition(input.position),
       outletId: outlet.id,
       areaId: area?.id ?? null,
       waNumber: input.wa_number.trim(),
@@ -145,7 +146,7 @@ export async function updateStaff(
       name: input.name?.trim() || undefined,
       position:
         input.position !== undefined
-          ? input.position.trim() || null
+          ? sanitizeStaffPosition(input.position)
           : undefined,
       outletId: input.outlet ? outlet.id : undefined,
       areaId:
