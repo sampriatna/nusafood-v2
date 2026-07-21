@@ -1,10 +1,13 @@
 import { ClipboardList, FileText, Info, Layers, Link2 } from "lucide-react";
 import { AdminPage } from "@/components/admin-page";
+import { DailyActivityAutoSeedBanner } from "@/components/daily-activity-auto-seed-banner";
 import { DailyActivitySeedButton } from "@/components/daily-activity-seed-button";
+import { DailyActivityTemplateCatalog } from "@/components/daily-activity-template-catalog";
 import { StaffPositionNormalizeButton } from "@/components/staff-position-normalize-button";
 import { SettingsLinkCard } from "@/components/settings-link-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { authRequired, getSession } from "@/lib/auth";
+import { ensureDailyActivityTemplatesSeeded } from "@/lib/services/daily-activity-seed.service";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +18,22 @@ export default async function DailyActivitySettingsPage() {
     session?.userRole === "ADMIN" ||
     session?.userId === "env-admin";
 
+  let autoSeedCount: number | null = null;
+  if (canManage) {
+    const ensured = await ensureDailyActivityTemplatesSeeded();
+    if (ensured.seeded && ensured.result) {
+      autoSeedCount = ensured.result.templates;
+    }
+  }
+
   return (
     <AdminPage title="Daily Activity SOP" backHref="/settings">
+      {autoSeedCount != null ? (
+        <DailyActivityAutoSeedBanner templateCount={autoSeedCount} />
+      ) : null}
       <DailyActivitySeedButton canManage={canManage} />
       <StaffPositionNormalizeButton canManage={canManage} />
+      <DailyActivityTemplateCatalog />
 
       <Card className="border-blue-200 bg-blue-50">
         <CardContent className="flex gap-3 p-4">
@@ -66,10 +81,9 @@ export default async function DailyActivitySettingsPage() {
             Cara pakai cepat
           </div>
           <ol className="list-inside list-decimal space-y-1">
-            <li>Klik Seed Template Kegiatan + Normalisasi Jabatan Staff</li>
-            <li>Edit / tambah template kegiatan + checklist jika perlu</li>
-            <li>Generate link untuk tiap staff aktif</li>
-            <li>Bagikan link satu kali - staff pakai tiap hari</li>
+            <li>Buka halaman ini sekali (template auto-import jika DB kosong)</li>
+            <li>Normalisasi Jabatan Staff + generate link /r/nama</li>
+            <li>Staff buka link tiap hari — kegiatan muncul sesuai posisi</li>
             <li>Pantau di Dashboard Audit</li>
           </ol>
         </CardContent>

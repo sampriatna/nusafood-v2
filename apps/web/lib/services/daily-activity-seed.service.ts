@@ -113,3 +113,29 @@ export async function seedDailyActivityTemplates(): Promise<DailyActivitySeedRes
     position_groups: [...positionGroups].sort(),
   };
 }
+
+/** Isi database otomatis jika belum ada template (first-run admin). */
+export async function ensureDailyActivityTemplatesSeeded(): Promise<{
+  seeded: boolean;
+  result?: DailyActivitySeedResult;
+}> {
+  const count = await prisma.reportTemplate.count();
+  if (count > 0) {
+    return { seeded: false };
+  }
+  const result = await seedDailyActivityTemplates();
+  return { seeded: true, result };
+}
+
+/** Ringkasan template wajib per posisi (untuk tampilan admin). */
+export function listPositionDailyTemplateSummary() {
+  return DAILY_ACTIVITY_SEED_TEMPLATES.filter(
+    (t) => t.position_group && t.is_required_daily,
+  ).map((t) => ({
+    code: t.code,
+    position: t.position_group!,
+    title: t.title,
+    checklist_count: t.checklist.length,
+  }));
+}
+
