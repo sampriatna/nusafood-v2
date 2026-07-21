@@ -1,13 +1,23 @@
 import { ClipboardList, FileText, Info, Layers, Link2 } from "lucide-react";
 import { AdminPage } from "@/components/admin-page";
+import { DailyActivitySeedButton } from "@/components/daily-activity-seed-button";
 import { SettingsLinkCard } from "@/components/settings-link-card";
 import { Card, CardContent } from "@/components/ui/card";
+import { authRequired, getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default function DailyActivitySettingsPage() {
+export default async function DailyActivitySettingsPage() {
+  const session = await getSession();
+  const canManage =
+    !authRequired() ||
+    session?.userRole === "ADMIN" ||
+    session?.userId === "env-admin";
+
   return (
     <AdminPage title="Daily Activity SOP" backHref="/settings">
+      <DailyActivitySeedButton canManage={canManage} />
+
       <Card className="border-blue-200 bg-blue-50">
         <CardContent className="flex gap-3 p-4">
           <Info className="mt-0.5 size-5 shrink-0 text-blue-700" />
@@ -54,7 +64,8 @@ export default function DailyActivitySettingsPage() {
             Cara pakai cepat
           </div>
           <ol className="list-inside list-decimal space-y-1">
-            <li>Edit / tambah template kegiatan + checklist</li>
+            <li>Klik Seed Template Kegiatan (sekali setelah deploy)</li>
+            <li>Edit / tambah template kegiatan + checklist jika perlu</li>
             <li>Generate link untuk tiap staff aktif</li>
             <li>Bagikan link satu kali - staff pakai tiap hari</li>
             <li>Pantau di Dashboard Audit</li>
