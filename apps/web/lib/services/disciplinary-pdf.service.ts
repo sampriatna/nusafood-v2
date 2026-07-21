@@ -5,19 +5,43 @@ import {
   buildFounderQrPayload,
   buildQrImageUrl,
 } from "@/lib/nf3-company";
+import {
+  isSupabaseStorageConfigured,
+  uploadDisciplinaryArchive,
+} from "@/lib/services/storage.service";
+
+export type DisciplinaryArchiveResult = {
+  url: string;
+  html: string;
+  /** supabase = arsip cloud permanen; temporary = preview API saja */
+  storage: "supabase" | "temporary";
+};
 
 /**
- * Document adapter for Teguran/SP.
- * Uses stable API document URL (Vercel-safe). Browser Print → Save as PDF.
+ * Arsip surat teguran/SP.
+ * Prefer upload HTML resmi ke Supabase Storage.
+ * Fallback: URL API document (sementara) jika Supabase belum dikonfigurasi.
  */
 export async function generateDisciplinaryPdfArchive(
   letter: DisciplinaryLetter,
   origin = "",
-): Promise<{ url: string; html: string }> {
+): Promise<DisciplinaryArchiveResult> {
   const html = buildFormalLetterHtml(letter, origin);
+
+  if (isSupabaseStorageConfigured()) {
+    const uploaded = await uploadDisciplinaryArchive({
+      html,
+      letterId: letter.id,
+      letterNumber: letter.letter_number,
+      type: letter.type,
+      outletName: letter.outlet_name_snapshot,
+    });
+    return { url: uploaded.url, html, storage: "supabase" };
+  }
+
   const base = origin.replace(/\/$/, "");
   const documentUrl = `${base}/api/disciplinary/${letter.id}/document`;
-  return { url: documentUrl, html };
+  return { url: documentUrl, html, storage: "temporary" };
 }
 
 function esc(value: string | null | undefined): string {
@@ -161,7 +185,7 @@ export function buildFormalLetterHtml(
     </div>
   </div>
 
-  <p class="print-hint">Cetak / simpan PDF: gunakan menu Print browser (Save as PDF).</p>
+  <p class="print-hint">Arsip resmi NF3. Cetak / simpan PDF: gunakan menu Print browser (Save as PDF).</p>
 </body>
 </html>`;
 }

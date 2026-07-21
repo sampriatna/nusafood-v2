@@ -104,10 +104,23 @@ export default function TeguranDetailPage() {
         return;
       }
       setLetter(json.data);
-      toast({ title: successTitle });
-      if (action === "generate_pdf" && json.data.pdf_url) {
-        window.open(json.data.pdf_url, "_blank", "noopener,noreferrer");
+      if (action === "generate_pdf") {
+        toast({
+          title:
+            json.data.pdf_storage === "supabase"
+              ? "Surat diarsipkan ke cloud"
+              : "Preview sementara dibuat",
+          description:
+            json.data.pdf_storage === "supabase"
+              ? "Tersimpan di Supabase Storage. Buka link untuk cetak / Save as PDF."
+              : "Supabase Storage belum dikonfigurasi — ini belum arsip permanen.",
+        });
+        if (json.data.pdf_url) {
+          window.open(json.data.pdf_url, "_blank", "noopener,noreferrer");
+        }
+        return;
       }
+      toast({ title: successTitle });
     });
   }
 
@@ -319,13 +332,23 @@ export default function TeguranDetailPage() {
               rel="noreferrer"
               className="text-sm text-primary underline"
             >
-              Buka preview surat (sementara — cetak / Save as PDF)
+              {letter.pdf_storage === "supabase"
+                ? "Buka arsip surat (cloud) — cetak / Save as PDF"
+                : "Buka preview surat (sementara — cetak / Save as PDF)"}
             </a>
           ) : null}
-          <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-            PDF/preview ini masih sementara. Belum disimpan ke storage permanen
-            (cloud). Jangan anggap sebagai arsip resmi final.
-          </p>
+          {letter.pdf_storage === "supabase" ? (
+            <p className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+              Arsip tersimpan di Supabase Storage (permanen). Format file HTML
+              resmi — gunakan Print browser untuk Save as PDF bila perlu.
+            </p>
+          ) : (
+            <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              {letter.pdf_url
+                ? "Preview masih sementara. Belum arsip cloud — pastikan NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY terpasang, lalu generate ulang."
+                : "Belum ada arsip. Klik “Arsipkan Surat ke Cloud” untuk menyimpan ke Supabase."}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -386,19 +409,21 @@ export default function TeguranDetailPage() {
             variant="secondary"
             className="w-full"
             disabled={pending || !canGeneratePdf}
-            onClick={() =>
-              act("generate_pdf", "Preview surat sementara dibuat")
-            }
+            onClick={() => act("generate_pdf", "Surat diarsipkan")}
           >
-            Generate Preview Surat
+            Arsipkan Surat ke Cloud
           </Button>
           {!canGeneratePdf ? (
             <p className="text-xs text-amber-800">
-              SP belum di-approve. Preview formal belum boleh dibuat.
+              SP belum di-approve. Arsip formal belum boleh dibuat.
+            </p>
+          ) : letter.pdf_storage === "supabase" ? (
+            <p className="text-xs text-emerald-800">
+              Sudah ada arsip cloud. Klik lagi untuk regenerate/overwrite.
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Preview sementara — belum arsip permanen.
+              Simpan HTML resmi ke Supabase Storage (bukan lewat GAS).
             </p>
           )}
         </div>

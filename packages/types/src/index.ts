@@ -838,6 +838,8 @@ export interface DisciplinaryLetter {
   consequence?: string | null;
   internal_note?: string | null;
   pdf_url?: string | null;
+  /** supabase = arsip cloud; temporary = preview API saja; null = belum digenerate */
+  pdf_storage?: "supabase" | "temporary" | null;
   created_at: string;
   updated_at: string;
   evidence?: DisciplinaryEvidence[];
