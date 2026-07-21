@@ -86,7 +86,7 @@ export async function callGasAction<T = unknown>(
         body: JSON.stringify({
           action,
           ...(adminKey && !adminKey.includes("your-gas")
-            ? { api_key: adminKey }
+            ? { admin_secret: adminKey, api_key: adminKey }
             : {}),
           ...payload,
         }),
