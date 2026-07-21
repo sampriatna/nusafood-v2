@@ -147,6 +147,37 @@ export async function listReportTemplates(): Promise<ReportTemplate[]> {
   return rows.map(mapReportTemplate);
 }
 
+/** Daftar admin tanpa checklist penuh — lebih cepat untuk halaman list. */
+export async function getReportTemplateById(
+  id: string,
+): Promise<ReportTemplate | null> {
+  const row = await prisma.reportTemplate.findUnique({
+    where: { id },
+    include: {
+      outlet: true,
+      items: { orderBy: { sortOrder: "asc" } },
+    },
+  });
+  return row ? mapReportTemplate(row) : null;
+}
+
+export async function listReportTemplatesForAdmin(): Promise<
+  (ReportTemplate & { checklist_item_count: number })[]
+> {
+  const rows = await prisma.reportTemplate.findMany({
+    include: {
+      outlet: true,
+      _count: { select: { items: true } },
+    },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+  return rows.map((row) => ({
+    ...mapReportTemplate({ ...row, items: [] }),
+    checklist_item_count: row._count.items,
+  }));
+}
+
 export async function createReportTemplate(
   payload: CreateReportTemplatePayload,
 ): Promise<ReportTemplate> {
@@ -362,20 +393,34 @@ export async function matchTemplatesForStaff(
   outletCode: string,
   position: string,
 ): Promise<ReportTemplate[]> {
+  const staffGroup = normalizePositionGroup(position);
+  const positionKey = position.trim();
+
   const rows = await prisma.reportTemplate.findMany({
-    where: { active: true },
+    where: {
+      active: true,
+      AND: [
+        {
+          OR: [{ outletId: null }, { outlet: { code: outletCode } }],
+        },
+        {
+          OR: [
+            { positionGroup: null },
+            ...(staffGroup ? [{ positionGroup: staffGroup }] : []),
+            ...(positionKey ? [{ positionGroup: positionKey }] : []),
+          ],
+        },
+      ],
+    },
     include: {
       outlet: true,
       items: { orderBy: { sortOrder: "asc" } },
     },
     orderBy: { sortOrder: "asc" },
   });
+
   return rows
-    .filter((t) => {
-      const outletOk = !t.outletId || t.outlet?.code === outletCode;
-      const positionOk = matchesPositionGroup(t.positionGroup, position);
-      return outletOk && positionOk;
-    })
+    .filter((t) => matchesPositionGroup(t.positionGroup, position))
     .map(mapReportTemplate);
 }
 
@@ -421,10 +466,8 @@ export async function getStaffReportByToken(
   const submissions = await prisma.dailyReportSubmission.findMany({
     where: { staffId: staff.staffId, reportDate: today },
     include: {
-      staff: { include: { outlet: true } },
-      outlet: true,
-      template: true,
-      answers: { include: { item: true } },
+      template: { select: { title: true } },
+      answers: { include: { item: { select: { itemText: true } } } },
     },
   });
 
@@ -438,7 +481,11 @@ export async function getStaffReportByToken(
       position_group: normalizePositionGroup(staff.position ?? ""),
     },
     templates,
-    today_submissions: submissions.map(mapDailySubmission),
+    today_submissions: submissions.map((sub) =>
+      mapDailySubmission(
+        sub as Parameters<typeof mapDailySubmission>[0],
+      ),
+    ),
   };
 }
 

@@ -1,8 +1,6 @@
 import { AdminPage } from "@/components/admin-page";
-import { DailyActivityAutoSeedBanner } from "@/components/daily-activity-auto-seed-banner";
-import { DailyActivitySeedButton } from "@/components/daily-activity-seed-button";
 import { authRequired, getSession } from "@/lib/auth";
-import { ensureDailyActivityTemplatesSeeded } from "@/lib/services/daily-activity-seed.service";
+import { listReportTemplatesForAdmin } from "@/lib/services/daily-activity.service";
 import { ReportTemplatesManager } from "./report-templates-manager";
 
 export const dynamic = "force-dynamic";
@@ -14,27 +12,20 @@ export default async function ReportTemplatesPage() {
     session?.userRole === "ADMIN" ||
     session?.userId === "env-admin";
 
-  let autoSeedCount: number | null = null;
-  if (canManage) {
-    const ensured = await ensureDailyActivityTemplatesSeeded();
-    if (ensured.seeded && ensured.result) {
-      autoSeedCount = ensured.result.templates;
-    }
-  }
+  const initialTemplates = await listReportTemplatesForAdmin();
 
   return (
-    <AdminPage title="Template Kegiatan" backHref="/settings/daily-activity">
-      {autoSeedCount != null ? (
-        <DailyActivityAutoSeedBanner templateCount={autoSeedCount} />
-      ) : null}
-      <div>
+    <AdminPage title="Template Kegiatan" backHref="/settings/daily-activity" maxWidth="3xl">
+      <div className="space-y-1">
         <h2 className="font-semibold">SOP Kegiatan Standar</h2>
         <p className="text-sm text-muted-foreground">
-          Checklist + standar hasil + foto - bukan laporan bebas.
+          {initialTemplates.length} template · checklist + standar hasil + foto
         </p>
       </div>
-      <DailyActivitySeedButton canManage={canManage} compact />
-      <ReportTemplatesManager />
+      <ReportTemplatesManager
+        canManage={canManage}
+        initialTemplates={initialTemplates}
+      />
     </AdminPage>
   );
 }

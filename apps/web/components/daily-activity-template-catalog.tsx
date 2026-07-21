@@ -1,7 +1,7 @@
 import { CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { getPositionGroupLabel } from "@/lib/position-groups";
-import { listPositionDailyTemplateSummary } from "@/lib/services/daily-activity-seed.service";
+import { listPositionDailyTemplateSummary } from "@/lib/daily-activity-seed";
 
 const rows = listPositionDailyTemplateSummary();
 

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { DAILY_ACTIVITY_SEED_TEMPLATES } from "@/lib/daily-activity-seed";
+export { listPositionDailyTemplateSummary } from "@/lib/daily-activity-seed";
 
 export class DailyActivitySeedError extends Error {
   code: string;
@@ -125,17 +126,5 @@ export async function ensureDailyActivityTemplatesSeeded(): Promise<{
   }
   const result = await seedDailyActivityTemplates();
   return { seeded: true, result };
-}
-
-/** Ringkasan template wajib per posisi (untuk tampilan admin). */
-export function listPositionDailyTemplateSummary() {
-  return DAILY_ACTIVITY_SEED_TEMPLATES.filter(
-    (t) => t.position_group && t.is_required_daily,
-  ).map((t) => ({
-    code: t.code,
-    position: t.position_group!,
-    title: t.title,
-    checklist_count: t.checklist.length,
-  }));
 }
 
