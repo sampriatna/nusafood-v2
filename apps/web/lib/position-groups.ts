@@ -9,14 +9,34 @@ export const POSITION_GROUP_LABELS: Record<PositionGroup, string> = {
   Bar: "Bar / Barista",
   Dapur: "Dapur / Kitchen",
   PA: "PA / OB (Public Area)",
+  Kasir: "Kasir",
+  Purchasing: "Purchasing / Pembelian",
+  Gudang: "Warehouse / Gudang",
+  ProduksiFnB: "Produksi FnB",
+  ProduksiNF: "Produksi NF",
+  Advertising: "Advertising / Marketing",
+  AdminMP: "Admin MP",
+  CSNF: "CS NF / Customer Service",
+  Finance: "Finance / Keuangan",
+  Design: "Design / Editor",
 };
+
+function matchesAny(text: string, keywords: string[]): boolean {
+  return keywords.some((k) => text === k || text.includes(k));
+}
 
 /** Map teks jabatan bebas ke grup posisi standar (sama dengan template kegiatan). */
 export function normalizePositionGroup(position: string): string {
   const p = (position || "").trim().toLowerCase();
   if (!p) return "";
+
+  const exact = REPORT_POSITION_GROUPS.find(
+    (group) => group.toLowerCase() === p,
+  );
+  if (exact) return exact;
+
   if (
-    [
+    matchesAny(p, [
       "pa",
       "ob",
       "public area",
@@ -26,25 +46,35 @@ export function normalizePositionGroup(position: string): string {
       "klindingan",
       "cleaning",
       "kebersihan",
-    ].some((k) => p === k || p.includes(k))
+    ])
   ) {
     return "PA";
   }
-  if (
-    ["waiter", "waiters", "server", "floor", "pramusaji", "kasir"].some((k) =>
-      p.includes(k),
-    )
-  ) {
+  if (matchesAny(p, ["kasir", "cashier"])) return "Kasir";
+  if (matchesAny(p, ["waiter", "waiters", "server", "floor", "pramusaji"])) {
     return "Waiters";
   }
-  if (["barista", "bar", "bartender"].some((k) => p.includes(k))) {
-    return "Bar";
+  if (matchesAny(p, ["barista", "bar", "bartender"])) return "Bar";
+  if (matchesAny(p, ["produksi nf", "produksinf"])) return "ProduksiNF";
+  if (matchesAny(p, ["produksi fnb", "produksifnb", "produksi f&b"])) {
+    return "ProduksiFnB";
   }
-  if (
-    ["cook", "chef", "dapur", "kitchen", "produksi"].some((k) => p.includes(k))
-  ) {
-    return "Dapur";
+  if (matchesAny(p, ["purchasing", "pembelian", "procurement"])) {
+    return "Purchasing";
   }
+  if (matchesAny(p, ["gudang", "warehouse", "logistik"])) return "Gudang";
+  if (matchesAny(p, ["advertising", "marketing", "iklan"])) return "Advertising";
+  if (matchesAny(p, ["admin mp", "adminmp"])) return "AdminMP";
+  if (matchesAny(p, ["cs nf", "csnf", "customer service"])) return "CSNF";
+  if (matchesAny(p, ["finance", "keuangan", "akuntansi", "accounting"])) {
+    return "Finance";
+  }
+  if (matchesAny(p, ["design", "editor", "desain", "creative"])) {
+    return "Design";
+  }
+  if (matchesAny(p, ["cook", "chef", "dapur", "kitchen"])) return "Dapur";
+  if (matchesAny(p, ["produksi", "production"])) return "ProduksiFnB";
+
   return position.trim();
 }
 
