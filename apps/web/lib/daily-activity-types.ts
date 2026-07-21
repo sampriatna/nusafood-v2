@@ -22,14 +22,7 @@ export type ReportTemplateKind =
   | "issue_quick"
   | "special_task";
 
-export type ReportPositionGroup =
-  | "Waiters"
-  | "Bar"
-  | "Dapur"
-  | "PA"
-  | "OB"
-  | "Klindingan"
-  | string;
+export type { ReportPositionGroup } from "@nusafood/types";
 
 export const REPORT_CONDITION_OPTIONS: Array<{
   value: ReportConditionStatus;
@@ -54,14 +47,7 @@ export const REPORT_CONDITION_OPTIONS: Array<{
   },
 ];
 
-export const REPORT_POSITION_GROUPS = [
-  "Waiters",
-  "Bar",
-  "Dapur",
-  "PA",
-  "OB",
-  "Klindingan",
-] as const;
+export { REPORT_POSITION_GROUPS } from "@nusafood/types";
 
 export type DailyReportStaff = Staff & {
   position_group?: string | null;
