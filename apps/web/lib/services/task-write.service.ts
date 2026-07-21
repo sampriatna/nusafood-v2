@@ -741,3 +741,61 @@ export async function resendWhatsApp(taskId: string): Promise<void> {
     data: { waSentAt: new Date(), gasSyncedAt: new Date() },
   });
 }
+
+export async function deleteTask(
+  taskId: string,
+  options?: { deletedBy?: string },
+): Promise<void> {
+  const task = await prisma.task.findUnique({ where: { taskId } });
+  if (!task) {
+    throw new TaskWriteError("Tugas tidak ditemukan", "TASK_NOT_FOUND", 404);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const reports = await tx.checklistReport.findMany({
+      where: { taskId },
+      select: { reportId: true },
+    });
+    const reportIds = reports.map((report) => report.reportId);
+    if (reportIds.length) {
+      await tx.checklistReportItem.deleteMany({
+        where: { reportId: { in: reportIds } },
+      });
+      await tx.checklistReport.deleteMany({ where: { taskId } });
+    }
+    await tx.task.delete({ where: { taskId } });
+  });
+
+  let v1Status: "success" | "failed" | null = null;
+  let gasError: string | null = null;
+  let v1Response: unknown = null;
+
+  if (dualWriteEnabled() && isGasEnabled()) {
+    const gas = await callGasAction("deleteTask", { task_id: taskId });
+    v1Response = gas.raw ?? { error: gas.error };
+    v1Status = gas.success ? "success" : "failed";
+    if (!gas.success) {
+      gasError = gas.error ?? "GAS deleteTask gagal";
+    }
+  }
+
+  await logSyncOperation({
+    operation: "delete_task",
+    entityType: "task",
+    entityId: taskId,
+    v1Status,
+    v2Status: "success",
+    v1Response,
+    v2Response: { deleted: true },
+    errorMessage: gasError,
+  });
+
+  await writeAuditLog({
+    entityType: "task",
+    entityId: taskId,
+    action: "deleted",
+    actorType: "leader",
+    actorName: options?.deletedBy ?? "v2-admin",
+    oldValue: { task_id: taskId, title: task.taskTitle },
+  });
+}

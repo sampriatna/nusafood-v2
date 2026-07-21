@@ -15,10 +15,22 @@ import {
   MessageSquare,
   RotateCcw,
   Send,
+  Trash2,
   User,
 } from "lucide-react";
 import { MobileHeader } from "@/components/mobile-header";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -39,6 +51,7 @@ import {
 
 type Props = {
   task: Task;
+  canDelete?: boolean;
 };
 
 type TimelineEvent = {
@@ -48,7 +61,10 @@ type TimelineEvent = {
   completed: boolean;
 };
 
-export function TaskDetailClient({ task: initialTask }: Props) {
+export function TaskDetailClient({
+  task: initialTask,
+  canDelete = false,
+}: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const [task, setTask] = useState(initialTask);
@@ -218,6 +234,33 @@ export function TaskDetailClient({ task: initialTask }: Props) {
         description: "Notifikasi sedang diproses",
       });
       refreshFromServer();
+    });
+  }
+
+  function handleDeleteTask() {
+    startTransition(async () => {
+      const res = await fetch(
+        `/api/tasks/${encodeURIComponent(task.task_id)}`,
+        { method: "DELETE", credentials: "include" },
+      );
+      const json = (await res.json()) as {
+        success?: boolean;
+        error?: string;
+      };
+      if (!res.ok || json.success === false) {
+        toast({
+          title: "Gagal menghapus tugas",
+          description: json.error || "Coba lagi",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Tugas dihapus",
+        description: task.task_id,
+      });
+      router.push("/dashboard");
+      router.refresh();
     });
   }
 
@@ -456,6 +499,41 @@ export function TaskDetailClient({ task: initialTask }: Props) {
             </div>
           </Card>
         )}
+
+        {canDelete ? (
+          <Card className="border-destructive/20 p-4">
+            <h3 className="mb-2 font-semibold text-destructive">Zona bahaya</h3>
+            <p className="mb-3 text-sm text-muted-foreground">
+              Hapus tugas dari daftar v2. Link laporan staff tidak lagi aktif.
+            </p>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={pending}>
+                  <Trash2 className="mr-2 size-4" />
+                  Hapus Tugas
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Hapus tugas ini?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {task.task_id} — {task.task_title} akan dihapus permanen
+                    dari database v2.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleDeleteTask}
+                  >
+                    Hapus
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </Card>
+        ) : null}
 
         {task.report_link ? (
           <p className="break-all px-1 font-mono text-xs text-muted-foreground">

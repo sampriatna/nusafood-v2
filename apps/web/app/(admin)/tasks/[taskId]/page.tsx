@@ -27,5 +27,10 @@ export default async function TaskDetailPage({ params }: Props) {
   const task = await getTaskById(taskId);
   if (!task) notFound();
 
-  return <TaskDetailClient task={task} />;
+  const canDelete =
+    !session ||
+    session.userRole === "ADMIN" ||
+    session.userRole === "LEADER";
+
+  return <TaskDetailClient task={task} canDelete={canDelete} />;
 }

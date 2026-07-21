@@ -5,6 +5,10 @@ import {
   OutletAccessError,
   assertTaskOutletAccess,
 } from "@/lib/outlet-scope";
+import {
+  TaskWriteError,
+  deleteTask,
+} from "@/lib/services/task-write.service";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +36,32 @@ export async function GET(_request: Request, { params }: Params) {
     console.error("[GET /api/tasks/:taskId]", error);
     return fail("Gagal mengambil detail tugas", {
       code: "TASK_DETAIL_FAILED",
+      status: 500,
+    });
+  }
+}
+
+export async function DELETE(_request: Request, { params }: Params) {
+  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  if (!auth.ok) return auth.response;
+
+  try {
+    const { taskId } = await params;
+    await assertTaskOutletAccess(auth.session!, taskId);
+    await deleteTask(taskId, {
+      deletedBy: auth.session?.userName ?? auth.session?.userId,
+    });
+    return ok({ task_id: taskId, deleted: true });
+  } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
+    if (error instanceof TaskWriteError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
+    console.error("[DELETE /api/tasks/:taskId]", error);
+    return fail("Gagal menghapus tugas", {
+      code: "TASK_DELETE_FAILED",
       status: 500,
     });
   }
