@@ -409,7 +409,7 @@ export function ReportTemplatesManager() {
               </div>
 
               <div className="space-y-2">
-                <Label>Posisi</Label>
+                <Label>Posisi / Jabatan</Label>
                 <Select
                   value={form.position_group}
                   onValueChange={(value) =>

@@ -1,4 +1,4 @@
-import type { Staff } from "@nusafood/types";
+import type { ReportPositionGroup, Staff } from "@nusafood/types";
 
 export type ReportConditionStatus =
   | "aman"

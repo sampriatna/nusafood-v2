@@ -289,8 +289,8 @@ export function StaffManager({ staff, outlets, areas, canManage }: Props) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Sama dengan posisi di template kegiatan harian (Waiters, Bar,
-                Dapur, PA).
+                Harus sama persis dengan posisi di template kegiatan harian
+                (contoh: PA, Kasir, Gudang, Produksi FnB).
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">

@@ -9,7 +9,10 @@ import { normalizeOutletCode } from "@nusafood/database/normalizers";
 import { prisma } from "@/lib/db";
 import { generateStaffId } from "@/lib/id";
 import { mapStaffToApi } from "@/lib/mappers/staff";
-import { sanitizeStaffPosition } from "@/lib/position-groups";
+import {
+  isPositionGroup,
+  sanitizeStaffPosition,
+} from "@/lib/position-groups";
 
 export class StaffWriteError extends Error {
   code: string;
@@ -20,6 +23,84 @@ export class StaffWriteError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+function requireStaffPosition(position?: string | null): string {
+  const sanitized = sanitizeStaffPosition(position);
+  if (!sanitized || !isPositionGroup(sanitized)) {
+    throw new StaffWriteError(
+      "Pilih posisi/jabatan dari daftar standar",
+      "VALIDATION_ERROR",
+    );
+  }
+  return sanitized;
+}
+
+export type StaffPositionNormalizeResult = {
+  total: number;
+  updated: number;
+  unchanged: number;
+  unresolved: Array<{
+    staff_id: string;
+    name: string;
+    position: string | null;
+  }>;
+  changes: Array<{
+    staff_id: string;
+    name: string;
+    from: string | null;
+    to: string;
+  }>;
+};
+
+/** Normalisasi massal jabatan staff ke grup posisi standar (1:1 dengan template kegiatan). */
+export async function normalizeAllStaffPositions(): Promise<StaffPositionNormalizeResult> {
+  const rows = await prisma.staff.findMany({
+    orderBy: [{ name: "asc" }],
+  });
+
+  const changes: StaffPositionNormalizeResult["changes"] = [];
+  const unresolved: StaffPositionNormalizeResult["unresolved"] = [];
+  let updated = 0;
+  let unchanged = 0;
+
+  for (const row of rows) {
+    const next = sanitizeStaffPosition(row.position);
+    if (!next || !isPositionGroup(next)) {
+      unresolved.push({
+        staff_id: row.staffId,
+        name: row.name,
+        position: row.position,
+      });
+      unchanged++;
+      continue;
+    }
+
+    if (row.position === next) {
+      unchanged++;
+      continue;
+    }
+
+    await prisma.staff.update({
+      where: { staffId: row.staffId },
+      data: { position: next },
+    });
+    updated++;
+    changes.push({
+      staff_id: row.staffId,
+      name: row.name,
+      from: row.position,
+      to: next,
+    });
+  }
+
+  return {
+    total: rows.length,
+    updated,
+    unchanged,
+    unresolved,
+    changes,
+  };
 }
 
 async function resolveOutlet(outlet: string) {
@@ -104,7 +185,7 @@ export async function createStaff(input: CreateStaffPayload): Promise<Staff> {
     data: {
       staffId: generateStaffId(),
       name: input.name.trim(),
-      position: sanitizeStaffPosition(input.position),
+      position: requireStaffPosition(input.position),
       outletId: outlet.id,
       areaId: area?.id ?? null,
       waNumber: input.wa_number.trim(),
@@ -146,7 +227,7 @@ export async function updateStaff(
       name: input.name?.trim() || undefined,
       position:
         input.position !== undefined
-          ? sanitizeStaffPosition(input.position)
+          ? requireStaffPosition(input.position)
           : undefined,
       outletId: input.outlet ? outlet.id : undefined,
       areaId:

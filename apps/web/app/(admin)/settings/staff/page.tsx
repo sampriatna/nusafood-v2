@@ -1,4 +1,5 @@
 import { AdminPage } from "@/components/admin-page";
+import { StaffPositionNormalizeButton } from "@/components/staff-position-normalize-button";
 import { authRequired, getSession } from "@/lib/auth";
 import {
   listAreas,
@@ -24,6 +25,7 @@ export default async function StaffSettingsPage() {
 
   return (
     <AdminPage title="Master Staff" backHref="/settings">
+      <StaffPositionNormalizeButton canManage={canManage} />
       <p className="text-sm text-muted-foreground">
         {staff.length} staf · {staff.filter((s) => s.status === "ACTIVE").length}{" "}
         aktif
