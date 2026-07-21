@@ -29,14 +29,18 @@ export function generateToken(length = 32) {
     .slice(0, length);
 }
 
+export function getAppOrigin(): string {
+  return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
+}
+
 export function buildReportLink(taskId: string, token: string) {
-  const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
+  const origin = getAppOrigin();
   const path = `/report/${taskId}?token=${token}`;
   return origin ? `${origin}${path}` : path;
 }
 
 export function buildChecklistLink(taskId: string, token: string) {
-  const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
+  const origin = getAppOrigin();
   const path = `/checklist/${taskId}?token=${token}`;
   return origin ? `${origin}${path}` : path;
 }

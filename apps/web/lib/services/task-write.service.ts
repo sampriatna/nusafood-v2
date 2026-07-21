@@ -8,7 +8,12 @@ import {
   parseDate,
 } from "@nusafood/database/normalizers";
 import { prisma } from "@/lib/db";
-import { buildReportLink, generateTaskId, generateToken } from "@/lib/id";
+import {
+  buildReportLink,
+  generateTaskId,
+  generateToken,
+  getAppOrigin,
+} from "@/lib/id";
 import { mapTaskToApi } from "@/lib/mappers/task";
 import {
   callGasAction,
@@ -27,6 +32,19 @@ import {
 import { TaskWriteError } from "@/lib/services/task-errors";
 
 export { TaskWriteError };
+
+function gasCreateTaskExtras(input?: {
+  taskId?: string;
+  token?: string;
+}): Record<string, string> {
+  const extras: Record<string, string> = {};
+  const appUrl = getAppOrigin();
+  if (appUrl) extras.app_url = appUrl;
+  if (input?.taskId && input?.token) {
+    extras.report_link = buildReportLink(input.taskId, input.token);
+  }
+  return extras;
+}
 
 async function resolveRelations(payload: CreateTaskPayload) {
   const outletCode = normalizeOutletCode(payload.outlet);
@@ -152,10 +170,10 @@ export async function createTask(
 
   // Path A: GAS primary (fase 2 migrasi)
   if (useDualWrite && primary === "gas" && gasOn) {
-    const gas = await callGasAction<Record<string, unknown>>(
-      "createTask",
-      payload as unknown as Record<string, unknown>,
-    );
+    const gas = await callGasAction<Record<string, unknown>>("createTask", {
+      ...(payload as unknown as Record<string, unknown>),
+      ...gasCreateTaskExtras(),
+    });
 
     if (!gas.success || !gas.data) {
       await logSyncOperation({
@@ -204,8 +222,7 @@ export async function createTask(
         createdBy:
           asString(gas.data.created_by) || options?.createdBy || "v2-admin",
         status: asString(gas.data.status) || "OPEN",
-        reportLink:
-          asString(gas.data.report_link) || buildReportLink(taskId, token),
+        reportLink: buildReportLink(taskId, token),
         sourceVersion: "v2",
       });
 
@@ -278,6 +295,7 @@ export async function createTask(
       ...(payload as unknown as Record<string, unknown>),
       task_id: taskId,
       token,
+      ...gasCreateTaskExtras({ taskId, token }),
     });
     v1Response = gas.raw ?? { error: gas.error };
     if (gas.success) {
@@ -594,7 +612,7 @@ export async function submitTaskReport(input: {
           pic_wa: asString(data.pic_wa),
           deadline: asString(data.deadline) || new Date().toISOString(),
           status: "SUBMITTED",
-          report_link: asString(data.report_link),
+          report_link: buildReportLink(input.taskId, input.token),
           after_photo_url: input.afterPhotoUrl,
           staff_note: input.staffNote,
           is_late: false,
