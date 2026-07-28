@@ -23,6 +23,7 @@ import {
   updateLeaderMonitorFollowUp,
   fetchStaffList,
 } from "@/lib/api/daily-report-client";
+import { OUTLET_FILTER_OPTIONS, normalizeOutletCode } from "@/lib/outlet-codes";
 import type {
   LeaderMonitorDashboardData,
   LeaderMonitorTemplate,
@@ -31,7 +32,6 @@ import type {
   LeaderItemScore,
   LeaderFollowUpStatus,
   StaffReportValidationStatus,
-  Outlet,
 } from "@nusafood/types";
 import {
   LEADER_MONITOR_STATUS_OPTIONS,
@@ -42,9 +42,13 @@ import {
 } from "@nusafood/types";
 import { cn } from "@/lib/utils";
 
-function todayLocal() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function todayWib() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 type View = "hub" | "form";
@@ -52,8 +56,9 @@ type View = "hub" | "form";
 export default function LeaderMonitoringPage() {
   const [, startTransition] = useTransition();
   const [view, setView] = useState<View>("hub");
-  const [date, setDate] = useState(todayLocal());
-  const [outlet, setOutlet] = useState<Outlet | "ALL">("KBU");
+  const [date, setDate] = useState(todayWib());
+  const [sessionOutlet, setSessionOutlet] = useState("KBU");
+  const [outlet, setOutlet] = useState<string>("KBU");
   const [data, setData] = useState<LeaderMonitorDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [flash, setFlash] = useState<string | null>(null);
@@ -76,25 +81,38 @@ export default function LeaderMonitoringPage() {
     { staff_id: string; name: string; position: string; outlet: string }[]
   >([]);
 
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.success && res.data?.userOutlet) {
+          const code = normalizeOutletCode(res.data.userOutlet);
+          setSessionOutlet(code);
+          setOutlet(code);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const staffRes = await fetchStaffList({ status: "ACTIVE" });
       if (staffRes.success && staffRes.data) {
         const opt = await getLeaderStaffOptions(
-          outlet === "ALL" ? undefined : outlet,
+          outlet === "ALL" ? sessionOutlet : outlet,
         );
         if (opt.success && opt.data) setStaffOptions(opt.data);
       }
       const dash = await getLeaderMonitorDashboard({
         date,
-        outlet: outlet === "ALL" ? undefined : outlet,
+        outlet,
       });
       if (dash.success && dash.data) setData(dash.data);
     } finally {
       setLoading(false);
     }
-  }, [date, outlet]);
+  }, [date, outlet, sessionOutlet]);
 
   useEffect(() => {
     load();
@@ -158,7 +176,10 @@ export default function LeaderMonitoringPage() {
     try {
       const result = await submitLeaderMonitor({
         template_id: template.id,
-        outlet_id: outlet === "ALL" ? "KBU" : outlet,
+        outlet_id:
+          outlet === "ALL"
+            ? sessionOutlet
+            : normalizeOutletCode(outlet),
         shift,
         area,
         status,
@@ -482,12 +503,13 @@ export default function LeaderMonitoringPage() {
           <select
             className="h-11 rounded-md border px-2 text-sm bg-white"
             value={outlet}
-            onChange={(e) => setOutlet(e.target.value as Outlet | "ALL")}
+            onChange={(e) => setOutlet(e.target.value)}
           >
-            <option value="KBU">KBU</option>
-            <option value="Kisamen">Kisamen</option>
-            <option value="Samtaro Express">Samtaro Express</option>
-            <option value="ALL">Semua</option>
+            {OUTLET_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
           </select>
         </div>
 

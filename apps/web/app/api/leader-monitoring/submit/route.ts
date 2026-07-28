@@ -5,6 +5,7 @@ import {
   OutletAccessError,
   assertCreateOutletAllowed,
 } from "@/lib/outlet-scope";
+import { normalizeOutletCode } from "@/lib/outlet-codes";
 import { ok, fail } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +16,13 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as SubmitLeaderMonitorPayload;
-    const outletId = body.outlet_id || auth.session?.userOutlet || body.outlet_id;
-    if (auth.session && outletId) {
+    const rawOutlet =
+      body.outlet_id || auth.session?.userOutlet || "";
+    const outletId = normalizeOutletCode(rawOutlet);
+    if (!outletId) {
+      return fail("Outlet wajib diisi.", { status: 400 });
+    }
+    if (auth.session) {
       assertCreateOutletAllowed(auth.session, outletId);
     }
 

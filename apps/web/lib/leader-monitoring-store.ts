@@ -12,6 +12,7 @@ export {
   validateStaffReportFromLeader,
   getLeaderStaffOptions,
   getStaffSubmissionForValidate,
+  resolveLeaderMonitorOutletFilter,
   type LeaderMonitorKind,
   type StaffReportValidationStatus,
 } from "@/lib/services/leader-monitoring.service";

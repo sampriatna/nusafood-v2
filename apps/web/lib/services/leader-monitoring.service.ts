@@ -38,13 +38,45 @@ import {
   LEADER_MONITOR_SEED_TEMPLATES,
 } from "@/lib/leader-monitoring-seed-data";
 import { dateKeyInAppTz, todayKeyInAppTz } from "@/lib/format-datetime";
+import { normalizeOutletCode } from "@/lib/outlet-codes";
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db";
+import { uploadPhoto } from "@/lib/services/storage.service";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function todayISO() {
   return todayKeyInAppTz();
+}
+
+/** Sama seperti daily-activity — UTC midnight untuk kolom @db.Date. */
+function parseDateOnly(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!));
+}
+
+async function persistLeaderPhoto(
+  photoInput: string | null | undefined,
+  submissionId: string,
+): Promise<string | null> {
+  if (!photoInput?.trim()) return null;
+  const trimmed = photoInput.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+
+  const base64 = trimmed.replace(/^data:image\/\w+;base64,/, "");
+  const bytes = Buffer.from(base64, "base64");
+  if (bytes.length === 0) return null;
+
+  const result = await uploadPhoto({
+    bytes,
+    contentType: "image/jpeg",
+    taskId: submissionId,
+    context: "leader_monitor",
+  });
+  return result.url;
 }
 
 function mapChecklist(raw: unknown): LeaderMonitorChecklistItem[] {
@@ -142,7 +174,21 @@ function computeStatusFromScores(
 
 function parseReportDate(value?: string): Date {
   const key = value?.trim() || todayISO();
-  return new Date(`${key}T12:00:00+07:00`);
+  return parseDateOnly(key);
+}
+
+export function resolveLeaderMonitorOutletFilter(
+  requested: string | null | undefined,
+  session?: { userRole?: string; userOutlet?: string } | null,
+): string | undefined {
+  const raw = (requested ?? "").trim();
+  if (raw === "ALL" || raw === "") {
+    if (session?.userRole === "LEADER" && session.userOutlet) {
+      return normalizeOutletCode(session.userOutlet);
+    }
+    return undefined;
+  }
+  return normalizeOutletCode(raw);
 }
 
 export async function listLeaderMonitorTemplates(
@@ -157,13 +203,10 @@ export async function listLeaderMonitorTemplates(
 
   return rows
     .map(mapTemplate)
-    .filter(
-      (t) =>
-        !t.outlet_id ||
-        !outlet ||
-        outlet === "ALL" ||
-        t.outlet_id === outlet,
-    );
+    .filter((t) => {
+      if (!t.outlet_id || !outlet || outlet === "ALL") return true;
+      return normalizeOutletCode(t.outlet_id) === normalizeOutletCode(outlet);
+    });
 }
 
 export async function getLeaderMonitorTemplate(
@@ -235,6 +278,26 @@ export async function submitLeaderMonitor(
     return { success: false, error: "Foto wajib jika ada masalah." };
   }
 
+  const outletCode = normalizeOutletCode(payload.outlet_id);
+  const reportDate = parseReportDate(payload.report_date);
+  const draftId = randomUUID();
+
+  let photoUrl: string | null = null;
+  if (photo) {
+    try {
+      photoUrl = await persistLeaderPhoto(photo, draftId);
+    } catch (error) {
+      console.error("[submitLeaderMonitor] photo upload failed", error);
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? `Gagal menyimpan foto: ${error.message}`
+            : "Gagal menyimpan foto bukti.",
+      };
+    }
+  }
+
   let follow_up: LeaderFollowUpStatus =
     payload.follow_up_status || (status === "aman" ? "selesai" : "open");
   if (status === "aman" && !payload.follow_up_status) follow_up = "selesai";
@@ -243,8 +306,8 @@ export async function submitLeaderMonitor(
     data: {
       templateId: templateRow.id,
       kind: templateRow.kind,
-      reportDate: parseReportDate(payload.report_date),
-      outletCode: payload.outlet_id,
+      reportDate,
+      outletCode,
       shift: payload.shift || "Siang",
       leaderId: payload.leader_id || "LEADER",
       leaderName: payload.leader_name || "Leader",
@@ -258,7 +321,7 @@ export async function submitLeaderMonitor(
       problemNote: problem_note,
       fixInstruction: fix_instruction,
       fixDeadline: payload.fix_deadline || null,
-      photoUrl: photo,
+      photoUrl,
       followUpStatus: follow_up,
       staffSubmissionId: payload.staff_submission_id || null,
       staffValidation: payload.staff_validation || null,
@@ -326,14 +389,16 @@ export async function listLeaderMonitorSubmissions(
   filters: LeaderMonitorFilters = {},
 ): Promise<LeaderMonitorSubmission[]> {
   const dateKey = filters.date || todayISO();
-  const reportDate = parseReportDate(dateKey);
+  const reportDate = parseDateOnly(dateKey);
+  const outletFilter =
+    filters.outlet && filters.outlet !== "ALL"
+      ? normalizeOutletCode(filters.outlet)
+      : undefined;
 
   const rows = await prisma.leaderMonitorSubmission.findMany({
     where: {
       reportDate,
-      ...(filters.outlet && filters.outlet !== "ALL"
-        ? { outletCode: filters.outlet }
-        : {}),
+      ...(outletFilter ? { outletCode: outletFilter } : {}),
       ...(filters.kind && filters.kind !== "ALL"
         ? { kind: filters.kind }
         : {}),
@@ -360,13 +425,14 @@ export async function buildLeaderMonitorDashboard(
 
   let staff_need_fix: DailyReportSubmission[] = [];
   try {
-    staff_need_fix = (await listSubmissionsNeedingFix(date)).filter(
-      (s) =>
-        !outlet ||
-        outlet === "ALL" ||
-        s.outlet_id === outlet ||
-        s.outlet === outlet,
-    );
+    staff_need_fix = (await listSubmissionsNeedingFix(date)).filter((s) => {
+      if (!outlet || outlet === "ALL") return true;
+      const code = normalizeOutletCode(outlet);
+      return (
+        normalizeOutletCode(s.outlet_id) === code ||
+        normalizeOutletCode(s.outlet) === code
+      );
+    });
   } catch (error) {
     console.error(
       "[buildLeaderMonitorDashboard] listSubmissionsNeedingFix failed",
