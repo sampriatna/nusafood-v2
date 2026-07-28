@@ -8,6 +8,7 @@ import {
   cancelLetter,
   generatePdf,
   resolveLetter,
+  resendDisciplinaryWa,
   sendLetter,
   submitForApproval,
 } from "@/lib/services/disciplinary.service";
@@ -21,6 +22,7 @@ type ActionBody = {
     | "submit_approval"
     | "approve"
     | "send"
+    | "resend_wa"
     | "generate_pdf"
     | "acknowledge"
     | "resolve"
@@ -44,6 +46,15 @@ export async function POST(request: Request, { params }: Params) {
         return ok(await approveLetter(id, auth.session));
       case "send": {
         const result = await sendLetter(id, auth.session);
+        return NextResponse.json({
+          success: true,
+          data: result.letter,
+          notify: result.notify,
+          error: null,
+        });
+      }
+      case "resend_wa": {
+        const result = await resendDisciplinaryWa(id, auth.session);
         return NextResponse.json({
           success: true,
           data: result.letter,
