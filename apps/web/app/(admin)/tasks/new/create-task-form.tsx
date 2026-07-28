@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
 type Option = { value: string; label: string; outlet?: string | null };
 
@@ -30,6 +31,7 @@ type Props = {
 
 export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
   const router = useRouter();
+  const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [manualInput, setManualInput] = useState(false);
@@ -126,7 +128,15 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
         const raw = await res.text();
         let json: {
           success: boolean;
-          data?: { task_id: string };
+          data?: {
+            task_id: string;
+            report_link?: string;
+          };
+          notify?: {
+            wa_sent: boolean;
+            wa_error?: string;
+            wa_link?: string;
+          };
           error?: string;
         };
         try {
@@ -146,6 +156,30 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
         }
 
         const taskId = json.data.task_id;
+
+        if (json.notify?.wa_sent) {
+          toast({
+            title: "Tugas dibuat & WA terkirim",
+            description: `Notifikasi dikirim ke ${picName.trim()}`,
+          });
+        } else if (json.notify?.wa_link) {
+          toast({
+            title: "Tugas dibuat — WA otomatis gagal",
+            description:
+              json.notify.wa_error === "GAS_NOT_CONFIGURED"
+                ? "GAS belum dikonfigurasi. Kirim link manual dari halaman detail."
+                : json.notify.wa_error || "Kirim link manual dari halaman detail.",
+            variant: "destructive",
+          });
+        } else if (json.notify) {
+          toast({
+            title: "Tugas dibuat — WA gagal",
+            description: json.notify.wa_error || "Coba kirim ulang dari halaman detail.",
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Tugas dibuat" });
+        }
 
         if (beforePhotoPreview) {
           const blob = await (await fetch(beforePhotoPreview)).blob();

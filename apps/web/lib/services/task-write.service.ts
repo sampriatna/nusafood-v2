@@ -1,5 +1,5 @@
 import type { TaskPriority } from "@nusafood/database";
-import type { CreateTaskPayload, Task } from "@nusafood/types";
+import type { CreateTaskPayload, CreateTaskResult, Task } from "@nusafood/types";
 import {
   normalizeOutletCode,
   normalizePriority,
@@ -30,8 +30,77 @@ import {
   verifyChecklistReport,
 } from "@/lib/services/checklist.service";
 import { TaskWriteError } from "@/lib/services/task-errors";
+import { buildTaskWaMessage, buildWaMeLink } from "@/lib/wa-message";
 
 export { TaskWriteError };
+
+async function finalizeTaskCreateWa(input: {
+  taskId: string;
+  token: string;
+  payload: CreateTaskPayload;
+  outletId: string;
+  gasSynced: boolean;
+}): Promise<CreateTaskResult["notify"]> {
+  const reportLink = buildReportLink(input.taskId, input.token);
+  const waMessage = buildTaskWaMessage({
+    task_title: input.payload.task_title,
+    pic_name: input.payload.pic_name,
+    deadline: input.payload.deadline,
+    report_link: reportLink,
+    outlet: String(input.payload.outlet),
+  });
+  const wa_link = buildWaMeLink(input.payload.pic_wa, waMessage) || undefined;
+
+  if (!input.gasSynced && isGasEnabled()) {
+    const gas = await callGasAction<Record<string, unknown>>("createTask", {
+      ...(input.payload as unknown as Record<string, unknown>),
+      task_id: input.taskId,
+      token: input.token,
+      ...gasCreateTaskExtras({ taskId: input.taskId, token: input.token }),
+    });
+    if (gas.success) {
+      await prisma.task.updateMany({
+        where: { taskId: input.taskId },
+        data: { gasSyncedAt: new Date() },
+      });
+    } else {
+      await logSyncOperation({
+        operation: "sync_task_to_gas",
+        entityType: "task",
+        entityId: input.taskId,
+        v1Status: "failed",
+        v2Status: "success",
+        v1Response: gas.raw ?? { error: gas.error },
+        errorMessage: gas.error ?? "GAS sync gagal",
+      });
+      return {
+        wa_sent: false,
+        wa_error: gas.error ?? "GAS sync gagal — gunakan link manual",
+        wa_link,
+      };
+    }
+  }
+
+  const { sendTaskWhatsAppViaGas } = await import("@/lib/gas-whatsapp.service");
+  const wa = await sendTaskWhatsAppViaGas({
+    taskId: input.taskId,
+    picWa: input.payload.pic_wa,
+    outletId: input.outletId,
+  });
+
+  if (wa.sent) {
+    await prisma.task.updateMany({
+      where: { taskId: input.taskId },
+      data: { waSentAt: new Date(), status: "SENT" },
+    });
+  }
+
+  return {
+    wa_sent: wa.sent,
+    wa_error: wa.error,
+    wa_link: wa.sent ? undefined : wa_link,
+  };
+}
 
 function gasCreateTaskExtras(input?: {
   taskId?: string;
@@ -161,7 +230,7 @@ async function insertTaskToDb(input: {
 export async function createTask(
   payload: CreateTaskPayload,
   options?: { createdBy?: string },
-): Promise<Task> {
+): Promise<CreateTaskResult> {
   validateCreatePayload(payload);
 
   const useDualWrite = dualWriteEnabled();
@@ -251,10 +320,15 @@ export async function createTask(
         newValue: { task_id: taskId, dual_write: true, primary: "gas" },
       });
 
-      const refreshed = await prisma.task.findUniqueOrThrow({
-        where: { taskId },
+      const notify = await finalizeTaskCreateWa({
+        taskId,
+        token,
+        payload,
+        outletId: row.outletId,
+        gasSynced: true,
       });
-      return mapTaskToApi(refreshed);
+      const updated = await prisma.task.findUniqueOrThrow({ where: { taskId } });
+      return { task: mapTaskToApi(updated), notify };
     } catch (error) {
       await logSyncOperation({
         operation: "create_task",
@@ -289,6 +363,7 @@ export async function createTask(
   let v1Status: "success" | "failed" | "partial" | null = null;
   let v1Response: unknown = null;
   let gasError: string | null = null;
+  let gasSynced = false;
 
   if (useDualWrite && gasOn) {
     const gas = await callGasAction<Record<string, unknown>>("createTask", {
@@ -300,6 +375,7 @@ export async function createTask(
     v1Response = gas.raw ?? { error: gas.error };
     if (gas.success) {
       v1Status = "success";
+      gasSynced = true;
       await prisma.task.update({
         where: { id: row.id },
         data: { gasSyncedAt: new Date() },
@@ -334,9 +410,17 @@ export async function createTask(
     },
   });
 
-  // Jika dual-write wajib GAS primary sudah di-handle di atas.
-  // Di path DB-primary, partial GAS failure tidak menggagalkan create (logged).
-  return mapTaskToApi(row);
+  // Kirim WA via GAS (sync ke GAS dulu jika belum). Sama seperti alur checklist.
+  const notify = await finalizeTaskCreateWa({
+    taskId,
+    token,
+    payload,
+    outletId: row.outletId,
+    gasSynced,
+  });
+
+  const updated = await prisma.task.findUniqueOrThrow({ where: { taskId } });
+  return { task: mapTaskToApi(updated), notify };
 }
 
 export async function markTaskOpened(taskId: string, token: string): Promise<Task> {

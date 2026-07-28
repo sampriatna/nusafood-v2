@@ -1,4 +1,5 @@
 import type { CreateTaskPayload } from "@nusafood/types";
+import { NextResponse } from "next/server";
 import { fail, ok } from "@/lib/api/response";
 import { listTasks } from "@/lib/services/task.service";
 import { requireAuth } from "@/lib/require-auth";
@@ -61,8 +62,13 @@ export async function POST(request: Request) {
     if (body.outlet) {
       assertCreateOutletAllowed(auth.session!, body.outlet);
     }
-    const task = await createTask(body);
-    return ok(task, undefined, { status: 201 });
+    const result = await createTask(body);
+    return NextResponse.json({
+      success: true,
+      data: result.task,
+      notify: result.notify,
+      error: null,
+    }, { status: 201 });
   } catch (error) {
     if (error instanceof OutletAccessError) {
       return fail(error.message, { code: error.code, status: error.status });
