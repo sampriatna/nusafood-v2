@@ -7,6 +7,7 @@ import {
   History,
   Info,
   Layers,
+  Link2,
   Repeat,
   ShieldCheck,
   Users,
@@ -125,6 +126,12 @@ export default async function SettingsPage() {
         icon={ShieldCheck}
         title="Manajemen User Login"
         description="Akun admin & leader"
+      />
+      <SettingsLinkCard
+        href="/settings/hris-integration"
+        icon={Link2}
+        title="Integrasi HRIS"
+        description="Sinkronisasi staf dari presensigpsv2 — status koneksi & sync manual"
       />
       <SettingsLinkCard
         href="/settings/sync-logs"

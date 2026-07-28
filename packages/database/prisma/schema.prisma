@@ -20,6 +20,19 @@ enum StaffStatus {
   INACTIVE
 }
 
+enum HrisLinkStatus {
+  LINKED
+  UNLINKED
+  AMBIGUOUS
+  MANUAL_REVIEW
+}
+
+enum HrisSyncRunStatus {
+  success
+  partial
+  failed
+}
+
 enum TaskStatus {
   CREATED
   SENT
@@ -113,12 +126,13 @@ enum LeaderPhotoMode {
 }
 
 model Outlet {
-  id        String   @id @default(uuid()) @db.Uuid
-  code      String   @unique @db.VarChar(50)
-  name      String   @db.VarChar(100)
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id             String   @id @default(uuid()) @db.Uuid
+  code           String   @unique @db.VarChar(50)
+  name           String   @db.VarChar(100)
+  hrisOutletCode String?  @unique @map("hris_outlet_code") @db.VarChar(50)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   areas                   Area[]
   staff                   Staff[]
@@ -165,18 +179,27 @@ model Category {
 }
 
 model Staff {
-  id           String      @id @default(uuid()) @db.Uuid
-  staffId      String      @unique @map("staff_id") @db.VarChar(50)
-  name         String      @db.VarChar(200)
-  position     String?     @db.VarChar(100)
-  outletId     String      @map("outlet_id") @db.Uuid
-  areaId       String?     @map("area_id") @db.Uuid
-  waNumber     String      @map("wa_number") @db.VarChar(20)
-  role         StaffRole   @default(STAFF)
-  status       StaffStatus @default(ACTIVE)
-  loginEnabled Boolean     @default(false) @map("login_enabled")
-  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id               String         @id @default(uuid()) @db.Uuid
+  staffId          String         @unique @map("staff_id") @db.VarChar(50)
+  name             String         @db.VarChar(200)
+  position         String?        @db.VarChar(100)
+  outletId         String         @map("outlet_id") @db.Uuid
+  areaId           String?        @map("area_id") @db.Uuid
+  waNumber         String         @map("wa_number") @db.VarChar(20)
+  role             StaffRole      @default(STAFF)
+  status           StaffStatus    @default(ACTIVE)
+  loginEnabled     Boolean        @default(false) @map("login_enabled")
+  hrisStaffId      String?        @unique @map("hris_staff_id") @db.VarChar(50)
+  hrisEmployeeCode String?        @map("hris_employee_code") @db.VarChar(50)
+  hrisOutletCode   String?        @map("hris_outlet_code") @db.VarChar(50)
+  hrisDivisionCode String?        @map("hris_division_code") @db.VarChar(50)
+  hrisDivisionName String?        @map("hris_division_name") @db.VarChar(100)
+  hrisPositionCode String?        @map("hris_position_code") @db.VarChar(50)
+  hrisPositionName String?        @map("hris_position_name") @db.VarChar(100)
+  hrisLinkStatus   HrisLinkStatus @default(UNLINKED) @map("hris_link_status")
+  hrisSyncedAt     DateTime?      @map("hris_synced_at") @db.Timestamptz(6)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   outlet                 Outlet                 @relation(fields: [outletId], references: [id])
   area                   Area?                  @relation(fields: [areaId], references: [id])
@@ -189,7 +212,29 @@ model Staff {
   @@index([outletId], map: "idx_staff_outlet")
   @@index([status], map: "idx_staff_status")
   @@index([waNumber], map: "idx_staff_wa")
+  @@index([hrisEmployeeCode], map: "idx_staff_hris_employee_code")
+  @@index([hrisLinkStatus], map: "idx_staff_hris_link_status")
   @@map("staff")
+}
+
+model HrisSyncLog {
+  id               String            @id @default(uuid()) @db.Uuid
+  startedAt        DateTime          @map("started_at") @db.Timestamptz(6)
+  completedAt      DateTime?         @map("completed_at") @db.Timestamptz(6)
+  triggeredBy      String?           @map("triggered_by") @db.VarChar(100)
+  triggeredByName  String?           @map("triggered_by_name") @db.VarChar(200)
+  status           HrisSyncRunStatus
+  checkedCount     Int               @default(0) @map("checked_count")
+  createdCount     Int               @default(0) @map("created_count")
+  updatedCount     Int               @default(0) @map("updated_count")
+  deactivatedCount Int               @default(0) @map("deactivated_count")
+  failedCount      Int               @default(0) @map("failed_count")
+  errorSummary     String?           @map("error_summary")
+  details          Json?
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([startedAt(sort: Desc)], map: "idx_hris_sync_logs_started")
+  @@map("hris_sync_logs")
 }
 
 model UserAccount {
