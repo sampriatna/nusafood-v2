@@ -6,5 +6,7 @@ describe("normalizeOutletCode", () => {
     expect(normalizeOutletCode("Kisamen")).toBe("KISAMEN");
     expect(normalizeOutletCode("Samtaro Express")).toBe("SAMTARO");
     expect(normalizeOutletCode("KBU")).toBe("KBU");
+    expect(normalizeOutletCode("General (Pusat)")).toBe("GENERAL");
+    expect(normalizeOutletCode("Nusa Fishing")).toBe("NUSAFISHING");
   });
 });

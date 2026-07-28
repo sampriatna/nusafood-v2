@@ -35,7 +35,11 @@ export function AreasManager({ areas, outlets, canManage }: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
-  const [outlet, setOutlet] = useState(outlets[0]?.value ?? "KBU");
+  const [outlet, setOutlet] = useState(
+    outlets.find((o) => o.value === "GENERAL")?.value ??
+      outlets[0]?.value ??
+      "KBU",
+  );
   const [name, setName] = useState("");
 
   function addArea() {
