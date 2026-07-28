@@ -96,6 +96,34 @@ export default function TeguranDetailPage() {
     })();
   }, []);
 
+  function handleWaNotify(notify: DisciplinaryNotifyResult) {
+    setWaNotify(notify);
+    if (notify.gas_sent) {
+      toast({
+        title: "WhatsApp terkirim",
+        description: `Pesan dikirim ke ${notify.employee_wa || "karyawan"}.`,
+      });
+      return;
+    }
+    if (notify.wa_link) {
+      window.open(notify.wa_link, "_blank", "noopener,noreferrer");
+      toast({
+        title: "Buka WhatsApp untuk kirim surat",
+        description:
+          "WA otomatis via GAS belum tersedia. WhatsApp dibuka — tekan Kirim di aplikasi WA.",
+      });
+      return;
+    }
+    toast({
+      title: "WA gagal",
+      description:
+        notify.gas_error === "NO_EMPLOYEE_WA"
+          ? "Nomor WA karyawan tidak ditemukan di data staff."
+          : notify.gas_error || "Tidak bisa mengirim WhatsApp.",
+      variant: "destructive",
+    });
+  }
+
   function act(action: string, successTitle: string) {
     startTransition(async () => {
       const json = await runAction(id, action);
@@ -108,31 +136,11 @@ export default function TeguranDetailPage() {
         return;
       }
       setLetter(json.data);
-      if (action === "send" && json.notify) {
-        setWaNotify(json.notify);
-        if (json.notify.gas_sent) {
-          toast({
-            title: "Surat terkirim via WhatsApp",
-            description: `Pesan dikirim ke ${json.notify.employee_wa || "karyawan"}.`,
-          });
-        } else if (json.notify.wa_link) {
-          toast({
-            title: "WA otomatis gagal — kirim manual",
-            description:
-              json.notify.gas_error ||
-              "GAS belum mengirim. Gunakan tombol Kirim WA Manual.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Surat ditandai terkirim, WA gagal",
-            description:
-              json.notify.gas_error === "NO_EMPLOYEE_WA"
-                ? "Nomor WA karyawan tidak ditemukan di data staff."
-                : json.notify.gas_error || "Tidak bisa mengirim WhatsApp.",
-            variant: "destructive",
-          });
-        }
+      if (
+        (action === "send" || action === "resend_wa") &&
+        json.notify
+      ) {
+        handleWaNotify(json.notify);
         return;
       }
       toast({ title: successTitle });
@@ -442,17 +450,17 @@ export default function TeguranDetailPage() {
             Kirim Surat (WhatsApp)
           </Button>
           <p className="text-xs text-muted-foreground">
-            Mengirim isi surat ke WhatsApp karyawan via GAS. Jika GAS gagal,
-            tersedia link kirim manual.
+            Mengirim isi surat ke WhatsApp karyawan. Jika GAS belum mendukung
+            action khusus, WhatsApp akan dibuka otomatis untuk kirim manual.
           </p>
-          {waNotify?.wa_link && !waNotify.gas_sent ? (
+          {waNotify?.wa_link ? (
             <a
               href={waNotify.wa_link}
               target="_blank"
               rel="noreferrer"
               className="inline-flex text-sm font-medium text-primary underline"
             >
-              Kirim WA Manual ke {waNotify.employee_wa}
+              Buka WhatsApp ke {waNotify.employee_wa}
             </a>
           ) : null}
           {!hasEvidence ? (
@@ -472,13 +480,22 @@ export default function TeguranDetailPage() {
           ) : null}
         </div>
         {letter.status === "SENT" && (
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={() => act("acknowledge", "Ditandai dibaca")}
-          >
-            Tandai Dibaca
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => act("resend_wa", "WA dikirim ulang")}
+            >
+              Kirim Ulang WA
+            </Button>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => act("acknowledge", "Ditandai dibaca")}
+            >
+              Tandai Dibaca
+            </Button>
+          </>
         )}
         {(letter.status === "SENT" || letter.status === "ACKNOWLEDGED") && (
           <Button

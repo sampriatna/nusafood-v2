@@ -826,6 +826,45 @@ export async function sendLetter(
   };
 }
 
+export async function resendDisciplinaryWa(
+  id: string,
+  session: SessionPayload | null,
+): Promise<DisciplinarySendResult> {
+  const letter = await prisma.disciplinaryLetter.findUnique({
+    where: { id },
+    include: includeAll,
+  });
+  if (!letter) throw new DisciplinaryError("Surat tidak ditemukan.", "NOT_FOUND", 404);
+  if (!["SENT", "ACKNOWLEDGED"].includes(letter.status)) {
+    throw new DisciplinaryError(
+      "Kirim ulang WA hanya untuk surat yang sudah terkirim.",
+      "INVALID_STATUS",
+      400,
+    );
+  }
+
+  const mapped = mapLetter(letter);
+  const notify = await notifyEmployeeOnDisciplinaryLetter(mapped);
+
+  const eventNote = notify.gas_sent
+    ? "WhatsApp dikirim ulang via GAS."
+    : notify.wa_link
+      ? `Kirim ulang WA gagal (${notify.gas_error || "unknown"}). Gunakan link manual.`
+      : `Kirim ulang WA gagal: ${notify.gas_error || "nomor WA tidak ada"}.`;
+
+  await addEvent(id, "WA_RESEND", session, letter.status, letter.status, eventNote);
+
+  const refreshed = await prisma.disciplinaryLetter.findUnique({
+    where: { id },
+    include: includeAll,
+  });
+
+  return {
+    letter: mapLetter(refreshed ?? letter),
+    notify,
+  };
+}
+
 export async function acknowledgeLetter(
   id: string,
   session: SessionPayload | null,
