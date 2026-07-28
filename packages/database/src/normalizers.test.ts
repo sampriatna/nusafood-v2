@@ -22,6 +22,8 @@ describe("normalizers", () => {
     expect(normalizeOutletCode("Kopi Buri Umah")).toBe("KBU");
     expect(normalizeOutletCode("Kisamen")).toBe("KISAMEN");
     expect(normalizeOutletCode("Samtaro Express")).toBe("SAMTARO");
+    expect(normalizeOutletCode("General (Pusat)")).toBe("GENERAL");
+    expect(normalizeOutletCode("Nusa Fishing")).toBe("NUSAFISHING");
   });
 
   it("normalizes task row from GAS-like payload", () => {

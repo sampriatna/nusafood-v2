@@ -98,6 +98,7 @@ export function normalizeStaffStatus(row: Record<string, unknown>): StaffStatus 
 export function normalizeOutletCode(value: unknown): string {
   const raw = asString(value, "KBU");
   const upper = raw.toUpperCase();
+  if (upper === "GENERAL" || upper.includes("PUSAT")) return "GENERAL";
   if (upper === "KBU" || upper.includes("BURI") || upper.includes("KOPI")) {
     return "KBU";
   }
@@ -108,6 +109,13 @@ export function normalizeOutletCode(value: unknown): string {
     upper.includes("SAMTAR")
   ) {
     return "SAMTARO";
+  }
+  if (
+    upper === "NUSAFISHING" ||
+    upper === "NUSA FISHING" ||
+    upper.includes("FISHING")
+  ) {
+    return "NUSAFISHING";
   }
   return upper.slice(0, 50);
 }

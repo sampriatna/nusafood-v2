@@ -8,6 +8,8 @@ export const REPORT_POSITION_GROUPS = [
   "Gudang",
   "ProduksiFnB",
   "ProduksiNF",
+  "ProduksiFishing",
+  "Maintenance",
   "Advertising",
   "AdminMP",
   "CSNF",
@@ -27,6 +29,8 @@ export const POSITION_GROUP_LABELS: Record<ReportPositionGroup, string> = {
   Gudang: "Warehouse / Gudang",
   ProduksiFnB: "Produksi FnB",
   ProduksiNF: "Produksi NF",
+  ProduksiFishing: "Produksi Nusa Fishing",
+  Maintenance: "Maintenance / Teknisi",
   Advertising: "Advertising / Marketing",
   AdminMP: "Admin MP",
   CSNF: "CS NF / Customer Service",
@@ -68,6 +72,21 @@ export function normalizePositionGroup(position: string): string {
   }
   if (matchesAny(p, ["barista", "bar", "bartender"])) return "Bar";
   if (matchesAny(p, ["produksi nf", "produksinf"])) return "ProduksiNF";
+  if (
+    matchesAny(p, [
+      "produksi fishing",
+      "produksifishing",
+      "nusa fishing",
+      "ikan",
+    ])
+  ) {
+    return "ProduksiFishing";
+  }
+  if (
+    matchesAny(p, ["maintenance", "teknisi", "mekanik", "perbaikan", "utility"])
+  ) {
+    return "Maintenance";
+  }
   if (matchesAny(p, ["produksi fnb", "produksifnb", "produksi f&b"])) {
     return "ProduksiFnB";
   }

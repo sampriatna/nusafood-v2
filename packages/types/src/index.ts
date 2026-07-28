@@ -24,7 +24,12 @@ export type TaskPriority = "Low" | "Medium" | "High" | "Urgent";
 export type Outlet = "KBU" | "Kisamen" | "Samtaro Express";
 
 /** Outlet codes used in v2 DB */
-export type OutletCode = "KBU" | "KISAMEN" | "SAMTARO";
+export type OutletCode =
+  | "GENERAL"
+  | "KBU"
+  | "KISAMEN"
+  | "SAMTARO"
+  | "NUSAFISHING";
 
 export type Area =
   | "Dapur"
