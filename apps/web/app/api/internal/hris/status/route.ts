@@ -5,6 +5,10 @@ import {
   listHrisSyncLogs,
   listStaffNeedingManualReview,
 } from "@/lib/services/hris-integration.service";
+import {
+  getLastSuccessfulSyncTime,
+  isOutletMappingConfirmed,
+} from "@/lib/services/hris-staff-sync.service";
 
 export const dynamic = "force-dynamic";
 
@@ -13,14 +17,19 @@ export async function GET() {
   if (!auth.ok) return auth.response;
 
   try {
-    const [status, logs, manualReview] = await Promise.all([
+    const [status, logs, manualReview, incrementalSince] = await Promise.all([
       getHrisIntegrationStatus(),
       listHrisSyncLogs(10),
       listStaffNeedingManualReview(),
+      getLastSuccessfulSyncTime(),
     ]);
 
     return ok({
       ...status,
+      outlet_mapping_confirmed: isOutletMappingConfirmed(),
+      incremental_since: incrementalSince ?? null,
+      cron_note:
+        "Vercel cron memakai UTC. Jadwal saat ini 19:00 UTC = 02:00 WIB.",
       recent_logs: logs.map((log) => ({
         id: log.id,
         started_at: log.startedAt.toISOString(),
@@ -40,6 +49,7 @@ export async function GET() {
         wa_number: s.waNumber,
         outlet: s.outlet.code,
         hris_link_status: s.hrisLinkStatus,
+        wa_needs_completion: s.waNeedsCompletion,
       })),
     });
   } catch (error) {

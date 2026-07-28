@@ -2,8 +2,17 @@ import { Link2, Unplug } from "lucide-react";
 import { AdminPage } from "@/components/admin-page";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { authRequired, getSession } from "@/lib/auth";
-import { getHrisIntegrationStatus, listHrisSyncLogs, listStaffNeedingManualReview } from "@/lib/services/hris-integration.service";
+import { getSession } from "@/lib/auth";
+import { requireHrisAdminSession } from "@/lib/hris-admin-guard";
+import {
+  getHrisIntegrationStatus,
+  listHrisSyncLogs,
+  listStaffNeedingManualReview,
+} from "@/lib/services/hris-integration.service";
+import {
+  getLastSuccessfulSyncTime,
+  isOutletMappingConfirmed,
+} from "@/lib/services/hris-staff-sync.service";
 import { HrisSyncButton } from "./hris-sync-button";
 
 export const dynamic = "force-dynamic";
@@ -17,16 +26,16 @@ function statusBadge(connected: boolean, enabled: boolean, configured: boolean) 
 
 export default async function HrisIntegrationPage() {
   const session = await getSession();
-  const canManage =
-    !authRequired() ||
-    session?.userRole === "ADMIN" ||
-    session?.userId === "env-admin";
+  requireHrisAdminSession(session);
 
-  const [status, logs, manualReview] = await Promise.all([
+  const [status, logs, manualReview, incrementalSince] = await Promise.all([
     getHrisIntegrationStatus(),
     listHrisSyncLogs(10),
     listStaffNeedingManualReview(),
+    getLastSuccessfulSyncTime(),
   ]);
+
+  const outletConfirmed = isOutletMappingConfirmed();
 
   return (
     <AdminPage title="Integrasi HRIS" backHref="/settings">
@@ -45,16 +54,16 @@ export default async function HrisIntegrationPage() {
               {statusBadge(status.connected, status.enabled, status.configured)}
             </div>
             <p className="text-sm text-muted-foreground">
-              Staf di Task Dashboard disinkronkan dari HRIS (presensigpsv2) via
-              REST API. Token API hanya disimpan di server — tidak ditampilkan di
-              browser.
+              Staf disinkronkan dari HRIS via REST API server-side. Token tidak
+              ditampilkan di browser. Role Task Dashboard tidak di-overwrite dari
+              jabatan HRIS pada fase ini.
             </p>
           </div>
         </div>
 
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-muted-foreground">Sync terakhir</dt>
+            <dt className="text-muted-foreground">Sync sukses terakhir</dt>
             <dd className="font-medium">
               {status.last_sync_at
                 ? new Date(status.last_sync_at).toLocaleString("id-ID")
@@ -62,18 +71,22 @@ export default async function HrisIntegrationPage() {
             </dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Hasil terakhir</dt>
-            <dd className="font-medium">{status.last_sync_status ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Staf terhubung HRIS</dt>
-            <dd className="font-medium">{status.staff_linked_count}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Perlu review manual</dt>
+            <dt className="text-muted-foreground">Incremental since</dt>
             <dd className="font-medium">
-              {status.staff_manual_review_count + status.staff_unlinked_count}
+              {incrementalSince
+                ? new Date(incrementalSince).toLocaleString("id-ID")
+                : "Full (belum ada sync sukses)"}
             </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Mapping outlet dikonfirmasi</dt>
+            <dd className="font-medium">
+              {outletConfirmed ? "Ya" : "Belum — sync aktual diblokir"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Cron (UTC → WIB)</dt>
+            <dd className="font-medium">19:00 UTC = 02:00 WIB</dd>
           </div>
         </dl>
 
@@ -83,18 +96,15 @@ export default async function HrisIntegrationPage() {
           </p>
         ) : null}
 
-        {canManage ? (
-          <HrisSyncButton disabled={!status.enabled || !status.configured} />
-        ) : null}
+        <HrisSyncButton
+          disabled={!status.enabled || !status.configured}
+          outletConfirmed={outletConfirmed}
+        />
       </Card>
 
       {manualReview.length > 0 ? (
         <Card className="space-y-3 p-4">
           <h3 className="font-semibold">Staf belum terhubung ke HRIS</h3>
-          <p className="text-sm text-muted-foreground">
-            Tugas lama tetap dapat dibuka. Label &quot;Belum terhubung ke HRIS&quot;
-            ditampilkan sampai mapping selesai.
-          </p>
           <ul className="divide-y text-sm">
             {manualReview.slice(0, 20).map((s) => (
               <li key={s.staffId} className="flex justify-between py-2">

@@ -199,6 +199,7 @@ export interface Staff {
   hris_position_name?: string | null;
   hris_link_status?: import("./hris").HrisLinkStatus;
   hris_synced_at?: string | null;
+  wa_needs_completion?: boolean;
   created_at: string;
   updated_at: string;
 }

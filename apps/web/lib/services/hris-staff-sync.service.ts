@@ -1,5 +1,5 @@
 import type { HrisStaffRecord, HrisSyncResult } from "@nusafood/types";
-import type { HrisLinkStatus, StaffRole, StaffStatus } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { generateStaffId } from "@/lib/id";
 import {
@@ -8,34 +8,56 @@ import {
   normalizeHrisPhone,
 } from "@/lib/services/hris-api.client";
 import {
-  isPositionGroup,
-  sanitizeStaffPosition,
-} from "@/lib/position-groups";
+  acquireHrisSyncLock,
+  releaseHrisSyncLock,
+} from "@/lib/services/hris-sync-lock.service";
+import {
+  buildHrisFields,
+  buildManualLinkUpdate,
+  buildStaffUpdateFromHris,
+  planStaffSyncAction,
+  summarizeSyncPlan,
+  type LocalStaffSnapshot,
+  type StaffSyncPlanItem,
+  type StaffSyncPlanSummary,
+  validateManualLink,
+} from "@/lib/services/hris-sync-plan";
 
-const LEADER_KEYWORDS = ["leader", "kepala", "supervisor", "manager", "koordinator"];
+const STAFF_SELECT = {
+  staffId: true,
+  hrisStaffId: true,
+  name: true,
+  waNumber: true,
+  waNeedsCompletion: true,
+  outletId: true,
+  role: true,
+  position: true,
+  status: true,
+} satisfies Prisma.StaffSelect;
 
-function mapHrisRole(role: string): StaffRole {
-  if (role === "leader") return "LEADER";
-  if (role === "admin") return "ADMIN";
-  return "STAFF";
+export function isOutletMappingConfirmed(): boolean {
+  return process.env.HRIS_OUTLET_MAPPING_CONFIRMED === "true";
 }
 
-function mapHrisStatus(status: string): StaffStatus {
-  return status === "active" ? "ACTIVE" : "INACTIVE";
-}
+export async function assertOutletMappingReady(): Promise<void> {
+  if (!isOutletMappingConfirmed()) {
+    throw new HrisApiError(
+      "Mapping outlet belum dikonfirmasi admin (HRIS_OUTLET_MAPPING_CONFIRMED)",
+      "OUTLET_MAPPING_NOT_CONFIRMED",
+      422,
+    );
+  }
 
-function resolveTaskPosition(hrisPositionName?: string | null): string | null {
-  const direct = sanitizeStaffPosition(hrisPositionName);
-  if (direct && isPositionGroup(direct)) return direct;
-
-  const lower = (hrisPositionName ?? "").toLowerCase();
-  if (LEADER_KEYWORDS.some((k) => lower.includes(k))) return "Leader";
-  if (lower.includes("bar")) return "Bar";
-  if (lower.includes("dapur") || lower.includes("kitchen")) return "Kitchen";
-  if (lower.includes("waiter") || lower.includes("floor")) return "Floor";
-  if (lower.includes("kasir")) return "Kasir";
-
-  return null;
+  const unmapped = await prisma.outlet.count({
+    where: { isActive: true, hrisOutletCode: null },
+  });
+  if (unmapped > 0) {
+    throw new HrisApiError(
+      `${unmapped} outlet aktif belum memiliki hris_outlet_code`,
+      "OUTLET_MAPPING_INCOMPLETE",
+      422,
+    );
+  }
 }
 
 async function resolveOutletId(hrisOutletCode: string): Promise<string | null> {
@@ -53,12 +75,44 @@ async function resolveOutletId(hrisOutletCode: string): Promise<string | null> {
   return byCode?.id ?? null;
 }
 
-export async function runHrisStaffSync(options?: {
+export async function getLastSuccessfulSyncTime(): Promise<string | undefined> {
+  const log = await prisma.hrisSyncLog.findFirst({
+    where: { status: { in: ["success", "partial"] }, completedAt: { not: null } },
+    orderBy: { completedAt: "desc" },
+  });
+  return log?.completedAt?.toISOString();
+}
+
+async function loadSyncContext(record: HrisStaffRecord) {
+  const hrisStaffId = record.id.trim();
+  const outletId = await resolveOutletId(record.outlet.id);
+  const existingByHrisId = await prisma.staff.findUnique({
+    where: { hrisStaffId },
+    select: STAFF_SELECT,
+  });
+
+  let localMatchesByWa: LocalStaffSnapshot[] = [];
+  const phone = normalizeHrisPhone(record.phone);
+  if (!existingByHrisId && phone && outletId) {
+    localMatchesByWa = await prisma.staff.findMany({
+      where: { hrisStaffId: null, outletId, waNumber: phone },
+      select: STAFF_SELECT,
+    });
+  }
+
+  return planStaffSyncAction({
+    record,
+    outletId,
+    existingByHrisId,
+    localMatchesByWa,
+  });
+}
+
+export async function previewHrisStaffSync(options?: {
   updatedSince?: string;
-  triggeredBy?: string;
-  triggeredByName?: string;
+  full?: boolean;
   client?: HrisApiClient;
-}): Promise<HrisSyncResult> {
+}): Promise<StaffSyncPlanSummary> {
   if (process.env.HRIS_SYNC_ENABLED !== "true") {
     throw new HrisApiError("Sinkronisasi HRIS dinonaktifkan", "HRIS_SYNC_DISABLED", 503);
   }
@@ -68,12 +122,122 @@ export async function runHrisStaffSync(options?: {
     throw new HrisApiError("HRIS API belum dikonfigurasi", "HRIS_NOT_CONFIGURED", 503);
   }
 
+  const updatedSince =
+    options?.full === true
+      ? undefined
+      : (options?.updatedSince ?? (await getLastSuccessfulSyncTime()));
+
+  const items: StaffSyncPlanItem[] = [];
+  for await (const batch of client.iterateStaff({
+    updated_since: updatedSince,
+    status: undefined,
+  })) {
+    for (const record of batch) {
+      items.push(await loadSyncContext(record));
+    }
+  }
+
+  return summarizeSyncPlan(items);
+}
+
+async function applySyncPlanItem(
+  plan: StaffSyncPlanItem,
+  record: HrisStaffRecord,
+  outletId: string,
+): Promise<"created" | "updated" | "deactivated"> {
+  if (plan.action === "create") {
+    const fields = buildHrisFields(record);
+    await prisma.staff.create({
+      data: {
+        staffId: generateStaffId(),
+        loginEnabled: false,
+        areaId: null,
+        outletId,
+        role: "STAFF",
+        position: null,
+        ...fields,
+        hrisSyncedAt: new Date(),
+      },
+    });
+    return "created";
+  }
+
+  if (plan.action === "deactivate" || plan.action === "update") {
+    const existing = await prisma.staff.findUnique({
+      where: { staffId: plan.local_staff_id! },
+      select: STAFF_SELECT,
+    });
+    if (!existing) {
+      throw new Error(`Staf lokal ${plan.local_staff_id} tidak ditemukan`);
+    }
+
+    await prisma.staff.update({
+      where: { staffId: existing.staffId },
+      data: {
+        ...buildStaffUpdateFromHris(record, existing, outletId),
+        hrisSyncedAt: new Date(),
+      },
+    });
+    return plan.action === "deactivate" ? "deactivated" : "updated";
+  }
+
+  throw new Error(plan.reason ?? "Rencana sync tidak valid");
+}
+
+export async function runHrisStaffSync(options?: {
+  updatedSince?: string;
+  full?: boolean;
+  dryRun?: boolean;
+  triggeredBy?: string;
+  triggeredByName?: string;
+  client?: HrisApiClient;
+  skipLock?: boolean;
+}): Promise<HrisSyncResult | StaffSyncPlanSummary> {
+  if (process.env.HRIS_SYNC_ENABLED !== "true") {
+    throw new HrisApiError("Sinkronisasi HRIS dinonaktifkan", "HRIS_SYNC_DISABLED", 503);
+  }
+
+  const client = options?.client ?? new HrisApiClient();
+  if (!client.isConfigured()) {
+    throw new HrisApiError("HRIS API belum dikonfigurasi", "HRIS_NOT_CONFIGURED", 503);
+  }
+
+  if (options?.dryRun) {
+    return previewHrisStaffSync(options);
+  }
+
+  await assertOutletMappingReady();
+
+  const lockOwner = options?.triggeredBy ?? "system";
+  let lockHeld = false;
+
+  if (!options?.skipLock) {
+    const lock = await acquireHrisSyncLock(lockOwner);
+    if (!lock.acquired) {
+      throw new HrisApiError(
+        "Sinkronisasi HRIS sedang berjalan",
+        "HRIS_SYNC_IN_PROGRESS",
+        409,
+      );
+    }
+    lockHeld = true;
+  }
+
+  const updatedSince =
+    options?.full === true
+      ? undefined
+      : (options?.updatedSince ?? (await getLastSuccessfulSyncTime()));
+
   const log = await prisma.hrisSyncLog.create({
     data: {
       startedAt: new Date(),
       triggeredBy: options?.triggeredBy ?? null,
       triggeredByName: options?.triggeredByName ?? null,
       status: "failed",
+      details: {
+        mode: options?.full ? "full" : "incremental",
+        updated_since: updatedSince ?? null,
+      },
     },
   });
 
@@ -86,13 +250,28 @@ export async function runHrisStaffSync(options?: {
 
   try {
     for await (const batch of client.iterateStaff({
-      updated_since: options?.updatedSince,
+      updated_since: updatedSince,
       status: undefined,
     })) {
       for (const record of batch) {
         checkedCount++;
         try {
-          const outcome = await upsertStaffFromHris(record);
+          const plan = await loadSyncContext(record);
+          if (plan.action === "failed" || plan.action === "ambiguous") {
+            failedCount++;
+            errors.push(`${record.id}: ${plan.reason ?? plan.action}`);
+            continue;
+          }
+          if (plan.action === "unchanged") continue;
+
+          const outletId = await resolveOutletId(record.outlet.id);
+          if (!outletId) {
+            failedCount++;
+            errors.push(`${record.id}: outlet belum dimapping`);
+            continue;
+          }
+
+          const outcome = await applySyncPlanItem(plan, record, outletId);
           if (outcome === "created") createdCount++;
           if (outcome === "updated") updatedCount++;
           if (outcome === "deactivated") deactivatedCount++;
@@ -104,8 +283,6 @@ export async function runHrisStaffSync(options?: {
         }
       }
     }
-
-    await backfillUnlinkedStaff(errors);
 
     const status =
       failedCount === 0 ? "success" : checkedCount > failedCount ? "partial" : "failed";
@@ -121,7 +298,11 @@ export async function runHrisStaffSync(options?: {
         deactivatedCount,
         failedCount,
         errorSummary: errors.slice(0, 20).join("; ") || null,
-        details: { errors: errors.slice(0, 100) },
+        details: {
+          mode: options?.full ? "full" : "incremental",
+          updated_since: updatedSince ?? null,
+          errors: errors.slice(0, 100),
+        },
       },
     });
 
@@ -151,156 +332,11 @@ export async function runHrisStaffSync(options?: {
       },
     });
     throw error;
-  }
-}
-
-async function upsertStaffFromHris(
-  record: HrisStaffRecord,
-): Promise<"created" | "updated" | "deactivated" | "unchanged"> {
-  const hrisStaffId = record.id.trim();
-  const phone = normalizeHrisPhone(record.phone) ?? "";
-  const outletId = await resolveOutletId(record.outlet.id);
-
-  if (!outletId) {
-    throw new Error(`Outlet HRIS ${record.outlet.id} belum dimapping`);
-  }
-
-  if (!phone) {
-    throw new Error("Nomor WhatsApp kosong di HRIS");
-  }
-
-  const existing = await prisma.staff.findUnique({
-    where: { hrisStaffId },
-  });
-
-  const data = {
-    name: record.name.trim(),
-    waNumber: phone,
-    outletId,
-    position: resolveTaskPosition(record.position.name),
-    role: mapHrisRole(record.role),
-    status: mapHrisStatus(record.status),
-    hrisStaffId,
-    hrisEmployeeCode: record.employee_code.trim(),
-    hrisOutletCode: record.outlet.id.trim(),
-    hrisDivisionCode: record.division.id.trim(),
-    hrisDivisionName: record.division.name,
-    hrisPositionCode: record.position.id.trim(),
-    hrisPositionName: record.position.name,
-    hrisLinkStatus: "LINKED" as HrisLinkStatus,
-    hrisSyncedAt: new Date(),
-  };
-
-  if (existing) {
-    const wasActive = existing.status === "ACTIVE";
-    await prisma.staff.update({
-      where: { staffId: existing.staffId },
-      data,
-    });
-    if (wasActive && data.status === "INACTIVE") return "deactivated";
-    return "updated";
-  }
-
-  const localMatches = await prisma.staff.findMany({
-    where: {
-      hrisStaffId: null,
-      outletId,
-      waNumber: phone,
-    },
-  });
-
-  if (localMatches.length === 1) {
-    await prisma.staff.update({
-      where: { staffId: localMatches[0].staffId },
-      data,
-    });
-    return "updated";
-  }
-
-  if (localMatches.length > 1) {
-    throw new Error("Beberapa staf lokal cocok WA+outlet — perlu review manual");
-  }
-
-  await prisma.staff.create({
-    data: {
-      staffId: generateStaffId(),
-      loginEnabled: false,
-      areaId: null,
-      ...data,
-    },
-  });
-
-  return "created";
-}
-
-async function backfillUnlinkedStaff(errors: string[]): Promise<void> {
-  const unlinked = await prisma.staff.findMany({
-    where: {
-      hrisStaffId: null,
-      hrisLinkStatus: { in: ["UNLINKED", "AMBIGUOUS"] },
-    },
-    include: { outlet: true },
-  });
-
-  for (const staff of unlinked) {
-    const candidates: string[] = [];
-
-    if (staff.hrisEmployeeCode) {
-      const byCode = await prisma.staff.findMany({
-        where: { hrisStaffId: staff.hrisEmployeeCode },
-        select: { staffId: true },
-      });
-      if (byCode.length === 1 && byCode[0].staffId === staff.staffId) {
-        await markLinked(staff.staffId, staff.hrisEmployeeCode);
-        continue;
-      }
+  } finally {
+    if (lockHeld) {
+      await releaseHrisSyncLock();
     }
-
-    const normalizedWa = normalizeHrisPhone(staff.waNumber);
-    if (normalizedWa) {
-      const matches = await prisma.staff.findMany({
-        where: {
-          waNumber: normalizedWa,
-          outletId: staff.outletId,
-          hrisStaffId: null,
-        },
-      });
-
-      if (matches.length === 1 && matches[0].staffId === staff.staffId) {
-        await prisma.staff.update({
-          where: { staffId: staff.staffId },
-          data: { hrisLinkStatus: "MANUAL_REVIEW" },
-        });
-        continue;
-      }
-
-      if (matches.length > 1) {
-        await prisma.staff.update({
-          where: { staffId: staff.staffId },
-          data: { hrisLinkStatus: "AMBIGUOUS" },
-        });
-        errors.push(`${staff.staffId}: mapping ambigu (WA + outlet)`);
-        continue;
-      }
-    }
-
-    await prisma.staff.update({
-      where: { staffId: staff.staffId },
-      data: { hrisLinkStatus: "UNLINKED" },
-    });
   }
-}
-
-async function markLinked(staffId: string, hrisStaffId: string) {
-  await prisma.staff.update({
-    where: { staffId },
-    data: {
-      hrisStaffId,
-      hrisEmployeeCode: hrisStaffId,
-      hrisLinkStatus: "LINKED",
-      hrisSyncedAt: new Date(),
-    },
-  });
 }
 
 export async function manuallyLinkStaffToHris(
@@ -313,26 +349,65 @@ export async function manuallyLinkStaffToHris(
     throw new HrisApiError("Staf HRIS tidak ditemukan", "HRIS_STAFF_NOT_FOUND", 404);
   }
 
-  const conflict = await prisma.staff.findFirst({
-    where: { hrisStaffId, NOT: { staffId } },
-    select: { staffId: true },
-  });
-  if (conflict) {
-    throw new HrisApiError(
-      "NIK HRIS sudah terhubung ke staf lain",
-      "HRIS_STAFF_CONFLICT",
-      409,
-    );
-  }
+  await prisma.$transaction(async (tx) => {
+    const local = await tx.staff.findUnique({
+      where: { staffId },
+      select: STAFF_SELECT,
+    });
+    if (!local) {
+      throw new HrisApiError("Staf lokal tidak ditemukan", "NOT_FOUND", 404);
+    }
 
-  await upsertStaffFromHris(remote);
-  await prisma.staff.update({
-    where: { staffId },
-    data: {
-      hrisStaffId: remote.id.trim(),
-      hrisEmployeeCode: remote.employee_code.trim(),
-      hrisLinkStatus: "LINKED",
-      hrisSyncedAt: new Date(),
-    },
+    const conflict = await tx.staff.findFirst({
+      where: {
+        hrisStaffId: remote.id.trim(),
+        NOT: { staffId },
+      },
+      select: { staffId: true },
+    });
+
+    const outletId = await resolveOutletId(remote.outlet.id);
+    const validation = validateManualLink({
+      local,
+      remote,
+      conflictStaffId: conflict?.staffId ?? null,
+      resolvedOutletId: outletId,
+    });
+
+    if (!validation.ok) {
+      throw new HrisApiError(validation.message, validation.code, validation.status);
+    }
+
+    const previousRole = local.role;
+    const previousPosition = local.position;
+
+    await tx.staff.update({
+      where: { staffId },
+      data: buildManualLinkUpdate(local, remote, outletId!),
+    });
+
+    const after = await tx.staff.findUnique({
+      where: { staffId },
+      select: { role: true, position: true, staffId: true },
+    });
+
+    const totalAfter = await tx.staff.count({
+      where: { hrisStaffId: remote.id.trim() },
+    });
+    if (totalAfter !== 1) {
+      throw new HrisApiError(
+        "Manual link gagal — NIK terhubung ke lebih dari satu staf",
+        "HRIS_STAFF_CONFLICT",
+        409,
+      );
+    }
+
+    if (after?.role !== previousRole || after?.position !== previousPosition) {
+      throw new HrisApiError(
+        "Manual link gagal — role/position lokal berubah",
+        "LOCAL_ROLE_CHANGED",
+        500,
+      );
+    }
   });
 }

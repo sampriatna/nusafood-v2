@@ -198,6 +198,7 @@ model Staff {
   hrisPositionName String?        @map("hris_position_name") @db.VarChar(100)
   hrisLinkStatus   HrisLinkStatus @default(UNLINKED) @map("hris_link_status")
   hrisSyncedAt     DateTime?      @map("hris_synced_at") @db.Timestamptz(6)
+  waNeedsCompletion Boolean       @default(false) @map("wa_needs_completion")
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -234,7 +235,18 @@ model HrisSyncLog {
   createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([startedAt(sort: Desc)], map: "idx_hris_sync_logs_started")
+  @@index([status, completedAt(sort: Desc)], map: "idx_hris_sync_logs_success")
   @@map("hris_sync_logs")
+}
+
+/// Distributed lock — cegah cron + manual sync bersamaan
+model HrisSyncLock {
+  id        String   @id @default("global") @db.VarChar(20)
+  lockedBy  String   @map("locked_by") @db.VarChar(100)
+  lockedAt  DateTime @map("locked_at") @db.Timestamptz(6)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@map("hris_sync_locks")
 }
 
 model UserAccount {

@@ -38,3 +38,6 @@ Salin file-file ini ke project Laravel HRIS produksi.
 - Token hanya via header `Authorization: Bearer ...`
 - Field sensitif (password, gaji, no_ktp, foto, lokasi GPS) **tidak** dikirim
 - Rate limit: 120 req/menit per IP
+- **Task Dashboard fase 1 mengabaikan field `role` dari response** — role lokal tidak di-overwrite
+- Validasi production: lihat [`docs/HRIS_LARAVEL_PRODUCTION_CHECKLIST.md`](../../docs/HRIS_LARAVEL_PRODUCTION_CHECKLIST.md)
+- **Jangan anggap repo GitHub identik dengan server production**

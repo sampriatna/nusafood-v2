@@ -18,7 +18,8 @@ export async function getHrisIntegrationStatus(): Promise<HrisIntegrationStatus>
     }),
     prisma.staff.count({ where: { hrisLinkStatus: "MANUAL_REVIEW" } }),
     prisma.hrisSyncLog.findFirst({
-      orderBy: { startedAt: "desc" },
+      where: { status: { in: ["success", "partial"] }, completedAt: { not: null } },
+      orderBy: { completedAt: "desc" },
     }),
   ]);
 

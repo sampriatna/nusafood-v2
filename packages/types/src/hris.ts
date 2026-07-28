@@ -87,3 +87,26 @@ export interface HrisSyncResult {
   failed_count: number;
   errors: string[];
 }
+
+export interface HrisSyncPreviewItem {
+  action: string;
+  hris_staff_id: string;
+  employee_code: string;
+  name: string;
+  local_staff_id?: string;
+  reason?: string;
+  wa_needs_completion?: boolean;
+  preserve_local_role?: boolean;
+}
+
+export interface HrisSyncPreviewResult {
+  dry_run: true;
+  checked_count: number;
+  would_create: HrisSyncPreviewItem[];
+  would_update: HrisSyncPreviewItem[];
+  would_deactivate: HrisSyncPreviewItem[];
+  failed: HrisSyncPreviewItem[];
+  ambiguous: HrisSyncPreviewItem[];
+  unchanged_count: number;
+  incremental_since: string | null;
+}

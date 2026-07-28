@@ -5,37 +5,42 @@ import {
   verifyInternalRequest,
 } from "@/lib/internal-auth";
 import { HrisApiError } from "@/lib/services/hris-api.client";
-import { runHrisStaffSync } from "@/lib/services/hris-staff-sync.service";
+import {
+  getLastSuccessfulSyncTime,
+  previewHrisStaffSync,
+  runHrisStaffSync,
+} from "@/lib/services/hris-staff-sync.service";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-async function runSync(request: Request, actor?: { id: string; name: string }) {
-  let updatedSince: string | undefined;
+type SyncBody = {
+  dry_run?: boolean;
+  full?: boolean;
+  updated_since?: string;
+};
+
+async function parseBody(request: Request): Promise<SyncBody> {
   try {
-    const body = (await request.json()) as { updated_since?: string };
-    updatedSince = body.updated_since;
+    return (await request.json()) as SyncBody;
   } catch {
-    updatedSince = undefined;
+    return {};
   }
-
-  const result = await runHrisStaffSync({
-    updatedSince,
-    triggeredBy: actor?.id ?? "cron",
-    triggeredByName: actor?.name ?? "Scheduled sync",
-  });
-
-  return ok(result);
 }
 
-/** Vercel Cron — GET dengan Bearer CRON_SECRET */
+/** Vercel Cron (UTC): incremental sync sejak sync sukses terakhir. */
 export async function GET(request: Request) {
   if (!verifyInternalRequest(request)) {
     return internalAuthFailure();
   }
 
   try {
-    return await runSync(request);
+    const result = await runHrisStaffSync({
+      full: false,
+      triggeredBy: "cron",
+      triggeredByName: "Vercel cron (incremental, UTC)",
+    });
+    return ok(result);
   } catch (error) {
     if (error instanceof HrisApiError) {
       return fail(error.message, { code: error.code, status: error.status });
@@ -50,16 +55,36 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const isCron = verifyInternalRequest(request);
+  const body = isCron ? {} : await parseBody(request);
 
   if (!isCron) {
     const auth = await requireAuth(["ADMIN"]);
     if (!auth.ok) return auth.response;
 
     try {
-      return await runSync(request, {
-        id: auth.session!.userId,
-        name: auth.session!.userName,
+      if (body.dry_run) {
+        const since =
+          body.full === true
+            ? undefined
+            : (body.updated_since ?? (await getLastSuccessfulSyncTime()));
+        const preview = await previewHrisStaffSync({
+          full: body.full,
+          updatedSince: since,
+        });
+        return ok({
+          dry_run: true as const,
+          incremental_since: since ?? null,
+          ...preview,
+        });
+      }
+
+      const result = await runHrisStaffSync({
+        full: body.full === true,
+        updatedSince: body.updated_since,
+        triggeredBy: auth.session!.userId,
+        triggeredByName: auth.session!.userName,
       });
+      return ok(result);
     } catch (error) {
       if (error instanceof HrisApiError) {
         return fail(error.message, { code: error.code, status: error.status });
@@ -73,7 +98,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    return await runSync(request);
+    const result = await runHrisStaffSync({
+      full: false,
+      triggeredBy: "cron",
+      triggeredByName: "Scheduled sync (incremental)",
+    });
+    return ok(result);
   } catch (error) {
     if (error instanceof HrisApiError) {
       return fail(error.message, { code: error.code, status: error.status });

@@ -16,6 +16,7 @@ ALTER TABLE "staff" ADD COLUMN "hris_position_code" VARCHAR(50);
 ALTER TABLE "staff" ADD COLUMN "hris_position_name" VARCHAR(100);
 ALTER TABLE "staff" ADD COLUMN "hris_link_status" "HrisLinkStatus" NOT NULL DEFAULT 'UNLINKED';
 ALTER TABLE "staff" ADD COLUMN "hris_synced_at" TIMESTAMPTZ(6);
+ALTER TABLE "staff" ADD COLUMN "wa_needs_completion" BOOLEAN NOT NULL DEFAULT false;
 
 CREATE UNIQUE INDEX "staff_hris_staff_id_key" ON "staff"("hris_staff_id");
 CREATE INDEX "idx_staff_hris_employee_code" ON "staff"("hris_employee_code");
@@ -41,3 +42,13 @@ CREATE TABLE "hris_sync_logs" (
 );
 
 CREATE INDEX "idx_hris_sync_logs_started" ON "hris_sync_logs"("started_at" DESC);
+CREATE INDEX "idx_hris_sync_logs_success" ON "hris_sync_logs"("status", "completed_at" DESC);
+
+CREATE TABLE "hris_sync_locks" (
+    "id" VARCHAR(20) NOT NULL DEFAULT 'global',
+    "locked_by" VARCHAR(100) NOT NULL,
+    "locked_at" TIMESTAMPTZ(6) NOT NULL,
+    "expires_at" TIMESTAMPTZ(6) NOT NULL,
+
+    CONSTRAINT "hris_sync_locks_pkey" PRIMARY KEY ("id")
+);

@@ -1,5 +1,6 @@
 import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
+import { getHrisIntegrationStatus } from "@/lib/services/hris-integration.service";
 import { HrisApiError } from "@/lib/services/hris-api.client";
 import { manuallyLinkStaffToHris } from "@/lib/services/hris-staff-sync.service";
 

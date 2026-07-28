@@ -119,9 +119,21 @@ async function insertTaskToDb(input: {
   if (requestedStaffId) {
     const staff = await prisma.staff.findUnique({
       where: { staffId: requestedStaffId },
-      select: { staffId: true },
+      select: { staffId: true, waNumber: true, waNeedsCompletion: true },
     });
-    staffId = staff?.staffId ?? null;
+    if (!staff) {
+      staffId = null;
+    } else {
+      const { staffWaReadyForAssignment } = await import("@/lib/services/hris-wa");
+      if (!staffWaReadyForAssignment(staff)) {
+        throw new TaskWriteError(
+          "Staf belum memiliki nomor WA valid — lengkapi dari HRIS atau master staff",
+          "STAFF_WA_INCOMPLETE",
+          422,
+        );
+      }
+      staffId = staff.staffId;
+    }
   }
 
   const row = await prisma.task.create({

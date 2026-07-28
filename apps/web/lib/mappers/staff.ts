@@ -26,6 +26,7 @@ export function mapStaffToApi(staff: StaffWithRelations): Staff {
     hris_position_name: staff.hrisPositionName,
     hris_link_status: staff.hrisLinkStatus as Staff["hris_link_status"],
     hris_synced_at: staff.hrisSyncedAt?.toISOString() ?? null,
+    wa_needs_completion: staff.waNeedsCompletion,
     created_at: staff.createdAt.toISOString(),
     updated_at: staff.updatedAt.toISOString(),
   };
