@@ -1,5 +1,6 @@
 import { fail, ok } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
+import { NextResponse } from "next/server";
 import {
   DisciplinaryError,
   acknowledgeLetter,
@@ -41,8 +42,15 @@ export async function POST(request: Request, { params }: Params) {
         return ok(await submitForApproval(id, auth.session));
       case "approve":
         return ok(await approveLetter(id, auth.session));
-      case "send":
-        return ok(await sendLetter(id, auth.session));
+      case "send": {
+        const result = await sendLetter(id, auth.session);
+        return NextResponse.json({
+          success: true,
+          data: result.letter,
+          notify: result.notify,
+          error: null,
+        });
+      }
       case "generate_pdf":
         return ok(await generatePdf(id, auth.session, origin));
       case "acknowledge":

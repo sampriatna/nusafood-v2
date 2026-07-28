@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import type {
   DisciplinaryEvidenceInput,
   DisciplinaryLetter,
+  DisciplinaryNotifyResult,
 } from "@nusafood/types";
 import { AdminPage } from "@/components/admin-page";
 import { PhotoUploader } from "@/components/photo-uploader";
@@ -16,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getLetterPreview } from "@/lib/services/disciplinary-preview";
 
 type ApiResponse<T> =
-  | { success: true; data: T; error: null }
+  | { success: true; data: T; error: null; notify?: DisciplinaryNotifyResult }
   | { success: false; data: null; error: string };
 
 type MeResponse = {
@@ -50,6 +51,9 @@ export default function TeguranDetailPage() {
   const id = params.id;
   const { toast } = useToast();
   const [letter, setLetter] = useState<DisciplinaryLetter | null>(null);
+  const [waNotify, setWaNotify] = useState<DisciplinaryNotifyResult | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -104,6 +108,33 @@ export default function TeguranDetailPage() {
         return;
       }
       setLetter(json.data);
+      if (action === "send" && json.notify) {
+        setWaNotify(json.notify);
+        if (json.notify.gas_sent) {
+          toast({
+            title: "Surat terkirim via WhatsApp",
+            description: `Pesan dikirim ke ${json.notify.employee_wa || "karyawan"}.`,
+          });
+        } else if (json.notify.wa_link) {
+          toast({
+            title: "WA otomatis gagal — kirim manual",
+            description:
+              json.notify.gas_error ||
+              "GAS belum mengirim. Gunakan tombol Kirim WA Manual.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Surat ditandai terkirim, WA gagal",
+            description:
+              json.notify.gas_error === "NO_EMPLOYEE_WA"
+                ? "Nomor WA karyawan tidak ditemukan di data staff."
+                : json.notify.gas_error || "Tidak bisa mengirim WhatsApp.",
+            variant: "destructive",
+          });
+        }
+        return;
+      }
       toast({ title: successTitle });
       if (action === "generate_pdf" && json.data.pdf_url) {
         window.open(json.data.pdf_url, "_blank", "noopener,noreferrer");
@@ -406,15 +437,24 @@ export default function TeguranDetailPage() {
           <Button
             className="w-full"
             disabled={pending || !canSend}
-            onClick={() =>
-              act("send", "Ditandai terkirim di sistem (bukan WA/email)")
-            }
+            onClick={() => act("send", "Surat terkirim")}
           >
-            Kirim Surat
+            Kirim Surat (WhatsApp)
           </Button>
           <p className="text-xs text-muted-foreground">
-            Menandai surat sebagai terkirim di sistem. Belum mengirim WA/email.
+            Mengirim isi surat ke WhatsApp karyawan via GAS. Jika GAS gagal,
+            tersedia link kirim manual.
           </p>
+          {waNotify?.wa_link && !waNotify.gas_sent ? (
+            <a
+              href={waNotify.wa_link}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex text-sm font-medium text-primary underline"
+            >
+              Kirim WA Manual ke {waNotify.employee_wa}
+            </a>
+          ) : null}
           {!hasEvidence ? (
             <p className="text-xs text-amber-800">
               Tambahkan bukti dulu sebelum menandai terkirim.

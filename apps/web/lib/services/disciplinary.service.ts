@@ -7,6 +7,7 @@ import type {
   DisciplinaryLetterLevel,
   DisciplinaryLetterStatus,
   DisciplinaryLetterType,
+  DisciplinarySendResult,
   DisciplinarySourceType,
   DisciplinarySummary,
   DisciplinaryTaskPrefill,
@@ -19,6 +20,7 @@ import {
   buildLetterPreviewText,
   generateDisciplinaryPdfArchive,
 } from "@/lib/services/disciplinary-pdf.service";
+import { notifyEmployeeOnDisciplinaryLetter } from "@/lib/wa-notify-disciplinary";
 
 export class DisciplinaryError extends TaskWriteError {}
 
@@ -764,7 +766,7 @@ export async function generatePdf(
 export async function sendLetter(
   id: string,
   session: SessionPayload | null,
-): Promise<DisciplinaryLetter> {
+): Promise<DisciplinarySendResult> {
   const letter = await prisma.disciplinaryLetter.findUnique({
     where: { id },
     include: includeAll,
@@ -796,21 +798,32 @@ export async function sendLetter(
     );
   }
 
-  // Status-only: tidak mengirim WA/email. Hanya menandai SENT di sistem.
+  const mapped = mapLetter(letter);
+  const notify = await notifyEmployeeOnDisciplinaryLetter(mapped);
+
   const updated = await prisma.disciplinaryLetter.update({
     where: { id },
     data: { status: "SENT", sentAt: new Date() },
     include: includeAll,
   });
-  await addEvent(
-    id,
-    "SENT",
-    session,
-    letter.status,
-    "SENT",
-    "Ditandai terkirim di sistem. Belum mengirim WA/email.",
-  );
-  return mapLetter(updated);
+
+  const eventNote = notify.gas_sent
+    ? "Surat terkirim via WhatsApp (GAS)."
+    : notify.wa_link
+      ? `WA otomatis gagal (${notify.gas_error || "unknown"}). Buka link manual di detail surat.`
+      : `Tidak bisa kirim WA: ${notify.gas_error || "nomor WA karyawan tidak ada"}.`;
+
+  await addEvent(id, "SENT", session, letter.status, "SENT", eventNote);
+
+  const refreshed = await prisma.disciplinaryLetter.findUnique({
+    where: { id },
+    include: includeAll,
+  });
+
+  return {
+    letter: mapLetter(refreshed ?? updated),
+    notify,
+  };
 }
 
 export async function acknowledgeLetter(
