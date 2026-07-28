@@ -11,5 +11,5 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const outlet = searchParams.get("outlet") || undefined;
 
-  return ok(listLeaderMonitorTemplates(outlet));
+  return ok(await listLeaderMonitorTemplates(outlet));
 }

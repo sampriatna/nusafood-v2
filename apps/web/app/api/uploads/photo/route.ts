@@ -2,6 +2,10 @@ import { fail, ok } from "@/lib/api/response";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/require-auth";
 import {
+  OutletAccessError,
+  assertOutletAccess,
+} from "@/lib/outlet-scope";
+import {
   DailyActivityError,
   assertDailyReportUploadToken,
 } from "@/lib/services/daily-activity.service";
@@ -46,10 +50,46 @@ export async function POST(request: Request) {
       });
     }
 
-    // Disciplinary evidence: admin/leader session, no task token required
-    if (context === "disciplinary") {
+    // Admin/leader-only uploads (no public token)
+    if (context === "disciplinary" || context === "before") {
       const auth = await requireAuth(["ADMIN", "LEADER"]);
       if (!auth.ok) return auth.response;
+
+      if (!taskId) {
+        return fail("task_id wajib diisi", {
+          code: "VALIDATION_ERROR",
+          status: 400,
+        });
+      }
+
+      const taskMeta = await prisma.task.findUnique({
+        where: { taskId },
+        include: { outlet: true },
+      });
+      if (!taskMeta) {
+        return fail("Tugas tidak ditemukan", {
+          code: "TASK_NOT_FOUND",
+          status: 404,
+        });
+      }
+
+      if (auth.session && auth.session.userRole === "LEADER") {
+        try {
+          assertOutletAccess(auth.session, {
+            outletId: taskMeta.outletId,
+            outletCode: taskMeta.outlet?.code,
+            outletName: taskMeta.outletName ?? taskMeta.outlet?.name,
+          });
+        } catch (error) {
+          if (error instanceof OutletAccessError) {
+            return fail(error.message, {
+              code: error.code,
+              status: error.status,
+            });
+          }
+          throw error;
+        }
+      }
     } else if (!taskId) {
       return fail("task_id wajib diisi", {
         code: "VALIDATION_ERROR",
@@ -57,7 +97,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // Staff uploads require valid token; before (admin) may omit when AUTH off
+    // Staff uploads require valid token
     if (context === "daily_report") {
       if (!token) {
         return fail("Token tidak valid", {
@@ -76,7 +116,7 @@ export async function POST(request: Request) {
         }
         throw error;
       }
-    } else if (context !== "before" && context !== "disciplinary") {
+    } else if (context !== "disciplinary" && context !== "before") {
       if (!token) {
         return fail("Token tidak valid", {
           code: "INVALID_TOKEN",

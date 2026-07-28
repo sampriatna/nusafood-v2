@@ -1,6 +1,10 @@
 import type { SubmitLeaderMonitorPayload } from "@nusafood/types";
 import { submitLeaderMonitor } from "@/lib/leader-monitoring-store";
 import { requireAuth } from "@/lib/require-auth";
+import {
+  OutletAccessError,
+  assertCreateOutletAllowed,
+} from "@/lib/outlet-scope";
 import { ok, fail } from "@/lib/api/response";
 
 export const dynamic = "force-dynamic";
@@ -11,11 +15,16 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as SubmitLeaderMonitorPayload;
+    const outletId = body.outlet_id || auth.session?.userOutlet || body.outlet_id;
+    if (auth.session && outletId) {
+      assertCreateOutletAllowed(auth.session, outletId);
+    }
+
     const payload: SubmitLeaderMonitorPayload = {
       ...body,
       leader_id: body.leader_id || auth.session?.userId || "LEADER",
       leader_name: body.leader_name || auth.session?.userName || "Leader",
-      outlet_id: body.outlet_id || auth.session?.userOutlet || body.outlet_id,
+      outlet_id: outletId,
     };
 
     const result = await submitLeaderMonitor(payload);
@@ -23,7 +32,10 @@ export async function POST(request: Request) {
       return fail(result.error, { status: 400 });
     }
     return ok(result.data);
-  } catch {
+  } catch (error) {
+    if (error instanceof OutletAccessError) {
+      return fail(error.message, { code: error.code, status: error.status });
+    }
     return fail("Gagal menyimpan checklist leader.", { status: 500 });
   }
 }

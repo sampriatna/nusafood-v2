@@ -19,10 +19,14 @@ export async function POST(request: Request) {
     if (!body.id || !body.follow_up_status) {
       return fail("id dan follow_up_status wajib.", { status: 400 });
     }
-    const result = updateLeaderMonitorFollowUp(body.id, body.follow_up_status, {
-      problem_note: body.problem_note,
-      fix_instruction: body.fix_instruction,
-    });
+    const result = await updateLeaderMonitorFollowUp(
+      body.id,
+      body.follow_up_status,
+      {
+        problem_note: body.problem_note,
+        fix_instruction: body.fix_instruction,
+      },
+    );
     if (!result.success) {
       return fail(result.error, { status: 400 });
     }
