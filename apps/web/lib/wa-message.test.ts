@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DisciplinaryLetter } from "@nusafood/types";
-import { buildDisciplinaryWaMessage, normalizeWa } from "./wa-message";
+import { buildDisciplinaryWaMessage, buildTaskWaMessage, normalizeWa } from "./wa-message";
 
 const sampleLetter: DisciplinaryLetter = {
   id: "abc",
@@ -35,5 +35,20 @@ describe("buildDisciplinaryWaMessage", () => {
     expect(msg).toContain("ST/KBU/2026/07/001");
     expect(msg).toContain("*Budi*");
     expect(msg).toContain("Surat Teguran Level 1");
+  });
+});
+
+describe("buildTaskWaMessage", () => {
+  it("includes task title and report link", () => {
+    const msg = buildTaskWaMessage({
+      task_title: "Bersihkan hood",
+      pic_name: "Andi",
+      deadline: "2026-07-29T10:00:00.000Z",
+      report_link: "https://tugas.nf3.company/report/TASK-1?token=abc",
+      outlet: "KBU",
+    });
+    expect(msg).toContain("Bersihkan hood");
+    expect(msg).toContain("tugas.nf3.company");
+    expect(msg).toContain("*Andi*");
   });
 });

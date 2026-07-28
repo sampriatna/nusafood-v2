@@ -89,3 +89,25 @@ export function buildDisciplinaryWaMessage(letter: DisciplinaryLetter): string {
 
   return lines.join("\n");
 }
+
+export function buildTaskWaMessage(input: {
+  task_title: string;
+  pic_name: string;
+  deadline: string;
+  report_link: string;
+  outlet?: string;
+}): string {
+  const lines = [
+    `📋 *Tugas Baru*`,
+    ``,
+    `Halo *${input.pic_name}*,`,
+    `Anda mendapat tugas baru:`,
+    ``,
+    `*${input.task_title}*`,
+  ];
+  if (input.outlet) lines.push(`Outlet: ${input.outlet}`);
+  lines.push(`Deadline: ${input.deadline}`);
+  lines.push(``, `Link laporan:`, input.report_link);
+  lines.push(``, `Mohon segera dikerjakan. Terima kasih.`);
+  return lines.join("\n");
+}

@@ -196,7 +196,7 @@ export async function generateRecurringTasks(input?: {
           task_id: gen.task.task_id,
         });
       } else {
-        const task = await createTask({
+        const { task } = await createTask({
           outlet: tpl.outlet.code,
           area: tpl.area?.name ?? "",
           category: tpl.category?.name ?? "",

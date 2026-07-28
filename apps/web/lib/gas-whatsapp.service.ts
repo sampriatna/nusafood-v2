@@ -85,3 +85,42 @@ export async function resendChecklistWhatsApp(taskId: string): Promise<void> {
     throw new Error(gas.error ?? "Gagal kirim ulang WA checklist");
   }
 }
+
+export async function sendTaskWhatsAppViaGas(input: {
+  taskId: string;
+  picWa?: string;
+  outletId?: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!gasWhatsAppEnabled()) {
+    await logSyncOperation({
+      operation: "send_task_wa",
+      entityType: "task",
+      entityId: input.taskId,
+      taskId: input.taskId,
+      outletId: input.outletId,
+      picWa: input.picWa,
+      v2Status: "partial",
+      v2Response: { skipped: true, reason: "GAS_NOT_CONFIGURED" },
+    });
+    return { sent: false, error: "GAS_NOT_CONFIGURED" };
+  }
+
+  const gas = await callGasAction("resendWhatsApp", { task_id: input.taskId });
+
+  await logSyncOperation({
+    operation: "send_task_wa",
+    entityType: "task",
+    entityId: input.taskId,
+    taskId: input.taskId,
+    outletId: input.outletId,
+    picWa: input.picWa,
+    v1Status: gas.success ? "success" : "failed",
+    v2Status: "success",
+    v1Response: gas.raw ?? { error: gas.error },
+    errorMessage: gas.success ? null : (gas.error ?? "GAGAL_KIRIM_WA"),
+  });
+
+  return gas.success
+    ? { sent: true }
+    : { sent: false, error: gas.error ?? "GAGAL_KIRIM_WA" };
+}

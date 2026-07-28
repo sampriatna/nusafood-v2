@@ -142,6 +142,17 @@ export interface CreateTaskPayload {
   before_photo_url?: string;
 }
 
+export interface TaskWaNotifyResult {
+  wa_sent: boolean;
+  wa_error?: string;
+  wa_link?: string;
+}
+
+export interface CreateTaskResult {
+  task: Task;
+  notify: TaskWaNotifyResult;
+}
+
 export interface SubmitReportPayload {
   task_id: string;
   token: string;
