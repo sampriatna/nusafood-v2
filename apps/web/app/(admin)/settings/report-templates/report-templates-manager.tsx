@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -68,7 +77,35 @@ const categories: ReportTemplateCategory[] = [
   "Kendala",
   "Special",
   "General",
+  "Marketing",
+  "Delivery",
+  "Administration",
+  "Monitoring",
+  "Finance",
+  "Purchasing",
 ];
+
+function checklistCount(template: AdminTemplate): number {
+  if (template.checklist_items?.length) return template.checklist_items.length;
+  return template.checklist_item_count ?? 0;
+}
+
+function sortTemplates(items: AdminTemplate[]): AdminTemplate[] {
+  return [...items].sort((a, b) => {
+    const timeA = a.target_time_start || "99:99";
+    const timeB = b.target_time_start || "99:99";
+    if (timeA !== timeB) return timeA.localeCompare(timeB);
+    const orderA = a.sort_order ?? 99;
+    const orderB = b.sort_order ?? 99;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.title.localeCompare(b.title, "id");
+  });
+}
+
+function formatTimeRange(template: AdminTemplate): string | null {
+  if (!template.target_time_start && !template.target_time_end) return null;
+  return `${template.target_time_start || "?"}–${template.target_time_end || "?"}`;
+}
 
 const emptyForm: TemplateForm = {
   title: "",
@@ -109,6 +146,13 @@ export function ReportTemplatesManager({
   const [editing, setEditing] = useState<AdminTemplate | null>(null);
   const [form, setForm] = useState<TemplateForm>(emptyForm);
   const [query, setQuery] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [loadingChecklistId, setLoadingChecklistId] = useState<string | null>(
+    null,
+  );
+  const [checklistCache, setChecklistCache] = useState<
+    Record<string, ReportTemplate["checklist_items"]>
+  >({});
 
   const loadTemplates = useCallback(async () => {
     setIsLoading(true);
@@ -165,15 +209,48 @@ export function ReportTemplatesManager({
       if (bucket) bucket.push(template);
       else groups.set(key, [template]);
     }
-    return [...groups.entries()].sort(([a], [b]) => {
-      if (a === "Semua") return 1;
-      if (b === "Semua") return -1;
-      return getPositionGroupLabel(a).localeCompare(
-        getPositionGroupLabel(b),
-        "id",
-      );
-    });
+    return [...groups.entries()]
+      .map(([position, items]) => [position, sortTemplates(items)] as const)
+      .sort(([a], [b]) => {
+        if (a === "Semua") return 1;
+        if (b === "Semua") return -1;
+        return getPositionGroupLabel(a).localeCompare(
+          getPositionGroupLabel(b),
+          "id",
+        );
+      });
   }, [filteredTemplates]);
+
+  async function toggleChecklist(template: AdminTemplate) {
+    if (expandedId === template.id) {
+      setExpandedId(null);
+      return;
+    }
+
+    setExpandedId(template.id);
+
+    if (checklistCache[template.id]?.length || template.checklist_items?.length) {
+      return;
+    }
+
+    setLoadingChecklistId(template.id);
+    try {
+      const res = await fetch(
+        `/api/staff-reports/templates/${encodeURIComponent(template.id)}`,
+        { credentials: "include" },
+      );
+      const json =
+        (await res.json()) as DailyActivityApiResponse<ReportTemplate>;
+      if (json.success && json.data?.checklist_items) {
+        setChecklistCache((prev) => ({
+          ...prev,
+          [template.id]: json.data!.checklist_items,
+        }));
+      }
+    } finally {
+      setLoadingChecklistId(null);
+    }
+  }
 
   function openCreate() {
     setEditing(null);
@@ -256,6 +333,18 @@ export function ReportTemplatesManager({
 
     if (checklistItems.length === 0) {
       toast({ title: "Minimal 1 checklist item", variant: "destructive" });
+      return;
+    }
+
+    if (
+      form.target_time_start &&
+      form.target_time_end &&
+      form.target_time_end < form.target_time_start
+    ) {
+      toast({
+        title: "Jam selesai tidak boleh sebelum jam mulai",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -388,20 +477,34 @@ export function ReportTemplatesManager({
         </Card>
       ) : (
         <div className="space-y-5">
-          {groupedTemplates.map(([position, items]) => (
+          {groupedTemplates.map(([position, items]) => {
+            const activeCount = items.filter((item) => item.active).length;
+            return (
             <section key={position} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">
-                  {position === "Semua"
-                    ? "Semua posisi"
-                    : getPositionGroupLabel(position)}
-                </h3>
-                <span className="text-xs text-muted-foreground">
-                  {items.length} kegiatan
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-semibold">
+                    {position === "Semua"
+                      ? "Semua posisi"
+                      : getPositionGroupLabel(position)}
+                  </h3>
+                  {position === "Semua" ? (
+                    <Badge variant="secondary">Semua Posisi</Badge>
+                  ) : null}
+                </div>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {activeCount} aktif · {items.length} kegiatan
                 </span>
               </div>
               <div className="space-y-2">
-                {items.map((template) => (
+                {items.map((template) => {
+                  const count = checklistCount(template);
+                  const cachedItems =
+                    checklistCache[template.id] ?? template.checklist_items;
+                  const timeRange = formatTimeRange(template);
+                  const isExpanded = expandedId === template.id;
+
+                  return (
                   <Card
                     key={template.id}
                     className={!template.active ? "opacity-60" : ""}
@@ -412,9 +515,14 @@ export function ReportTemplatesManager({
                           <div className="flex flex-wrap items-center gap-2">
                             <h4 className="font-medium">{template.title}</h4>
                             <Badge variant="outline">{template.category}</Badge>
+                            {!template.position_group ? (
+                              <Badge variant="secondary">Semua Posisi</Badge>
+                            ) : null}
                             {template.is_required_daily ? (
                               <Badge variant="secondary">Wajib</Badge>
-                            ) : null}
+                            ) : (
+                              <Badge variant="outline">Opsional</Badge>
+                            )}
                             {template.requires_photo ? (
                               <Badge variant="outline">Foto</Badge>
                             ) : null}
@@ -422,16 +530,46 @@ export function ReportTemplatesManager({
                           <p className="line-clamp-2 text-sm text-muted-foreground">
                             {template.standard_result || template.description}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            Checklist{" "}
-                            {template.checklist_items?.length ??
-                              template.checklist_item_count ??
-                              0}{" "}
-                            item
-                            {template.target_time_start || template.target_time_end
-                              ? ` · ${template.target_time_start || "?"}-${template.target_time_end || "?"}`
-                              : ""}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            {count > 0 ? (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 text-left hover:text-foreground"
+                                onClick={() => void toggleChecklist(template)}
+                              >
+                                Checklist {count} item
+                                {isExpanded ? (
+                                  <ChevronUp className="size-3" />
+                                ) : (
+                                  <ChevronDown className="size-3" />
+                                )}
+                              </button>
+                            ) : (
+                              <span className="font-medium text-amber-600">
+                                Checklist belum dibuat
+                              </span>
+                            )}
+                            {timeRange ? <span>{timeRange}</span> : null}
+                          </div>
+                          {isExpanded ? (
+                            <div className="rounded-md border bg-muted/30 p-3">
+                              {loadingChecklistId === template.id ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Memuat checklist...
+                                </p>
+                              ) : cachedItems?.length ? (
+                                <ol className="list-decimal space-y-1 pl-4 text-sm">
+                                  {cachedItems.map((item) => (
+                                    <li key={item.id}>{item.item_text}</li>
+                                  ))}
+                                </ol>
+                              ) : (
+                                <p className="text-xs text-amber-600">
+                                  Checklist belum dibuat
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                         {canManage ? (
                           <div className="flex flex-col items-end gap-2">
@@ -451,10 +589,12 @@ export function ReportTemplatesManager({
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             </section>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { getPositionGroupLabel } from "@/lib/position-groups";
-import { listPositionDailyTemplateSummary } from "@/lib/daily-activity-seed";
+import { listPositionDailyTemplateCounts } from "@/lib/daily-activity-seed";
 import type { DailyActivitySetupStats } from "@/lib/services/daily-activity-setup.service";
 
 type Props = {
@@ -25,20 +25,7 @@ type Props = {
   stats: DailyActivitySetupStats;
 };
 
-const catalog = listPositionDailyTemplateSummary().filter((row) =>
-  [
-    "Kasir",
-    "Purchasing",
-    "Gudang",
-    "ProduksiFnB",
-    "ProduksiNF",
-    "Advertising",
-    "AdminMP",
-    "CSNF",
-    "Finance",
-    "Design",
-  ].includes(row.position),
-);
+const positionCounts = listPositionDailyTemplateCounts();
 
 export function DailyActivityAdminPanel({ canManage, stats }: Props) {
   const router = useRouter();
@@ -171,11 +158,13 @@ export function DailyActivityAdminPanel({ canManage, stats }: Props) {
 
       <Card>
         <CardContent className="space-y-3 p-4">
-          <p className="text-sm font-semibold">10 posisi back-office (wajib harian)</p>
+          <p className="text-sm font-semibold">
+            {positionCounts.length} posisi · kegiatan wajib harian
+          </p>
           <div className="flex flex-wrap gap-2">
-            {catalog.map((row) => (
-              <Badge key={row.code} variant="secondary" className="font-normal">
-                {getPositionGroupLabel(row.position)} · {row.checklist_count} item
+            {positionCounts.map((row) => (
+              <Badge key={row.position} variant="secondary" className="font-normal">
+                {getPositionGroupLabel(row.position)} · {row.activities} kegiatan
               </Badge>
             ))}
           </div>

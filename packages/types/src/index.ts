@@ -350,7 +350,13 @@ export type ReportTemplateCategory =
   | "Maintenance"
   | "Kendala"
   | "Special"
-  | "General";
+  | "General"
+  | "Marketing"
+  | "Delivery"
+  | "Administration"
+  | "Monitoring"
+  | "Finance"
+  | "Purchasing";
 
 export type ReportTemplateKind =
   | "daily_required"

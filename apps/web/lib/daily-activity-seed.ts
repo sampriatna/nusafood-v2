@@ -1,23 +1,11 @@
 /** Seed definitions for Daily Activity SOP templates (ported from v1 PR #19). */
 import type { ReportTemplateCategory, ReportTemplateKind } from "@nusafood/types";
+import { DAILY_ACTIVITY_EXTENDED_TEMPLATES } from "./daily-activity-seed-extended";
+import type { DailyActivitySeedDef } from "./daily-activity-seed-types";
 
-export type DailyActivitySeedDef = {
-  code: string;
-  title: string;
-  category: ReportTemplateCategory;
-  position_group: string | null;
-  outlet_code?: string | null;
-  standard_result: string;
-  requires_photo: boolean;
-  is_required_daily: boolean;
-  kind?: ReportTemplateKind;
-  target_time_start?: string;
-  target_time_end?: string;
-  sort_order: number;
-  checklist: string[];
-};
+export type { DailyActivitySeedDef } from "./daily-activity-seed-types";
 
-export const DAILY_ACTIVITY_SEED_TEMPLATES: DailyActivitySeedDef[] = [
+const BASE_DAILY_ACTIVITY_SEED_TEMPLATES: DailyActivitySeedDef[] = [
 
   // —— Waiters (5) ——
   {
@@ -761,17 +749,27 @@ export const DAILY_ACTIVITY_SEED_TEMPLATES: DailyActivitySeedDef[] = [
     category: "Kendala",
     position_group: null,
     outlet_code: null,
-    standard_result: "Kendala tercatat jelas agar leader bisa follow up.",
+    standard_result:
+      "Kendala dicatat dengan informasi yang cukup agar leader dapat memahami, menentukan prioritas, dan menindaklanjuti.",
     requires_photo: false,
     is_required_daily: false,
     kind: "issue_quick",
     sort_order: 99,
     checklist: [
-      "Jenis kendala sudah dipilih di status kondisi",
-      "Lokasi / area kendala sudah jelas di catatan",
-      "Foto diambil jika relevan (opsional)",
+      "Pilih jenis kendala di status kondisi",
+      "Tulis lokasi atau divisi kendala",
+      "Jelaskan masalah secara jelas",
+      "Jelaskan dampak terhadap operasional",
+      "Unggah foto jika kendala berbentuk fisik",
+      "Pilih tingkat prioritas (rendah/sedang/tinggi/darurat)",
+      "Kirim laporan kepada leader",
     ],
   },
+];
+
+export const DAILY_ACTIVITY_SEED_TEMPLATES: DailyActivitySeedDef[] = [
+  ...BASE_DAILY_ACTIVITY_SEED_TEMPLATES,
+  ...DAILY_ACTIVITY_EXTENDED_TEMPLATES,
 ];
 
 /** Ringkasan template wajib per posisi (untuk tampilan admin, tanpa DB). */
@@ -784,4 +782,27 @@ export function listPositionDailyTemplateSummary() {
     title: t.title,
     checklist_count: t.checklist.length,
   }));
+}
+
+/** Agregat jumlah kegiatan wajib per posisi. */
+export function listPositionDailyTemplateCounts() {
+  const counts = new Map<
+    string,
+    { activities: number; checklist_items: number }
+  >();
+
+  for (const template of DAILY_ACTIVITY_SEED_TEMPLATES) {
+    if (!template.position_group || !template.is_required_daily) continue;
+    const current = counts.get(template.position_group) ?? {
+      activities: 0,
+      checklist_items: 0,
+    };
+    current.activities += 1;
+    current.checklist_items += template.checklist.length;
+    counts.set(template.position_group, current);
+  }
+
+  return [...counts.entries()]
+    .map(([position, data]) => ({ position, ...data }))
+    .sort((a, b) => a.position.localeCompare(b.position, "id"));
 }

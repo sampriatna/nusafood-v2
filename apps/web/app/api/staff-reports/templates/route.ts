@@ -7,7 +7,7 @@ import { requireAuth } from "@/lib/require-auth";
 import {
   DailyActivityError,
   createReportTemplate,
-  listReportTemplates,
+  listReportTemplatesForAdmin,
 } from "@/lib/services/daily-activity.service";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export async function GET() {
   if (!auth.ok) return auth.response;
 
   try {
-    const data = await listReportTemplates();
+    const data = await listReportTemplatesForAdmin();
     return ok(data, { total: data.length });
   } catch (error) {
     console.error("[GET /api/staff-reports/templates]", error);

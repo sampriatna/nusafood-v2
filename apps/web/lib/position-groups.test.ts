@@ -18,6 +18,11 @@ describe("position-groups", () => {
     expect(normalizePositionGroup("Produksi FnB")).toBe("ProduksiFnB");
     expect(normalizePositionGroup("Finance")).toBe("Finance");
     expect(normalizePositionGroup("Design / Editor")).toBe("Design");
+    expect(normalizePositionGroup("Supir / Personal Assistant")).toBe("SupirPA");
+    expect(normalizePositionGroup("Maintenance & Kebun")).toBe("MaintenanceKebon");
+    expect(normalizePositionGroup("Leader Outlet")).toBe("LeaderOutlet");
+    expect(normalizePositionGroup("Marketing FnB")).toBe("MarketingFnB");
+    expect(normalizePositionGroup("Marketing NF")).toBe("MarketingNF");
   });
 
   it("resolves staff position for form select", () => {

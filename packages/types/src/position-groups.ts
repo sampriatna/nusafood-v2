@@ -10,6 +10,11 @@ export const REPORT_POSITION_GROUPS = [
   "ProduksiNF",
   "ProduksiFishing",
   "Maintenance",
+  "MaintenanceKebon",
+  "SupirPA",
+  "LeaderOutlet",
+  "MarketingFnB",
+  "MarketingNF",
   "Advertising",
   "AdminMP",
   "CSNF",
@@ -31,6 +36,11 @@ export const POSITION_GROUP_LABELS: Record<ReportPositionGroup, string> = {
   ProduksiNF: "Produksi NF",
   ProduksiFishing: "Produksi Nusa Fishing",
   Maintenance: "Maintenance / Teknisi",
+  MaintenanceKebon: "Maintenance & Kebun",
+  SupirPA: "Supir / Personal Assistant",
+  LeaderOutlet: "Leader Outlet",
+  MarketingFnB: "Marketing FnB",
+  MarketingNF: "Marketing NF",
   Advertising: "Advertising / Marketing",
   AdminMP: "Admin MP",
   CSNF: "CS NF / Customer Service",
@@ -81,6 +91,37 @@ export function normalizePositionGroup(position: string): string {
     ])
   ) {
     return "ProduksiFishing";
+  }
+  if (
+    matchesAny(p, [
+      "maintenance & kebun",
+      "maintenance kebun",
+      "kebun",
+      "taman",
+      "garden",
+    ])
+  ) {
+    return "MaintenanceKebon";
+  }
+  if (
+    matchesAny(p, [
+      "supir",
+      "personal assistant",
+      "driver",
+      "sopir",
+      "pengemudi",
+    ])
+  ) {
+    return "SupirPA";
+  }
+  if (matchesAny(p, ["leader outlet", "leaderoutlet", "kepala outlet"])) {
+    return "LeaderOutlet";
+  }
+  if (matchesAny(p, ["marketing fnb", "marketing f&b", "marketingfnb"])) {
+    return "MarketingFnB";
+  }
+  if (matchesAny(p, ["marketing nf", "marketingnf"])) {
+    return "MarketingNF";
   }
   if (
     matchesAny(p, ["maintenance", "teknisi", "mekanik", "perbaikan", "utility"])
