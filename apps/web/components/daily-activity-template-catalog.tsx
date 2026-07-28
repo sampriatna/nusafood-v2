@@ -1,26 +1,20 @@
 import { CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { getPositionGroupLabel } from "@/lib/position-groups";
-import { listPositionDailyTemplateSummary } from "@/lib/daily-activity-seed";
+import {
+  DAILY_ACTIVITY_SEED_TEMPLATES,
+  listPositionDailyTemplateCounts,
+} from "@/lib/daily-activity-seed";
 
-const rows = listPositionDailyTemplateSummary();
+const positionCounts = listPositionDailyTemplateCounts();
+const requiredCount = DAILY_ACTIVITY_SEED_TEMPLATES.filter(
+  (row) => row.is_required_daily && row.position_group,
+).length;
+const globalCount = DAILY_ACTIVITY_SEED_TEMPLATES.filter(
+  (row) => !row.position_group,
+).length;
 
 export function DailyActivityTemplateCatalog() {
-  const backOffice = rows.filter((r) =>
-    [
-      "Kasir",
-      "Purchasing",
-      "Gudang",
-      "ProduksiFnB",
-      "ProduksiNF",
-      "Advertising",
-      "AdminMP",
-      "CSNF",
-      "Finance",
-      "Design",
-    ].includes(r.position),
-  );
-
   return (
     <Card>
       <CardContent className="space-y-3 p-4">
@@ -29,8 +23,9 @@ export function DailyActivityTemplateCatalog() {
           <div>
             <p className="font-semibold">Template wajib per posisi (di database)</p>
             <p className="text-sm text-muted-foreground">
-              {rows.length} kegiatan wajib — otomatis di-import saat database masih
-              kosong. Tampil di Settings → Template Kegiatan.
+              {requiredCount} kegiatan wajib posisi + {globalCount} kegiatan
+              global — otomatis di-import saat database masih kosong. Tampil di
+              Settings → Template Kegiatan.
             </p>
           </div>
         </div>
@@ -40,24 +35,36 @@ export function DailyActivityTemplateCatalog() {
               <tr>
                 <th className="px-3 py-2 font-medium">Posisi</th>
                 <th className="px-3 py-2 font-medium">Kegiatan wajib</th>
-                <th className="px-3 py-2 font-medium">Checklist</th>
+                <th className="px-3 py-2 font-medium">Total checklist</th>
               </tr>
             </thead>
             <tbody>
-              {backOffice.map((row) => (
-                <tr key={row.code} className="border-t">
+              {positionCounts.map((row) => (
+                <tr key={row.position} className="border-t">
                   <td className="px-3 py-2">
                     {getPositionGroupLabel(row.position)}
                   </td>
-                  <td className="px-3 py-2">{row.title}</td>
-                  <td className="px-3 py-2">{row.checklist_count} item</td>
+                  <td className="px-3 py-2">{row.activities}</td>
+                  <td className="px-3 py-2">{row.checklist_items} item</td>
                 </tr>
               ))}
+              {globalCount > 0 ? (
+                <tr className="border-t bg-muted/20">
+                  <td className="px-3 py-2">Semua posisi</td>
+                  <td className="px-3 py-2">{globalCount}</td>
+                  <td className="px-3 py-2">
+                    {DAILY_ACTIVITY_SEED_TEMPLATES.filter((row) => !row.position_group)
+                      .reduce((sum, row) => sum + row.checklist.length, 0)}{" "}
+                    item
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
         <p className="text-xs text-muted-foreground">
-          Plus template operasional Waiters, Bar, Dapur, PA, dan lapor kendala umum.
+          Termasuk Waiters, Bar, Dapur, PA, Supir/PA, Maintenance & Kebun, Leader
+          Outlet, Marketing FnB/NF, dan posisi back-office.
         </p>
       </CardContent>
     </Card>

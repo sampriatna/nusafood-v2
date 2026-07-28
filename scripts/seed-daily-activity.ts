@@ -60,6 +60,70 @@ function parseTime(value?: string): Date | null {
   return new Date(Date.UTC(1970, 0, 1, hh ?? 0, mm ?? 0, 0));
 }
 
+function normalizeChecklistText(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
+async function syncTemplateChecklist(
+  templateId: string,
+  checklist: string[],
+) {
+  const normalized = checklist.map(normalizeChecklistText).filter(Boolean);
+  if (!normalized.length) return;
+
+  const existingItems = await prisma.reportTemplateChecklistItem.findMany({
+    where: { reportTemplateId: templateId },
+    include: { _count: { select: { answers: true } } },
+  });
+
+  const hasAnswers = existingItems.some((item) => item._count.answers > 0);
+
+  if (!hasAnswers) {
+    await prisma.reportTemplateChecklistItem.deleteMany({
+      where: { reportTemplateId: templateId },
+    });
+    await prisma.reportTemplateChecklistItem.createMany({
+      data: normalized.map((text, index) => ({
+        reportTemplateId: templateId,
+        itemText: text,
+        isRequired: true,
+        sortOrder: index + 1,
+      })),
+    });
+    return;
+  }
+
+  const existingByText = new Map(
+    existingItems.map((item) => [
+      normalizeChecklistText(item.itemText).toLowerCase(),
+      item,
+    ]),
+  );
+
+  for (let index = 0; index < normalized.length; index++) {
+    const text = normalized[index]!;
+    const key = text.toLowerCase();
+    const found = existingByText.get(key);
+    if (found) {
+      if (found.sortOrder !== index + 1) {
+        await prisma.reportTemplateChecklistItem.update({
+          where: { id: found.id },
+          data: { sortOrder: index + 1 },
+        });
+      }
+      continue;
+    }
+    await prisma.reportTemplateChecklistItem.create({
+      data: {
+        reportTemplateId: templateId,
+        itemText: text,
+        isRequired: true,
+        sortOrder: index + 1,
+      },
+    });
+  }
+}
+
 async function main() {
   const outlets = await prisma.outlet.findMany();
   if (!outlets.length) {
@@ -112,20 +176,7 @@ async function main() {
       },
     });
 
-    await prisma.reportTemplateChecklistItem.deleteMany({
-      where: { reportTemplateId: template.id },
-    });
-
-    if (def.checklist.length) {
-      await prisma.reportTemplateChecklistItem.createMany({
-        data: def.checklist.map((text, index) => ({
-          reportTemplateId: template.id,
-          itemText: text,
-          isRequired: true,
-          sortOrder: index + 1,
-        })),
-      });
-    }
+    await syncTemplateChecklist(template.id, def.checklist);
   }
 
   // Demo staff + links

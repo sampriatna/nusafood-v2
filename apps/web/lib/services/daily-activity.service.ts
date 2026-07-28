@@ -178,24 +178,88 @@ export async function listReportTemplatesForAdmin(): Promise<
   }));
 }
 
+function normalizeTitle(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+async function assertUniqueTemplateTitle(
+  title: string,
+  positionGroup: string | null,
+  excludeId?: string,
+) {
+  const normalized = normalizeTitle(title);
+  const existing = await prisma.reportTemplate.findFirst({
+    where: {
+      title: { equals: normalized, mode: "insensitive" },
+      positionGroup: positionGroup ?? null,
+      ...(excludeId ? { NOT: { id: excludeId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    throw new DailyActivityError(
+      "Nama kegiatan sudah ada untuk posisi ini",
+      "DUPLICATE_TEMPLATE_TITLE",
+      409,
+    );
+  }
+}
+
+function assertValidTimeRange(
+  start?: string | null,
+  end?: string | null,
+) {
+  if (!start || !end) return;
+  const startDate = parseTime(start);
+  const endDate = parseTime(end);
+  if (startDate && endDate && endDate < startDate) {
+    throw new DailyActivityError(
+      "Jam selesai tidak boleh sebelum jam mulai",
+      "INVALID_TIME_RANGE",
+      400,
+    );
+  }
+}
+
 export async function createReportTemplate(
   payload: CreateReportTemplatePayload,
 ): Promise<ReportTemplate> {
+  const title = normalizeTitle(payload.title);
   const outletId = await resolveOutletIdByCode(payload.outlet_id ?? null);
+  const positionGroup = payload.position_group || null;
+  assertValidTimeRange(payload.target_time_start, payload.target_time_end);
+  await assertUniqueTemplateTitle(title, positionGroup);
+
+  const checklistItems = (payload.checklist_items ?? [])
+    .map((item, index) => ({
+      itemText: item.item_text.trim().replace(/\s+/g, " "),
+      isRequired: item.is_required !== false,
+      sortOrder: item.sort_order ?? index + 1,
+    }))
+    .filter((i) => i.itemText);
+
+  if (payload.is_required_daily !== false && checklistItems.length === 0) {
+    throw new DailyActivityError(
+      "Kegiatan wajib minimal memiliki satu checklist",
+      "CHECKLIST_REQUIRED",
+      400,
+    );
+  }
+
   const kind: ReportTemplateKind =
     payload.kind ||
     (payload.is_required_daily ? "daily_required" : "special_task");
   const standard =
     (payload.standard_result || payload.description || "").trim() ||
-    payload.title.trim();
+    title;
 
   const created = await prisma.reportTemplate.create({
     data: {
       code: nextTemplateCode(),
-      title: payload.title.trim(),
+      title,
       category: payload.category || "General",
       outletId,
-      positionGroup: payload.position_group || null,
+      positionGroup,
       standardResult: standard,
       description: (payload.description || payload.standard_result || "").trim(),
       requiresPhoto: Boolean(payload.requires_photo),
@@ -205,16 +269,8 @@ export async function createReportTemplate(
       targetTimeEnd: parseTime(payload.target_time_end),
       active: payload.active !== false,
       sortOrder: payload.sort_order ?? 10,
-      items: payload.checklist_items?.length
-        ? {
-            create: payload.checklist_items
-              .map((item, index) => ({
-                itemText: item.item_text.trim(),
-                isRequired: item.is_required !== false,
-                sortOrder: item.sort_order ?? index + 1,
-              }))
-              .filter((i) => i.itemText),
-          }
+      items: checklistItems.length
+        ? { create: checklistItems }
         : undefined,
     },
     include: {
@@ -239,8 +295,32 @@ export async function updateReportTemplate(
     );
   }
 
+  const nextTitle =
+    payload.title !== undefined ? normalizeTitle(payload.title) : existing.title;
+  const nextPositionGroup =
+    payload.position_group !== undefined
+      ? payload.position_group || null
+      : existing.positionGroup;
+  const nextStart =
+    payload.target_time_start !== undefined
+      ? payload.target_time_start
+      : existing.targetTimeStart
+        ? `${String(existing.targetTimeStart.getUTCHours()).padStart(2, "0")}:${String(existing.targetTimeStart.getUTCMinutes()).padStart(2, "0")}`
+        : null;
+  const nextEnd =
+    payload.target_time_end !== undefined
+      ? payload.target_time_end
+      : existing.targetTimeEnd
+        ? `${String(existing.targetTimeEnd.getUTCHours()).padStart(2, "0")}:${String(existing.targetTimeEnd.getUTCMinutes()).padStart(2, "0")}`
+        : null;
+
+  assertValidTimeRange(nextStart, nextEnd);
+  if (payload.title !== undefined || payload.position_group !== undefined) {
+    await assertUniqueTemplateTitle(nextTitle, nextPositionGroup, payload.id);
+  }
+
   const data: Record<string, unknown> = {};
-  if (payload.title !== undefined) data.title = payload.title.trim();
+  if (payload.title !== undefined) data.title = nextTitle;
   if (payload.category !== undefined) data.category = payload.category;
   if (payload.standard_result !== undefined)
     data.standardResult = payload.standard_result.trim();
@@ -269,6 +349,25 @@ export async function updateReportTemplate(
       data,
     });
     if (payload.checklist_items !== undefined) {
+      const items = payload.checklist_items
+        .map((item, index) => ({
+          reportTemplateId: payload.id,
+          itemText: item.item_text.trim().replace(/\s+/g, " "),
+          isRequired: item.is_required !== false,
+          sortOrder: item.sort_order ?? index + 1,
+        }))
+        .filter((i) => i.itemText);
+
+      const isRequiredDaily =
+        payload.is_required_daily ?? existing.isRequiredDaily;
+      if (isRequiredDaily && items.length === 0) {
+        throw new DailyActivityError(
+          "Kegiatan wajib minimal memiliki satu checklist",
+          "CHECKLIST_REQUIRED",
+          400,
+        );
+      }
+
       const oldItems = await tx.reportTemplateChecklistItem.findMany({
         where: { reportTemplateId: payload.id },
         select: { id: true },
@@ -281,14 +380,6 @@ export async function updateReportTemplate(
       await tx.reportTemplateChecklistItem.deleteMany({
         where: { reportTemplateId: payload.id },
       });
-      const items = payload.checklist_items
-        .map((item, index) => ({
-          reportTemplateId: payload.id,
-          itemText: item.item_text.trim(),
-          isRequired: item.is_required !== false,
-          sortOrder: item.sort_order ?? index + 1,
-        }))
-        .filter((i) => i.itemText);
       if (items.length) {
         await tx.reportTemplateChecklistItem.createMany({ data: items });
       }
