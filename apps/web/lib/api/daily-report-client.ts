@@ -142,6 +142,14 @@ async function callLeaderMonitorApi<T>(
       return { success: false, data: null, error: "Sesi telah berakhir. Silakan login kembali." };
     }
 
+    if (response.status === 413) {
+      return {
+        success: false,
+        data: null,
+        error: "Foto terlalu besar. Coba ambil ulang dengan kualitas lebih rendah.",
+      };
+    }
+
     const text = await response.text();
     let result: ApiResponse<T>;
     try {

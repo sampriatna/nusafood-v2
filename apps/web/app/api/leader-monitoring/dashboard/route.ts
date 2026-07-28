@@ -3,7 +3,10 @@ import type {
   LeaderMonitorKind,
   LeaderFollowUpStatus,
 } from "@nusafood/types";
-import { buildLeaderMonitorDashboard } from "@/lib/leader-monitoring-store";
+import {
+  buildLeaderMonitorDashboard,
+  resolveLeaderMonitorOutletFilter,
+} from "@/lib/leader-monitoring-store";
 import { requireAuth } from "@/lib/require-auth";
 import { ok, fail } from "@/lib/api/response";
 
@@ -15,9 +18,13 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
+    const outlet = resolveLeaderMonitorOutletFilter(
+      searchParams.get("outlet"),
+      auth.session,
+    );
     const filters: LeaderMonitorFilters = {
       date: searchParams.get("date") || undefined,
-      outlet: searchParams.get("outlet") || auth.session?.userOutlet || undefined,
+      outlet,
       kind: (searchParams.get("kind") as LeaderMonitorKind | "ALL") || undefined,
       follow_up:
         (searchParams.get("follow_up") as LeaderFollowUpStatus | "ALL") ||

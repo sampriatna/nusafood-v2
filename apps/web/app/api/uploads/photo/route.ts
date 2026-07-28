@@ -42,6 +42,7 @@ export async function POST(request: Request) {
         "checklist_item",
         "daily_report",
         "disciplinary",
+        "leader_monitor",
       ].includes(context)
     ) {
       return fail("context tidak valid", {
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     }
 
     // Admin/leader-only uploads (no public token)
-    if (context === "disciplinary" || context === "before") {
+    if (context === "disciplinary" || context === "before" || context === "leader_monitor") {
       const auth = await requireAuth(["ADMIN", "LEADER"]);
       if (!auth.ok) return auth.response;
 
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
         }
         throw error;
       }
-    } else if (context !== "disciplinary" && context !== "before") {
+    } else if (context !== "disciplinary" && context !== "before" && context !== "leader_monitor") {
       if (!token) {
         return fail("Token tidak valid", {
           code: "INVALID_TOKEN",

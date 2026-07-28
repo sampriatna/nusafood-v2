@@ -14,7 +14,8 @@ export type UploadContext =
   | "after"
   | "checklist_item"
   | "daily_report"
-  | "disciplinary";
+  | "disciplinary"
+  | "leader_monitor";
 
 export interface UploadResult {
   url: string;
