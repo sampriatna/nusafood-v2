@@ -845,6 +845,19 @@ export interface DisciplinaryLetter {
   employee_history_count?: number;
 }
 
+export interface DisciplinaryNotifyResult {
+  gas_sent: boolean;
+  gas_error?: string;
+  employee_wa?: string;
+  wa_link?: string;
+  message: string;
+}
+
+export interface DisciplinarySendResult {
+  letter: DisciplinaryLetter;
+  notify: DisciplinaryNotifyResult;
+}
+
 export interface DisciplinaryEvidenceInput {
   evidence_type: DisciplinaryEvidenceType;
   file_url?: string | null;

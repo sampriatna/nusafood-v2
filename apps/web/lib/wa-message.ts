@@ -1,4 +1,8 @@
-import type { ReportConditionStatus } from "@nusafood/types";
+import type {
+  DisciplinaryLetter,
+  ReportConditionStatus,
+} from "@nusafood/types";
+import { getLetterPreview } from "@/lib/services/disciplinary-preview";
 
 export function normalizeWa(wa: string): string {
   const digits = (wa || "").replace(/\D/g, "");
@@ -57,4 +61,31 @@ export function buildWaMeLink(waNumber: string, message: string): string {
   const wa = normalizeWa(waNumber);
   if (!wa) return "";
   return `https://wa.me/${wa}?text=${encodeURIComponent(message)}`;
+}
+
+export function buildDisciplinaryWaMessage(letter: DisciplinaryLetter): string {
+  const kind =
+    letter.type === "TEGURAN"
+      ? `Surat Teguran Level ${letter.level}`
+      : `Surat Peringatan ${letter.level}`;
+
+  const lines = [
+    `📋 *${kind}*`,
+    `Nomor: ${letter.letter_number}`,
+    `Karyawan: *${letter.employee_name_snapshot}*`,
+    `Outlet: ${letter.outlet_name_snapshot}`,
+    ``,
+    getLetterPreview(letter),
+  ];
+
+  if (letter.pdf_url) {
+    lines.push(``, `Preview surat: ${letter.pdf_url}`);
+  }
+
+  lines.push(
+    ``,
+    `Mohon baca dan lakukan perbaikan sesuai instruksi. Terima kasih.`,
+  );
+
+  return lines.join("\n");
 }
