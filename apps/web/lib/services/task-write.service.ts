@@ -787,43 +787,57 @@ export async function submitTaskReport(input: {
   return mapTaskToApi(updated);
 }
 
-export async function resendWhatsApp(taskId: string): Promise<void> {
-  const task = await prisma.task.findUnique({ where: { taskId } });
+export async function resendWhatsApp(taskId: string): Promise<{
+  auto_sent: boolean;
+  wa_link: string;
+  error?: string;
+}> {
+  const task = await prisma.task.findUnique({
+    where: { taskId },
+    include: { outlet: true },
+  });
   if (!task) {
     throw new TaskWriteError("Tugas tidak ditemukan", "TASK_NOT_FOUND", 404);
   }
 
-  if (!isGasEnabled()) {
-    throw new TaskWriteError(
-      "WhatsApp masih via GAS — konfigurasi GAS_WEB_APP_URL dulu",
-      "GAS_NOT_CONFIGURED",
-      503,
-    );
-  }
-
-  const gas = await callGasAction("resendWhatsApp", { task_id: taskId });
-  await logSyncOperation({
-    operation: "resend_wa",
-    entityType: "task",
-    entityId: taskId,
-    v1Status: gas.success ? "success" : "failed",
-    v2Status: "success",
-    v1Response: gas.raw ?? { error: gas.error },
-    errorMessage: gas.success ? null : gas.error,
+  const message = buildTaskWaMessage({
+    task_title: task.taskTitle,
+    pic_name: task.picName,
+    deadline: task.deadline.toISOString(),
+    report_link: buildReportLink(task.taskId, task.token),
+    outlet: task.outletName || task.outlet?.name,
   });
 
-  if (!gas.success) {
-    throw new TaskWriteError(
-      gas.error ?? "Gagal kirim ulang WhatsApp",
-      "GAS_WA_FAILED",
-      502,
-    );
+  const { deliverWhatsApp } = await import("@/lib/services/whatsapp.service");
+  const result = await deliverWhatsApp({
+    to: task.picWa,
+    message,
+    gas: {
+      action: "resendWhatsApp",
+      payload: { task_id: taskId },
+    },
+    log: {
+      operation: "resend_wa",
+      entityType: "task",
+      entityId: taskId,
+      taskId,
+      outletId: task.outletId,
+      picWa: task.picWa,
+    },
+  });
+
+  if (result.auto_sent) {
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { waSentAt: new Date(), gasSyncedAt: new Date() },
+    });
   }
 
-  await prisma.task.update({
-    where: { id: task.id },
-    data: { waSentAt: new Date(), gasSyncedAt: new Date() },
-  });
+  return {
+    auto_sent: result.auto_sent,
+    wa_link: result.wa_link,
+    error: result.error,
+  };
 }
 
 export async function deleteTask(

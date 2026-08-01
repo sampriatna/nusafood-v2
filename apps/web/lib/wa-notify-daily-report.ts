@@ -1,3 +1,4 @@
+import { shouldTryGasDelivery } from "@/lib/services/whatsapp.service";
 import type { ReportConditionStatus, Staff } from "@nusafood/types";
 import { listStaff } from "@/lib/services/staff.service";
 import {
@@ -41,6 +42,10 @@ async function tryGasNotify(payload: Record<string, unknown>): Promise<{
   sent: boolean;
   error?: string;
 }> {
+  if (!shouldTryGasDelivery()) {
+    return { sent: false, error: "WA_PROVIDER_WAME" };
+  }
+
   const gasUrl = process.env.GAS_WEB_APP_URL;
   const adminApiKey = process.env.ADMIN_API_KEY;
   if (!gasUrl || !adminApiKey) {

@@ -111,3 +111,25 @@ export function buildTaskWaMessage(input: {
   lines.push(``, `Mohon segera dikerjakan. Terima kasih.`);
   return lines.join("\n");
 }
+
+export function buildChecklistWaMessage(input: {
+  pic_name: string;
+  report_link: string;
+  template_title?: string;
+  deadline?: string;
+  outlet?: string;
+}): string {
+  const lines = [
+    `📋 *Checklist Harian*`,
+    ``,
+    `Halo *${input.pic_name}*,`,
+  ];
+  if (input.template_title) {
+    lines.push(`Checklist: *${input.template_title}*`);
+  }
+  if (input.outlet) lines.push(`Outlet: ${input.outlet}`);
+  if (input.deadline) lines.push(`Deadline: ${input.deadline}`);
+  lines.push(``, `Link checklist:`, input.report_link);
+  lines.push(``, `Mohon segera dikerjakan. Terima kasih.`);
+  return lines.join("\n");
+}
