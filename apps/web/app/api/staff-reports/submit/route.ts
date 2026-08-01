@@ -84,9 +84,30 @@ export async function POST(request: Request) {
       return fail(error.message, { code: error.code, status: error.status });
     }
     console.error("[POST /api/staff-reports/submit]", error);
-    return fail("Gagal submit kegiatan", {
-      code: "DAILY_REPORT_SUBMIT_FAILED",
-      status: 500,
-    });
+    const message =
+      error instanceof Error ? error.message : String(error ?? "");
+    const looksLikeMissingSchema =
+      /does not exist|P2021|P2022|relation .* does not exist|column .* does not exist/i.test(
+        message,
+      );
+    const looksLikeTxPool =
+      /P2028|Transaction not found|Unable to start a transaction|transaction.*timeout|prepared statement/i.test(
+        message,
+      );
+    return fail(
+      looksLikeMissingSchema
+        ? "Gagal submit kegiatan — jalankan migrasi DB (pnpm db:migrate:deploy)"
+        : looksLikeTxPool
+          ? "Gagal submit kegiatan — koneksi database pooler. Coba lagi sebentar."
+          : "Gagal submit kegiatan",
+      {
+        code: looksLikeMissingSchema
+          ? "DAILY_REPORT_SCHEMA_MISSING"
+          : looksLikeTxPool
+            ? "DAILY_REPORT_TX_FAILED"
+            : "DAILY_REPORT_SUBMIT_FAILED",
+        status: 500,
+      },
+    );
   }
 }
