@@ -135,7 +135,11 @@ export function TaskDetailClient({
   async function postAction(
     path: string,
     body?: object,
-  ): Promise<{ success: boolean; error?: string; data?: Task }> {
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    data?: Task & { auto_sent?: boolean; wa_link?: string };
+  }> {
     const res = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -145,7 +149,7 @@ export function TaskDetailClient({
     const json = (await res.json()) as {
       success: boolean;
       error?: string;
-      data?: Task;
+      data?: Task & { auto_sent?: boolean; wa_link?: string };
     };
     return json;
   }
@@ -218,21 +222,30 @@ export function TaskDetailClient({
       const result = await postAction(path);
       if (!result.success) {
         const raw = result.error || "Terjadi kesalahan";
-        const friendly =
-          raw.includes("ADMIN_SECRET") || raw.includes("GAS_")
-            ? "Gagal kirim ulang WA. Cek konfigurasi GAS_WEB_APP_URL / ADMIN_API_KEY."
-            : raw;
         toast({
           title: "Gagal mengirim ulang",
-          description: friendly,
+          description: raw,
           variant: "destructive",
         });
         return;
       }
-      toast({
-        title: "WhatsApp Dikirim Ulang",
-        description: "Notifikasi sedang diproses",
-      });
+
+      const data = result.data;
+      if (data?.wa_link && !data.auto_sent) {
+        window.open(data.wa_link, "_blank", "noopener,noreferrer");
+        toast({
+          title: "Buka WhatsApp",
+          description:
+            "GAS tidak tersedia — pesan siap dikirim via wa.me. Tekan kirim di WhatsApp.",
+        });
+      } else {
+        toast({
+          title: data?.auto_sent ? "WhatsApp Dikirim Ulang" : "Link WA siap",
+          description: data?.auto_sent
+            ? "Notifikasi sedang diproses"
+            : "Gunakan link wa.me jika perlu",
+        });
+      }
       refreshFromServer();
     });
   }

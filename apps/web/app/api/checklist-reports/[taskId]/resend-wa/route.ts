@@ -17,8 +17,14 @@ export async function POST(_request: Request, { params }: Params) {
   try {
     const { taskId } = await params;
     await assertTaskOutletAccess(auth.session!, taskId);
-    await resendChecklistWhatsApp(taskId);
-    return ok({ task_id: taskId, resent: true });
+    const result = await resendChecklistWhatsApp(taskId);
+    return ok({
+      task_id: taskId,
+      auto_sent: result.auto_sent,
+      wa_link: result.wa_link,
+      error: result.error,
+      resent: result.auto_sent,
+    });
   } catch (error) {
     if (error instanceof OutletAccessError) {
       return fail(error.message, { code: error.code, status: error.status });

@@ -1,12 +1,13 @@
+import {
+  deliverWhatsApp,
+  shouldTryGasDelivery,
+} from "@/lib/services/whatsapp.service";
 import type {
   DisciplinaryLetter,
   DisciplinaryNotifyResult,
 } from "@nusafood/types";
 import { logSyncOperation } from "@/lib/services/dual-write.service";
-import {
-  callGasAction,
-  isGasEnabled,
-} from "@/lib/services/gas-adapter.service";
+import { isGasEnabled } from "@/lib/services/gas-adapter.service";
 import { getStaffById } from "@/lib/services/staff.service";
 import {
   buildDisciplinaryWaMessage,
@@ -23,6 +24,7 @@ async function tryGasSendDisciplinary(input: {
   employeeWa: string;
   message: string;
 }): Promise<{ sent: boolean; error?: string; action?: string }> {
+  const { callGasAction } = await import("@/lib/services/gas-adapter.service");
   const basePayload = {
     letter_id: input.letter.id,
     letter_number: input.letter.letter_number,
@@ -34,16 +36,18 @@ async function tryGasSendDisciplinary(input: {
     level: input.letter.level,
   };
 
-  // Action khusus (jika sudah ditambahkan di GAS v1)
   const dedicated = await callGasAction("sendDisciplinaryWhatsApp", basePayload);
   if (dedicated.success) {
     return { sent: true, action: "sendDisciplinaryWhatsApp" };
   }
   if (!isUnknownGasAction(dedicated.error)) {
-    return { sent: false, error: dedicated.error, action: "sendDisciplinaryWhatsApp" };
+    return {
+      sent: false,
+      error: dedicated.error,
+      action: "sendDisciplinaryWhatsApp",
+    };
   }
 
-  // Fallback: reuse action kendala daily report yang sudah ada di GAS v1
   const fallback = await callGasAction("notifyDailyReportIssue", {
     staff_id: input.letter.employee_id,
     staff_name: input.letter.employee_name_snapshot,
@@ -96,49 +100,52 @@ export async function notifyEmployeeOnDisciplinaryLetter(
     };
   }
 
-  let gas_sent = false;
-  let gas_error: string | undefined;
-
-  if (isGasEnabled()) {
-    const gas = await tryGasSendDisciplinary({
-      letter,
-      employeeWa,
+  if (!shouldTryGasDelivery() || !isGasEnabled()) {
+    await deliverWhatsApp({
+      to: waRaw,
       message,
-    });
-    gas_sent = gas.sent;
-    gas_error = gas.sent ? undefined : gas.error || "GAS_REJECTED";
-
-    await logSyncOperation({
-      operation: "send_disciplinary_wa",
-      entityType: "disciplinary_letter",
-      entityId: letter.id,
-      picWa: employeeWa,
-      v1Status: gas_sent ? "success" : "failed",
-      v2Status: "success",
-      v1Response: { action: gas.action, error: gas.error },
-      errorMessage: gas_sent ? null : gas_error ?? "GAGAL_KIRIM_WA",
-      v2Response: {
-        letter_number: letter.letter_number,
-        employee_id: letter.employee_id,
-        gas_action: gas.action,
+      log: {
+        operation: "send_disciplinary_wa",
+        entityType: "disciplinary_letter",
+        entityId: letter.id,
+        picWa: employeeWa,
       },
     });
-  } else {
-    gas_error = "GAS_NOT_CONFIGURED";
-    await logSyncOperation({
-      operation: "send_disciplinary_wa",
-      entityType: "disciplinary_letter",
-      entityId: letter.id,
-      picWa: employeeWa,
-      v2Status: "partial",
-      v2Response: { skipped: true, reason: "GAS_NOT_CONFIGURED" },
-      errorMessage: gas_error,
-    });
+    return {
+      gas_sent: false,
+      gas_error: isGasEnabled() ? "WA_PROVIDER_WAME" : "GAS_NOT_CONFIGURED",
+      employee_wa: employeeWa,
+      wa_link,
+      message,
+    };
   }
 
+  const gas = await tryGasSendDisciplinary({
+    letter,
+    employeeWa,
+    message,
+  });
+
+  await logSyncOperation({
+    operation: "send_disciplinary_wa",
+    entityType: "disciplinary_letter",
+    entityId: letter.id,
+    picWa: employeeWa,
+    v1Status: gas.sent ? "success" : "failed",
+    v2Status: gas.sent ? "success" : "partial",
+    v1Response: { action: gas.action, error: gas.error },
+    errorMessage: gas.sent ? null : gas.error ?? "GAGAL_KIRIM_WA",
+    v2Response: {
+      letter_number: letter.letter_number,
+      employee_id: letter.employee_id,
+      gas_action: gas.action,
+      wa_link,
+    },
+  });
+
   return {
-    gas_sent,
-    gas_error,
+    gas_sent: gas.sent,
+    gas_error: gas.sent ? undefined : gas.error || "GAS_REJECTED",
     employee_wa: employeeWa,
     wa_link,
     message,
