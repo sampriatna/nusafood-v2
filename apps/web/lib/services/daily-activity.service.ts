@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import type {
   CreateReportTemplatePayload,
   DailyReportDashboardData,
@@ -16,6 +16,7 @@ import type {
   UpdateReportTemplatePayload,
 } from "@nusafood/types";
 import { prisma } from "@/lib/db";
+import { todayKeyInAppTz } from "@/lib/format-datetime";
 import {
   mapDailySubmission,
   mapReportTemplate,
@@ -28,8 +29,9 @@ export { normalizePositionGroup };
 
 export class DailyActivityError extends TaskWriteError {}
 
-function todayISO(d = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Tanggal operasional WIB (bukan timezone server Vercel/UTC). */
+function todayISO(): string {
+  return todayKeyInAppTz();
 }
 
 function parseDateOnly(iso: string): Date {
@@ -674,62 +676,64 @@ export async function submitDailyReport(input: {
   const today = parseDateOnly(todayISO());
   const now = new Date();
 
-  const submission = await prisma.$transaction(async (tx) => {
-    const upserted = await tx.dailyReportSubmission.upsert({
-      where: {
-        staffId_reportTemplateId_reportDate: {
-          staffId: staff.staff_id,
-          reportTemplateId: template.id,
-          reportDate: today,
-        },
-      },
-      create: {
+  // Sequential writes (bukan interactive $transaction): pooler Supabase
+  // transaction mode (port 6543 / pgbouncer) sering timeout pada interactive tx.
+  // Pola sama dengan leader-monitoring.service (create + randomUUID).
+  const upserted = await prisma.dailyReportSubmission.upsert({
+    where: {
+      staffId_reportTemplateId_reportDate: {
         staffId: staff.staff_id,
-        outletId: staffRow.outletId,
         reportTemplateId: template.id,
         reportDate: today,
-        statusCondition: input.status_condition,
-        note,
-        photoUrl: input.photo_url ?? null,
-        submittedAt: now,
       },
-      update: {
-        statusCondition: input.status_condition,
-        note,
-        photoUrl: input.photo_url ?? undefined,
-        submittedAt: now,
-        leaderValidation: null,
-        leaderValidationNote: null,
-        leaderValidatedAt: null,
-        leaderValidatedBy: null,
-        leaderValidatedByName: null,
-        leaderValidationPhotoUrl: null,
-      },
-    });
+    },
+    create: {
+      staffId: staff.staff_id,
+      outletId: staffRow.outletId,
+      reportTemplateId: template.id,
+      reportDate: today,
+      statusCondition: input.status_condition,
+      note,
+      photoUrl: input.photo_url ?? null,
+      submittedAt: now,
+    },
+    update: {
+      statusCondition: input.status_condition,
+      note,
+      photoUrl: input.photo_url ?? undefined,
+      submittedAt: now,
+      leaderValidation: null,
+      leaderValidationNote: null,
+      leaderValidatedAt: null,
+      leaderValidatedBy: null,
+      leaderValidatedByName: null,
+      leaderValidationPhotoUrl: null,
+    },
+  });
 
-    await tx.dailyReportChecklistAnswer.deleteMany({
-      where: { submissionId: upserted.id },
-    });
+  await prisma.dailyReportChecklistAnswer.deleteMany({
+    where: { submissionId: upserted.id },
+  });
 
-    if (items.length) {
-      await tx.dailyReportChecklistAnswer.createMany({
-        data: items.map((item) => ({
-          submissionId: upserted.id,
-          checklistItemId: item.id,
-          checked: Boolean(answerMap.get(item.id)),
-        })),
-      });
-    }
-
-    return tx.dailyReportSubmission.findUniqueOrThrow({
-      where: { id: upserted.id },
-      include: {
-        staff: { include: { outlet: true } },
-        outlet: true,
-        template: true,
-        answers: { include: { item: true } },
-      },
+  if (items.length) {
+    await prisma.dailyReportChecklistAnswer.createMany({
+      data: items.map((item) => ({
+        id: randomUUID(),
+        submissionId: upserted.id,
+        checklistItemId: item.id,
+        checked: Boolean(answerMap.get(item.id)),
+      })),
     });
+  }
+
+  const submission = await prisma.dailyReportSubmission.findUniqueOrThrow({
+    where: { id: upserted.id },
+    include: {
+      staff: { include: { outlet: true } },
+      outlet: true,
+      template: true,
+      answers: { include: { item: true } },
+    },
   });
 
   return mapDailySubmission(submission);
