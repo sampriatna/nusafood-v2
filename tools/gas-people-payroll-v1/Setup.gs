@@ -1,7 +1,7 @@
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('NF People Payroll')
-    .addItem('Setup / Reset Headers', 'setupWorkbook')
+    .addItem('Setup / Migrate Headers', 'setupWorkbook')
     .addSeparator()
     .addItem('Validate Data', 'validateData')
     .addItem('Generate Payroll Preview', 'promptGeneratePayrollPreview')
@@ -23,23 +23,31 @@ function setupWorkbook() {
     if (!hasData) {
       sheet.clearContents();
       sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      sheet.setFrozenRows(1);
-      sheet.autoResizeColumns(1, headers.length);
     } else {
-      const currentHeaders = existing[0].map(String);
-      headers.forEach((h, index) => {
-        if (currentHeaders[index] !== h) {
-          throw new Error('Sheet ' + name + ' sudah berisi data tetapi header tidak sesuai pada kolom ' + (index + 1) + '. Backup dahulu sebelum reset.');
+      const currentHeaders = existing[0].map(String).filter((h, i, arr) => i < arr.length && h !== '');
+      if (currentHeaders.length > headers.length) {
+        throw new Error('Sheet ' + name + ' punya kolom lebih banyak dari schema V1. Backup & review dulu.');
+      }
+      for (let i = 0; i < currentHeaders.length; i++) {
+        if (currentHeaders[i] !== headers[i]) {
+          throw new Error('Sheet ' + name + ' header tidak sesuai pada kolom ' + (i + 1) + '. Tidak ada data yang diubah.');
         }
-      });
+      }
+      if (currentHeaders.length < headers.length) {
+        const missing = headers.slice(currentHeaders.length);
+        sheet.getRange(1, currentHeaders.length + 1, 1, missing.length).setValues([missing]);
+      }
     }
+
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, Math.max(sheet.getLastColumn(), headers.length));
   });
 
   seedCareerMaster_();
   seedPayrollRules_();
   formatWorkbook_();
-  appendAudit_('SETUP', 'WORKBOOK', ss.getId(), null, {version: NFP.VERSION}, 'Setup workbook');
-  SpreadsheetApp.getUi().alert('Setup selesai. Career Master dan Payroll Rules sudah disiapkan.');
+  appendAudit_('SETUP_MIGRATE', 'WORKBOOK', ss.getId(), null, {version: NFP.VERSION}, 'Safe header migration; source rows preserved');
+  SpreadsheetApp.getUi().alert('Setup/migrasi selesai. Data lama tidak dihapus.');
 }
 
 function seedCareerMaster_() {
@@ -52,8 +60,11 @@ function seedCareerMaster_() {
 function seedPayrollRules_() {
   const sheet = getSheet_(NFP.SHEETS.PAYROLL_RULES);
   const current = getRowsAsObjects_(NFP.SHEETS.PAYROLL_RULES);
-  if (current.length) return;
-  sheet.getRange(2, 1, RULE_SEED.length, HEADERS.PAYROLL_RULES.length).setValues(RULE_SEED);
+  const existingKeys = new Set(current.map(r => String(r.key || '').trim()).filter(Boolean));
+  const missing = RULE_SEED.filter(row => !existingKeys.has(String(row[0])));
+  if (missing.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, missing.length, HEADERS.PAYROLL_RULES.length).setValues(missing);
+  }
 }
 
 function formatWorkbook_() {
@@ -90,13 +101,14 @@ function getPayrollRules_() {
     ATTENDANCE_RATE: NFP.DEFAULT_ATTENDANCE_RATE,
     OVERTIME_DIVISOR: NFP.OVERTIME_DIVISOR,
     DEFAULT_WORKWEEK_MODE: NFP.DEFAULT_WORKWEEK_MODE,
+    OVERSTAY_WARNING_MINUTES: 30,
     THR_ENGINE: 'DISABLED'
   };
   rows.forEach(r => {
     if (!r.key) return;
     const key = String(r.key).trim();
     const raw = r.value;
-    if (['BENCHMARK_SHIFTS','ATTENDANCE_RATE','OVERTIME_DIVISOR'].includes(key)) {
+    if (['BENCHMARK_SHIFTS','ATTENDANCE_RATE','OVERTIME_DIVISOR','OVERSTAY_WARNING_MINUTES'].includes(key)) {
       out[key] = normalizeNumber_(raw, out[key]);
     } else {
       out[key] = raw;
@@ -122,7 +134,7 @@ function collectValidationIssues_() {
   const careers = getRowsAsObjects_(NFP.SHEETS.CAREER_MASTER);
   const roster = getRowsAsObjects_(NFP.SHEETS.ROSTER);
   const attendance = getRowsAsObjects_(NFP.SHEETS.ATTENDANCE);
-  const careerMap = mapBy_(careers, r => String(r.code || '').trim());
+  const careerMap = mapBy_(careers, r => String(r.code || '').trim().toUpperCase());
   const activeStaff = {};
 
   employees.forEach((e, i) => {
@@ -130,11 +142,13 @@ function collectValidationIssues_() {
     if (!id) issues.push('EMPLOYEES row ' + (i + 2) + ': staff_id kosong');
     if (id && activeStaff[id]) issues.push('EMPLOYEES: duplicate staff_id ' + id);
     if (id) activeStaff[id] = true;
-    const code = String(e.career_code || '').trim();
+    const code = String(e.career_code || '').trim().toUpperCase();
     if (!code) issues.push('EMPLOYEES ' + id + ': career_code kosong');
     if (code && !careerMap[code]) issues.push('EMPLOYEES ' + id + ': career_code tidak ada di CAREER_MASTER: ' + code);
-    const mode = String(e.workweek_mode || NFP.DEFAULT_WORKWEEK_MODE).trim();
+    const mode = String(e.workweek_mode || NFP.DEFAULT_WORKWEEK_MODE).trim().toUpperCase();
     if (!['5D','6D'].includes(mode)) issues.push('EMPLOYEES ' + id + ': workweek_mode harus 5D/6D');
+    const extraRate = normalizeNumber_(e.extra_hour_rate, 0);
+    if (extraRate < 0) issues.push('EMPLOYEES ' + id + ': extra_hour_rate tidak boleh negatif');
   });
 
   const rosterKeys = {};
@@ -164,6 +178,7 @@ function collectValidationIssues_() {
     if (!['PRESENT','COMPANY_RELEASE','TRAINING','PAID_LEAVE','SICK_PAID','UNPAID_PERMISSION','ABSENT'].includes(status)) {
       issues.push('ATTENDANCE ' + key + ': attendance_status invalid ' + status);
     }
+    if (normalizeNumber_(a.extra_hour_hours, 0) < 0) issues.push('ATTENDANCE ' + key + ': extra_hour_hours tidak boleh negatif');
   });
 
   return issues;
