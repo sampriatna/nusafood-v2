@@ -1,5 +1,5 @@
 const NFP = Object.freeze({
-  VERSION: '1.0.0-sim',
+  VERSION: '1.1.0-sim',
   TIMEZONE: 'Asia/Jakarta',
   BENCHMARK_SHIFTS: 26,
   DEFAULT_ATTENDANCE_RATE: 25000,
@@ -24,7 +24,8 @@ const HEADERS = Object.freeze({
   EMPLOYEES: [
     'staff_id','name','outlet','employment_type','primary_path','career_code',
     'reference_rate_override','base_monthly_override','attendance_rate_override',
-    'overtime_base_monthly','workweek_mode','active','effective_from','approved_by','notes'
+    'overtime_base_monthly','workweek_mode','active','effective_from','approved_by','notes',
+    'extra_hour_rate'
   ],
   CAREER_MASTER: [
     'path','code','stage','level_name','reference_rate','stage_cap','rate_mode',
@@ -38,7 +39,8 @@ const HEADERS = Object.freeze({
   ],
   ATTENDANCE: [
     'date','staff_id','check_in','check_out','effective_minutes','attendance_status',
-    'regular_ot_hours','holiday_ot_hours_override','source','approved_by','notes'
+    'regular_ot_hours','holiday_ot_hours_override','source','approved_by','notes',
+    'extra_hour_hours'
   ],
   HOLIDAYS: [
     'date','holiday_name','is_public_holiday','is_shortest_workday_6d','notes'
@@ -56,7 +58,7 @@ const HEADERS = Object.freeze({
     'reference_rate','stage_cap','scheduled_shift_target','base_credit','attendance_credit',
     'base_master','base_payable','attendance_rate','attendance_pay','regular_ot_hours',
     'regular_ot_pay','holiday_ot_hours','holiday_ot_pay','owner_bonus','thp','warnings',
-    'calculation_trace','generated_at'
+    'calculation_trace','generated_at','extra_hour_hours','extra_hour_rate','extra_hour_pay'
   ],
   AUDIT_LOG: [
     'timestamp','actor','action','entity_type','entity_key','before_json','after_json','notes'
@@ -104,8 +106,9 @@ const RULE_SEED = Object.freeze([
   ['STATUS', NFP.STATUS, 'Output bukan payroll final', '', ''],
   ['BENCHMARK_SHIFTS', NFP.BENCHMARK_SHIFTS, 'Benchmark untuk default Base Master', '', ''],
   ['ATTENDANCE_RATE', NFP.DEFAULT_ATTENDANCE_RATE, 'Default attendance pay per full work credit', '', ''],
-  ['OVERTIME_DIVISOR', NFP.OVERTIME_DIVISOR, 'Hourly overtime base = overtime_base_monthly / divisor', '', ''],
+  ['OVERTIME_DIVISOR', NFP.OVERTIME_DIVISOR, 'Hourly legal overtime base = overtime_base_monthly / divisor', '', ''],
   ['DEFAULT_WORKWEEK_MODE', NFP.DEFAULT_WORKWEEK_MODE, '6D atau 5D', '', ''],
+  ['OVERSTAY_WARNING_MINUTES', 30, 'Warning jika clock-out melewati jadwal tanpa approved extra hour', '', ''],
   ['THR_ENGINE', 'DISABLED', 'THR sengaja tidak dihitung di V1', '', '']
 ]);
 
@@ -133,6 +136,10 @@ function normalizeNumber_(value, fallback) {
 
 function normalizeDateKey_(value) {
   if (!value) return '';
+  if (typeof value === 'string') {
+    const m = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  }
   const d = value instanceof Date ? value : new Date(value);
   if (isNaN(d.getTime())) return '';
   return Utilities.formatDate(d, NFP.TIMEZONE, 'yyyy-MM-dd');
