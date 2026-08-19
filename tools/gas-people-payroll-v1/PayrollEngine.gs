@@ -1,7 +1,9 @@
 function generatePayrollPreview(periodStart, periodEnd) {
   const startKey = normalizeDateKey_(periodStart);
   const endKey = normalizeDateKey_(periodEnd);
-  if (!startKey || !endKey || startKey > endKey) throw new Error('Period invalid. Gunakan YYYY-MM-DD dan pastikan start <= end.');
+  if (!startKey || !endKey || startKey > endKey) {
+    throw new Error('Period invalid. Gunakan YYYY-MM-DD dan pastikan start <= end.');
+  }
 
   const rules = getPayrollRules_();
   const employees = getRowsAsObjects_(NFP.SHEETS.EMPLOYEES).filter(isEmployeeActive_);
@@ -13,7 +15,7 @@ function generatePayrollPreview(periodStart, periodEnd) {
     return normalizeDateKey_(r.period_start) === startKey && normalizeDateKey_(r.period_end) === endKey;
   });
 
-  const careerMap = mapBy_(careers, r => String(r.code || '').trim());
+  const careerMap = mapBy_(careers, r => String(r.code || '').trim().toUpperCase());
   const attendanceMap = mapBy_(attendance, r => normalizeDateKey_(r.date) + '|' + String(r.staff_id || '').trim());
   const holidayMap = mapBy_(holidays.filter(h => normalizeBool_(h.is_public_holiday)), h => normalizeDateKey_(h.date));
   const adjustmentMap = mapBy_(adjustments, a => String(a.staff_id || '').trim());
@@ -25,7 +27,7 @@ function generatePayrollPreview(periodStart, periodEnd) {
   employees.forEach(employee => {
     const staffId = String(employee.staff_id || '').trim();
     const warnings = [];
-    const careerCode = String(employee.career_code || '').trim();
+    const careerCode = String(employee.career_code || '').trim().toUpperCase();
     const career = careerMap[careerCode];
     const adjustment = adjustmentMap[staffId] || {};
     const staffRoster = (rosterByStaff[staffId] || []).sort((a, b) => normalizeDateKey_(a.date).localeCompare(normalizeDateKey_(b.date)));
@@ -43,6 +45,11 @@ function generatePayrollPreview(periodStart, periodEnd) {
     if (scheduledTarget === 0) warnings.push('NO_SCHEDULED_SHIFT_IN_PERIOD');
 
     const attendancePay = roundMoney_(credits.attendanceCredit * payrollProfile.attendanceRate);
+    const extraHourPay = roundMoney_(credits.extraHourHours * payrollProfile.extraHourRate);
+
+    if (credits.extraHourHours > 0 && payrollProfile.extraHourRate <= 0) {
+      warnings.push('EXTRA_HOUR_RATE_MISSING');
+    }
 
     let regularOtPay = calculateRegularOtPay_(credits.regularOtByDay, payrollProfile.overtimeBaseMonthly, rules, warnings);
     let holidayOtPay = calculateHolidayOtPay_(credits.holidayOtByDay, payrollProfile.overtimeBaseMonthly, employee, rules, warnings);
@@ -58,13 +65,22 @@ function generatePayrollPreview(periodStart, periodEnd) {
 
     const ownerBonus = roundMoney_(normalizeNumber_(adjustment.owner_bonus, 0));
     if (ownerBonus !== 0 && !String(adjustment.reason || '').trim()) warnings.push('OWNER_BONUS_WITHOUT_REASON');
-    if ((ownerBonus !== 0 || hasAnyOverride_(adjustment)) && !String(adjustment.approved_by || '').trim()) warnings.push('ADJUSTMENT_WITHOUT_APPROVER');
+    if ((ownerBonus !== 0 || hasAnyOverride_(adjustment)) && !String(adjustment.approved_by || '').trim()) {
+      warnings.push('ADJUSTMENT_WITHOUT_APPROVER');
+    }
 
-    const thp = roundMoney_(basePayable + attendancePay + regularOtPay + holidayOtPay + ownerBonus);
+    const thp = roundMoney_(
+      basePayable + attendancePay + extraHourPay + regularOtPay + holidayOtPay + ownerBonus
+    );
     warningCount += warnings.length;
 
     const trace = {
       simulator_status: NFP.STATUS,
+      anti_gaming: {
+        normal_credit_source: 'OVERLAP_BETWEEN_ROSTER_AND_CLOCK',
+        clock_out_after_schedule_never_creates_extra_hour_automatically: true,
+        extra_hour_requires_explicit_hours_and_approval: true
+      },
       career: {
         code: careerCode,
         stage: career ? normalizeNumber_(career.stage, 0) : '',
@@ -75,6 +91,7 @@ function generatePayrollPreview(periodStart, periodEnd) {
         benchmark_shifts: normalizeNumber_(rules.BENCHMARK_SHIFTS, NFP.BENCHMARK_SHIFTS),
         base_master: payrollProfile.baseMaster,
         attendance_rate: payrollProfile.attendanceRate,
+        extra_hour_rate: payrollProfile.extraHourRate,
         overtime_base_monthly: payrollProfile.overtimeBaseMonthly,
         workweek_mode: String(employee.workweek_mode || rules.DEFAULT_WORKWEEK_MODE || NFP.DEFAULT_WORKWEEK_MODE)
       },
@@ -82,12 +99,14 @@ function generatePayrollPreview(periodStart, periodEnd) {
         scheduled_shift_target: scheduledTarget,
         base_credit: credits.baseCredit,
         attendance_credit: credits.attendanceCredit,
+        extra_hour_hours: credits.extraHourHours,
         regular_ot_hours: credits.regularOtHours,
         holiday_ot_hours: credits.holidayOtHours
       },
       payable: {
         base_payable: basePayable,
         attendance_pay: attendancePay,
+        extra_hour_pay: extraHourPay,
         regular_ot_pay: regularOtPay,
         holiday_ot_pay: holidayOtPay,
         owner_bonus: ownerBonus,
@@ -122,7 +141,10 @@ function generatePayrollPreview(periodStart, periodEnd) {
       thp: thp,
       warnings: warnings.join(' | '),
       calculation_trace: JSON.stringify(trace),
-      generated_at: new Date()
+      generated_at: new Date(),
+      extra_hour_hours: credits.extraHourHours,
+      extra_hour_rate: payrollProfile.extraHourRate,
+      extra_hour_pay: extraHourPay
     });
   });
 
@@ -181,14 +203,13 @@ function resolvePayrollProfile_(employee, career, adjustment, rules, warnings) {
     warnings.push('PERIOD_BASE_MONTHLY_OVERRIDE');
   }
 
-  const overtimeBaseMonthly = normalizeNumber_(employee.overtime_base_monthly, 0);
-
   return {
     referenceRate: roundMoney_(referenceRate),
     stageCap: roundMoney_(stageCap),
     attendanceRate: roundMoney_(attendanceRate),
     baseMaster: roundMoney_(baseMaster),
-    overtimeBaseMonthly: roundMoney_(overtimeBaseMonthly)
+    extraHourRate: roundMoney_(normalizeNumber_(employee.extra_hour_rate, 0)),
+    overtimeBaseMonthly: roundMoney_(normalizeNumber_(employee.overtime_base_monthly, 0))
   };
 }
 
@@ -196,6 +217,7 @@ function calculatePeriodCredits_(employee, staffRoster, attendanceMap, holidayMa
   let scheduledTarget = 0;
   let baseCredit = 0;
   let attendanceCredit = 0;
+  let extraHourHours = 0;
   let regularOtHours = 0;
   let holidayOtHours = 0;
   const regularOtByDay = [];
@@ -209,7 +231,7 @@ function calculatePeriodCredits_(employee, staffRoster, attendanceMap, holidayMa
     const dateKey = normalizeDateKey_(roster.date);
     const attendanceKey = dateKey + '|' + String(employee.staff_id || '').trim();
     const att = attendanceMap[attendanceKey];
-    const scheduledMinutes = normalizeNumber_(roster.scheduled_effective_minutes, 0);
+    const scheduledMinutes = Math.max(0, normalizeNumber_(roster.scheduled_effective_minutes, 0));
 
     if (rosterStatus === 'TRAINING') {
       baseCredit += 1;
@@ -223,8 +245,16 @@ function calculatePeriodCredits_(employee, staffRoster, attendanceMap, holidayMa
     }
 
     const status = String(att.attendance_status || '').trim().toUpperCase();
-    const effectiveMinutes = Math.max(0, normalizeNumber_(att.effective_minutes, 0));
-    const credit = scheduledMinutes > 0 ? Math.min(1, effectiveMinutes / scheduledMinutes) : 0;
+    const clock = calculateClockMetrics_(roster, att, scheduledMinutes);
+    const normalMinutes = clock.hasClockWindow
+      ? clock.normalScheduledMinutes
+      : Math.min(scheduledMinutes, Math.max(0, normalizeNumber_(att.effective_minutes, 0)));
+
+    if (!clock.hasClockWindow && status === 'PRESENT') {
+      warnings.push('CLOCK_WINDOW_MISSING_USING_EFFECTIVE_MINUTES:' + dateKey);
+    }
+
+    const credit = scheduledMinutes > 0 ? Math.min(1, normalMinutes / scheduledMinutes) : 0;
 
     switch (status) {
       case 'PRESENT':
@@ -250,17 +280,46 @@ function calculatePeriodCredits_(employee, staffRoster, attendanceMap, holidayMa
         warnings.push('INVALID_ATTENDANCE_STATUS:' + dateKey + ':' + status);
     }
 
+    // EXTRA HOUR INCENTIVE = kebijakan internal flat per jam.
+    // Tidak pernah dibuat otomatis dari clock-out. Harus ada jam eksplisit + approver.
+    const requestedExtraHours = Math.max(0, normalizeNumber_(att.extra_hour_hours, 0));
+    const approver = String(att.approved_by || '').trim();
+
+    if (requestedExtraHours > 0) {
+      if (!approver) {
+        warnings.push('EXTRA_HOUR_NOT_APPROVED:' + dateKey);
+      } else {
+        extraHourHours += requestedExtraHours;
+        if (clock.hasClockWindow) {
+          const approvedMinutes = requestedExtraHours * 60;
+          if (approvedMinutes > clock.outsideScheduleMinutes + 15) {
+            warnings.push('EXTRA_HOUR_EXCEEDS_CLOCK_OUTSIDE:' + dateKey + ':' + requestedExtraHours + 'h');
+          }
+        } else {
+          warnings.push('EXTRA_HOUR_CLOCK_EVIDENCE_MISSING:' + dateKey);
+        }
+      }
+    }
+
+    const overstayWarningMinutes = normalizeNumber_(rules.OVERSTAY_WARNING_MINUTES, 30);
+    if (clock.hasClockWindow && clock.afterScheduleMinutes >= overstayWarningMinutes && requestedExtraHours <= 0) {
+      warnings.push('CLOCK_OUT_OVERSTAY_NO_APPROVED_EXTRA:' + dateKey + ':' + clock.afterScheduleMinutes + 'm');
+    }
+
+    // Legal regular overtime tetap jalur terpisah.
     const regularHours = Math.max(0, normalizeNumber_(att.regular_ot_hours, 0));
     if (regularHours > 0) {
       regularOtHours += regularHours;
       regularOtByDay.push({date: dateKey, hours: regularHours});
     }
 
+    // Pada hari libur resmi, default jam legal OT hanya dari overlap roster vs clock,
+    // bukan dari lamanya orang sengaja menahan clock-out.
     const holiday = holidayMap[dateKey];
-    if (holiday && ['PRESENT','COMPANY_RELEASE'].includes(status) && effectiveMinutes > 0) {
+    if (holiday && ['PRESENT','COMPANY_RELEASE'].includes(status) && normalMinutes > 0) {
       const holidayHours = hasValue_(att.holiday_ot_hours_override)
         ? Math.max(0, normalizeNumber_(att.holiday_ot_hours_override, 0))
-        : effectiveMinutes / 60;
+        : normalMinutes / 60;
       holidayOtHours += holidayHours;
       holidayOtByDay.push({
         date: dateKey,
@@ -276,11 +335,70 @@ function calculatePeriodCredits_(employee, staffRoster, attendanceMap, holidayMa
     scheduledTarget: scheduledTarget,
     baseCredit: round4_(baseCredit),
     attendanceCredit: round4_(attendanceCredit),
+    extraHourHours: round4_(extraHourHours),
     regularOtHours: round4_(regularOtHours),
     holidayOtHours: round4_(holidayOtHours),
     regularOtByDay: regularOtByDay,
     holidayOtByDay: holidayOtByDay
   };
+}
+
+function calculateClockMetrics_(roster, att, scheduledEffectiveMinutes) {
+  const shiftStart = parseClockMinutes_(roster.scheduled_start);
+  let shiftEnd = parseClockMinutes_(roster.scheduled_end);
+  let checkIn = parseClockMinutes_(att.check_in);
+  let checkOut = parseClockMinutes_(att.check_out);
+
+  if ([shiftStart, shiftEnd, checkIn, checkOut].some(v => v == null)) {
+    return {
+      hasClockWindow: false,
+      normalScheduledMinutes: 0,
+      outsideScheduleMinutes: 0,
+      afterScheduleMinutes: 0
+    };
+  }
+
+  if (shiftEnd <= shiftStart) shiftEnd += 1440;
+  if (checkOut <= checkIn) checkOut += 1440;
+
+  // Align attendance to an overnight roster if needed.
+  if (shiftEnd > 1440 && checkIn < shiftStart - 720) {
+    checkIn += 1440;
+    checkOut += 1440;
+  }
+
+  const overlapStart = Math.max(shiftStart, checkIn);
+  const overlapEnd = Math.min(shiftEnd, checkOut);
+  const rawOverlap = Math.max(0, overlapEnd - overlapStart);
+  const normalScheduledMinutes = Math.min(Math.max(0, scheduledEffectiveMinutes), rawOverlap);
+  const totalClockMinutes = Math.max(0, checkOut - checkIn);
+  const outsideScheduleMinutes = Math.max(0, totalClockMinutes - rawOverlap);
+  const afterScheduleMinutes = Math.max(0, checkOut - shiftEnd);
+
+  return {
+    hasClockWindow: true,
+    normalScheduledMinutes: normalScheduledMinutes,
+    outsideScheduleMinutes: outsideScheduleMinutes,
+    afterScheduleMinutes: afterScheduleMinutes
+  };
+}
+
+function parseClockMinutes_(value) {
+  if (value == null || value === '') return null;
+
+  if (value instanceof Date) {
+    const hhmm = Utilities.formatDate(value, NFP.TIMEZONE, 'HH:mm');
+    const parts = hhmm.split(':').map(Number);
+    return parts[0] * 60 + parts[1];
+  }
+
+  const s = String(value).trim();
+  const match = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
 }
 
 function calculateRegularOtPay_(days, overtimeBaseMonthly, rules, warnings) {
@@ -365,7 +483,7 @@ function isEmployeeActive_(employee) {
 }
 
 function hasValue_(value) {
-  return value !== '' && value != null;
+  return value !== '' && value !== null && value !== undefined;
 }
 
 function hasAnyOverride_(adjustment) {
