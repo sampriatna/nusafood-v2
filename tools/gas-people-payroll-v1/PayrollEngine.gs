@@ -38,9 +38,13 @@ function generatePayrollPreview(periodStart, periodEnd) {
     const credits = calculatePeriodCredits_(employee, staffRoster, attendanceMap, holidayMap, rules, warnings);
 
     const scheduledTarget = credits.scheduledTarget;
-    const basePayable = scheduledTarget > 0
-      ? roundMoney_(payrollProfile.baseMaster * credits.baseCredit / scheduledTarget)
-      : 0;
+    const basePayable = calculateBasePayable_(
+      payrollProfile.baseMaster,
+      payrollProfile.referenceRate,
+      payrollProfile.attendanceRate,
+      scheduledTarget,
+      credits.baseCredit
+    );
 
     if (scheduledTarget === 0) warnings.push('NO_SCHEDULED_SHIFT_IN_PERIOD');
 
@@ -74,12 +78,21 @@ function generatePayrollPreview(periodStart, periodEnd) {
     );
     warningCount += warnings.length;
 
+    const lostBaseCredit = Math.max(0, scheduledTarget - credits.baseCredit);
+    const baseDailyEquivalent = Math.max(0, payrollProfile.referenceRate - payrollProfile.attendanceRate);
+
     const trace = {
       simulator_status: NFP.STATUS,
       anti_gaming: {
         normal_credit_source: 'OVERLAP_BETWEEN_ROSTER_AND_CLOCK',
         clock_out_after_schedule_never_creates_extra_hour_automatically: true,
         extra_hour_requires_explicit_hours_and_approval: true
+      },
+      absence_policy: {
+        mode: 'FIXED_REFERENCE_RATE_EQUIVALENT',
+        base_daily_equivalent: baseDailyEquivalent,
+        attendance_daily_equivalent: payrollProfile.attendanceRate,
+        lost_base_credit: round4_(lostBaseCredit)
       },
       career: {
         code: careerCode,
@@ -211,6 +224,18 @@ function resolvePayrollProfile_(employee, career, adjustment, rules, warnings) {
     extraHourRate: roundMoney_(normalizeNumber_(employee.extra_hour_rate, 0)),
     overtimeBaseMonthly: roundMoney_(normalizeNumber_(employee.overtime_base_monthly, 0))
   };
+}
+
+function calculateBasePayable_(baseMaster, referenceRate, attendanceRate, scheduledTarget, baseCredit) {
+  const target = Math.max(0, normalizeNumber_(scheduledTarget, 0));
+  if (target <= 0) return 0;
+
+  const earnedCredit = Math.min(target, Math.max(0, normalizeNumber_(baseCredit, 0)));
+  const lostBaseCredit = Math.max(0, target - earnedCredit);
+  const baseDailyEquivalent = Math.max(0, normalizeNumber_(referenceRate, 0) - normalizeNumber_(attendanceRate, 0));
+  const payable = normalizeNumber_(baseMaster, 0) - (lostBaseCredit * baseDailyEquivalent);
+
+  return roundMoney_(Math.max(0, payable));
 }
 
 function calculatePeriodCredits_(employee, staffRoster, attendanceMap, holidayMap, rules, warnings) {
