@@ -13,6 +13,13 @@ function runSelfTests() {
     assertEqual_(650000, profile.baseMaster);
   });
 
+  testCase_(results, 'KH absent 1 day cuts fixed 135k total', () => {
+    const basePayable = calculateBasePayable_(2860000, 135000, 25000, 25, 24);
+    const attendancePay = 24 * 25000;
+    assertEqual_(2750000, basePayable);
+    assertEqual_(3350000, basePayable + attendancePay);
+  });
+
   testCase_(results, 'Clock 10-20 against roster 10-20 = full 600 minutes', () => {
     const m = calculateClockMetrics_(
       {scheduled_start: '10:00', scheduled_end: '20:00'},
