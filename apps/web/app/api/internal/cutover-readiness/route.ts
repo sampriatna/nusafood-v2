@@ -78,6 +78,50 @@ export async function GET() {
     detail: `GAS health=${gas}`,
   })
 
+  const leaderTemplateCount = await prisma.leaderMonitorTemplate
+    .count()
+    .catch((error) => {
+      checks.push({
+        id: "leader_monitor_schema",
+        ok: false,
+        detail:
+          error instanceof Error
+            ? `leader_monitor tables: ${error.message}`
+            : "leader_monitor tables missing — jalankan pnpm db:migrate:deploy",
+      })
+      return -1
+    })
+
+  if (leaderTemplateCount >= 0) {
+    checks.push({
+      id: "leader_monitor_schema",
+      ok: true,
+      detail: `leader_monitor_templates OK (${leaderTemplateCount} rows)`,
+    })
+  }
+
+  const disciplinaryCount = await prisma.disciplinaryLetter
+    .count()
+    .catch((error) => {
+      checks.push({
+        id: "disciplinary_schema",
+        ok: false,
+        detail:
+          error instanceof Error
+            ? `disciplinary tables: ${error.message}`
+            : "disciplinary tables missing — jalankan pnpm db:migrate:deploy",
+      })
+      return -1
+    })
+
+  if (disciplinaryCount >= 0) {
+    checks.push({
+      id: "disciplinary_schema",
+      ok: true,
+      detail: `disciplinary_letters OK (${disciplinaryCount} rows)`,
+    })
+  }
+
   const failed = checks.filter((c) => !c.ok).map((c) => c.id)
   const ready = failed.length === 0
 
