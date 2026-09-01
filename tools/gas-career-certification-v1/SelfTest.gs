@@ -9,9 +9,24 @@ function runCareerCertificationSelfTestsNoUi() {
     Object.keys(NF3C.SHEETS).forEach(function(k) { sheet_(NF3C.SHEETS[k]); });
   });
 
-  test('staff master has 30 source people including owner', function() {
+  test('staff master roster changes are preserved without duplicate IDs', function() {
     const staff = readObjects_(NF3C.SHEETS.STAFF, 1).filter(function(r){ return r.staff_id; });
-    if (staff.length !== 30) throw new Error('Expected 30 staff rows, got ' + staff.length);
+    const ids = staff.map(function(r){ return String(r.staff_id); });
+    const unique = new Set(ids);
+    if (unique.size !== ids.length) throw new Error('Duplicate staff_id detected.');
+    if (!findStaff_('SIM-NF3-SAM')) throw new Error('Owner row missing.');
+
+    ['SIM-NF3-INKA','SIM-NF3-RAFI','SIM-NF3-ANGGI'].forEach(function(id) {
+      const row = findStaff_(id);
+      if (!row || String(row.record_status).toUpperCase() === 'EXCLUDED') throw new Error(id + ' must exist as active onboarding staff.');
+    });
+
+    ['SIM-NF3-ZAENUDIN','SIM-NF3-AYU','SIM-NF3-AHMAD'].forEach(function(id) {
+      const row = findStaff_(id);
+      if (!row || String(row.record_status).toUpperCase() !== 'EXCLUDED' || String(row.level_status).toUpperCase() !== 'RESIGNED') {
+        throw new Error(id + ' must remain in history as resigned/excluded.');
+      }
+    });
   });
 
   test('Hana S3 and Sima K10 mappings are preserved', function() {
@@ -41,7 +56,7 @@ function runCareerCertificationSelfTestsNoUi() {
 
   test('PT crew has PT grade candidate/effective marker', function() {
     const bad = readObjects_(NF3C.SHEETS.STAFF, 1).filter(function(r){
-      return String(r.employment_type).toUpperCase() === 'PT' && !String(r.pt_effective_grade || r.pt_grade_candidate || '').trim();
+      return String(r.employment_type).toUpperCase() === 'PT' && String(r.record_status).toUpperCase() !== 'EXCLUDED' && !String(r.pt_effective_grade || r.pt_grade_candidate || '').trim();
     });
     if (bad.length) throw new Error('PT without grade: ' + bad.map(function(r){return r.name;}).join(', '));
   });
