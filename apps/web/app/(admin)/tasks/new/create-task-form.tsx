@@ -156,6 +156,7 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
         }
 
         const taskId = json.data.task_id;
+        let waFallbackLink: string | undefined;
 
         if (json.notify?.wa_sent) {
           toast({
@@ -163,18 +164,16 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
             description: `Notifikasi dikirim ke ${picName.trim()}`,
           });
         } else if (json.notify?.wa_link) {
+          waFallbackLink = json.notify.wa_link;
           toast({
-            title: "Tugas dibuat — WA otomatis gagal",
+            title: "Tugas dibuat — lanjut kirim WA",
             description:
-              json.notify.wa_error === "GAS_NOT_CONFIGURED"
-                ? "GAS belum dikonfigurasi. Kirim link manual dari halaman detail."
-                : json.notify.wa_error || "Kirim link manual dari halaman detail.",
-            variant: "destructive",
+              "WhatsApp akan dibuka dengan pesan tugas yang sudah siap. Tinggal tekan Kirim.",
           });
         } else if (json.notify) {
           toast({
-            title: "Tugas dibuat — WA gagal",
-            description: json.notify.wa_error || "Coba kirim ulang dari halaman detail.",
+            title: "Tugas dibuat — WA belum tersedia",
+            description: json.notify.wa_error || "Buka halaman detail untuk menyalin link tugas.",
             variant: "destructive",
           });
         } else {
@@ -214,6 +213,11 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
           }
         }
 
+        if (waFallbackLink) {
+          window.location.assign(waFallbackLink);
+          return;
+        }
+
         router.push(`/tasks/${taskId}`);
       } catch (cause) {
         const message =
@@ -231,7 +235,7 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Lokasi & Kategori</CardTitle>
+          <CardTitle className="text-base">Lokasi & Tugas</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -250,10 +254,10 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Area *</Label>
+            <Label>Bagian / Area *</Label>
             <Select value={effectiveArea} onValueChange={setArea}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih area" />
+                <SelectValue placeholder="Pilih bagian" />
               </SelectTrigger>
               <SelectContent>
                 {filteredAreas.map((a) => (
@@ -265,10 +269,10 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Kategori *</Label>
+            <Label>Jenis Tugas *</Label>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pilih kategori" />
+                <SelectValue placeholder="Pilih jenis tugas" />
               </SelectTrigger>
               <SelectContent>
                 {categories.map((c) => (
@@ -286,10 +290,10 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Low">Low</SelectItem>
-                <SelectItem value="Medium">Medium</SelectItem>
-                <SelectItem value="High">High</SelectItem>
-                <SelectItem value="Urgent">Urgent</SelectItem>
+                <SelectItem value="Low">Rendah</SelectItem>
+                <SelectItem value="Medium">Normal</SelectItem>
+                <SelectItem value="High">Tinggi</SelectItem>
+                <SelectItem value="Urgent">Darurat</SelectItem>
               </SelectContent>
             </Select>
           </div>
