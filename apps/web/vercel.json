@@ -5,6 +5,10 @@
     {
       "path": "/api/internal/recurring/generate",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/internal/hris/sync",
+      "schedule": "0 19 * * *"
     }
   ]
 }

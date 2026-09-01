@@ -206,6 +206,11 @@ export function StaffManager({ staff, outlets, areas, canManage }: Props) {
                       >
                         {member.status === "ACTIVE" ? "Aktif" : "Nonaktif"}
                       </Badge>
+                      {member.hris_link_status === "LINKED" ? (
+                        <Badge className="bg-emerald-600">HRIS</Badge>
+                      ) : (
+                        <Badge variant="outline">Belum terhubung ke HRIS</Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {member.outlet}
