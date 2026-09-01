@@ -13,6 +13,7 @@ import type {
   Staff,
   StaffReportLink as DbLink,
 } from "@nusafood/database";
+import { operationalStandardResult } from "@/lib/daily-activity-operational";
 
 type TemplateWithRelations = DbTemplate & {
   outlet?: Outlet | null;
@@ -60,6 +61,17 @@ export function mapChecklistItem(
 export function mapReportTemplate(
   template: TemplateWithRelations,
 ): ReportTemplate {
+  const standardResult = operationalStandardResult(
+    {
+      title: template.title,
+      category: template.category,
+      kind: template.kind,
+      position_group: template.positionGroup,
+      standard_result: template.standardResult,
+    },
+    template.standardResult,
+  );
+
   return {
     id: template.id,
     code: template.code,
@@ -67,7 +79,7 @@ export function mapReportTemplate(
     category: template.category,
     outlet_id: template.outlet?.code ?? null,
     position_group: template.positionGroup,
-    standard_result: template.standardResult,
+    standard_result: standardResult,
     description: template.description ?? template.standardResult,
     requires_photo: template.requiresPhoto,
     is_required_daily: template.isRequiredDaily,

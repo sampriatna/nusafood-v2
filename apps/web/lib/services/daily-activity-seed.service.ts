@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
 import { DAILY_ACTIVITY_SEED_TEMPLATES } from "@/lib/daily-activity-seed";
+import {
+  DAILY_ACTIVITY_OPERATIONAL_OVERRIDES,
+  DEPRECATED_DAILY_ACTIVITY_TEMPLATE_CODES,
+} from "@/lib/daily-activity-operational-overrides";
 export { listPositionDailyTemplateSummary } from "@/lib/daily-activity-seed";
 
 export class DailyActivitySeedError extends Error {
@@ -26,10 +30,21 @@ export type DailyActivitySeedResult = {
   templates: number;
   codes: string[];
   position_groups: string[];
+  deprecated_templates: number;
 };
 
 function normalizeChecklistText(text: string): string {
   return text.trim().replace(/\s+/g, " ");
+}
+
+function getEffectiveSeedTemplates() {
+  const byCode = new Map(
+    DAILY_ACTIVITY_SEED_TEMPLATES.map((def) => [def.code, def] as const),
+  );
+  for (const override of DAILY_ACTIVITY_OPERATIONAL_OVERRIDES) {
+    byCode.set(override.code, override);
+  }
+  return [...byCode.values()];
 }
 
 async function syncTemplateChecklist(
@@ -61,6 +76,8 @@ async function syncTemplateChecklist(
     return;
   }
 
+  // Jika sudah punya histori jawaban, jangan hapus checklist lama karena akan
+  // merusak audit trail. Tambahkan / urutkan item baru saja.
   const existingByText = new Map(
     existingItems.map((item) => [
       normalizeChecklistText(item.itemText).toLowerCase(),
@@ -106,8 +123,9 @@ export async function seedDailyActivityTemplates(): Promise<DailyActivitySeedRes
   const outletByCode = new Map(outlets.map((o) => [o.code, o]));
   const codes: string[] = [];
   const positionGroups = new Set<string>();
+  const effectiveTemplates = getEffectiveSeedTemplates();
 
-  for (const def of DAILY_ACTIVITY_SEED_TEMPLATES) {
+  for (const def of effectiveTemplates) {
     const outletId = def.outlet_code
       ? (outletByCode.get(def.outlet_code)?.id ?? null)
       : null;
@@ -159,10 +177,22 @@ export async function seedDailyActivityTemplates(): Promise<DailyActivitySeedRes
     }
   }
 
+  const deprecated = await prisma.reportTemplate.updateMany({
+    where: {
+      code: { in: [...DEPRECATED_DAILY_ACTIVITY_TEMPLATE_CODES] },
+    },
+    data: {
+      active: false,
+      isRequiredDaily: false,
+      kind: "special_task",
+    },
+  });
+
   return {
-    templates: DAILY_ACTIVITY_SEED_TEMPLATES.length,
+    templates: effectiveTemplates.length,
     codes,
     position_groups: [...positionGroups].sort(),
+    deprecated_templates: deprecated.count,
   };
 }
 
@@ -178,4 +208,3 @@ export async function ensureDailyActivityTemplatesSeeded(): Promise<{
   const result = await seedDailyActivityTemplates();
   return { seeded: true, result };
 }
-
