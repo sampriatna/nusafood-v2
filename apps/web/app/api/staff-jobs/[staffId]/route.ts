@@ -12,7 +12,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function actorName(session: NonNullable<Awaited<ReturnType<typeof requireAuth>>["session"]>) {
+type ActorSession = {
+  userName?: string | null;
+  userId?: string | null;
+};
+
+function actorName(session: ActorSession) {
   return session.userName || session.userId || "system";
 }
 
