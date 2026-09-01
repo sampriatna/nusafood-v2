@@ -80,9 +80,15 @@ function parsePositionList(raw?: string | null): string[] {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((value) => resolveStaffPositionGroup(String(value)))
-      .filter((value): value is string => Boolean(value) && isPositionGroup(value));
+
+    const result: string[] = [];
+    for (const value of parsed) {
+      const group = resolveStaffPositionGroup(String(value));
+      if (group && isPositionGroup(group) && !result.includes(group)) {
+        result.push(group);
+      }
+    }
+    return result;
   } catch {
     return [];
   }
