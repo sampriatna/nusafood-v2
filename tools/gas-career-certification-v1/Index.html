@@ -4,81 +4,446 @@
   <base target="_top">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    :root{--bg:#f6f7f9;--card:#fff;--text:#171717;--muted:#666;--line:#e6e7ea;--ok:#137333;--warn:#b06000;--bad:#b3261e;--brand:#111827}
-    *{box-sizing:border-box} body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}
-    header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);padding:14px 18px;z-index:5;display:flex;gap:12px;align-items:center;justify-content:space-between}
-    h1{font-size:18px;margin:0}.muted{color:var(--muted);font-size:12px}.wrap{max-width:1200px;margin:auto;padding:18px}
-    nav{display:flex;gap:8px;flex-wrap:wrap}.tab{border:1px solid var(--line);background:#fff;color:#111;padding:9px 12px;border-radius:10px;cursor:pointer}.tab.active{background:var(--brand);color:#fff}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}.metric{font-size:28px;font-weight:700;margin-top:5px}
-    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbar input,.toolbar select,input,select,textarea{border:1px solid #d8dbe0;border-radius:9px;padding:9px 10px;background:#fff;font:inherit} textarea{width:100%;min-height:70px}
-    button{border:0;border-radius:9px;padding:9px 12px;background:var(--brand);color:#fff;cursor:pointer}button.secondary{background:#fff;color:#111;border:1px solid var(--line)}button.danger{background:var(--bad)}button:disabled{opacity:.5;cursor:not-allowed}
-    table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:top}th{background:#fafafa;position:sticky;top:58px}
-    .pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 8px;font-size:11px;background:#fff}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
-    .hidden{display:none!important}.drawer,.modal{position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:20;display:flex;justify-content:flex-end}.drawer .panel{width:min(620px,100%);height:100%;overflow:auto;background:#fff;padding:18px}.modal{justify-content:center;align-items:flex-start;padding:30px 12px;overflow:auto}.modal .panel{width:min(900px,100%);background:#fff;border-radius:14px;padding:18px}
-    .close{float:right;background:#fff;color:#111;border:1px solid var(--line)}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.section{margin:18px 0}.section h3{margin:0 0 10px;font-size:15px}.big{font-size:22px;font-weight:700}.test{border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}.test-head{display:flex;justify-content:space-between;gap:10px}.score{width:90px}.statusline{padding:10px 12px;border-radius:10px;background:#f7f7f7;margin:10px 0}.loading{position:fixed;bottom:16px;right:16px;background:#111;color:#fff;padding:10px 13px;border-radius:10px;z-index:99}
-    .action-list{display:grid;gap:10px}.action-item{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff}.action-main{min-width:0}.action-main b{display:block}.action-main .muted{margin-top:3px}.metric-note{margin-top:4px}.legacy-note{color:var(--warn);font-size:11px;margin-top:4px}
-    @media(max-width:800px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}th{position:static}.hide-mobile{display:none}.action-item{align-items:flex-start;flex-direction:column}}
+    :root{
+      --bg:#f5f6f8;--card:#fff;--text:#17191c;--muted:#69707a;--line:#e4e7eb;
+      --ok:#137333;--ok-bg:#eaf5ee;--warn:#a85f00;--warn-bg:#fff4e2;
+      --bad:#b3261e;--bad-bg:#fdeceb;--brand:#111827;--soft:#f8f9fb;
+      --shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.05)
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.45}
+    header{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:13px 22px;display:flex;gap:18px;align-items:center;justify-content:space-between}
+    h1{font-size:18px;line-height:1.2;margin:0} h2{margin:0 0 4px;font-size:24px} h3{margin:0;font-size:16px}
+    p{margin:8px 0}.muted{color:var(--muted);font-size:12px}.wrap{max-width:1280px;margin:auto;padding:24px}
+    nav{display:flex;gap:7px;flex-wrap:wrap}
+    .tab{border:1px solid transparent;background:transparent;color:#333b46;padding:9px 13px;border-radius:10px;cursor:pointer;font-weight:600}
+    .tab:hover{background:#f3f4f6}.tab.active{background:var(--brand);color:#fff}
+    button{border:0;border-radius:9px;padding:9px 12px;background:var(--brand);color:#fff;cursor:pointer;font:inherit;font-weight:600;white-space:nowrap}
+    button:hover{opacity:.92}button.secondary{background:#fff;color:#222;border:1px solid var(--line)}button.danger{background:var(--bad)}button:disabled{opacity:.45;cursor:not-allowed}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
+    .metric-card{min-height:112px;display:flex;flex-direction:column;justify-content:space-between}
+    .metric{font-size:30px;font-weight:750;line-height:1;margin-top:8px}.metric-note{margin-top:6px}
+    .section{margin:20px 0}.section-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+    .toolbar input,.toolbar select,input,select,textarea{border:1px solid #d7dbe1;border-radius:9px;padding:10px 11px;background:#fff;font:inherit;color:var(--text)}
+    .toolbar input{min-width:260px;flex:1}.toolbar select{min-width:150px}textarea{width:100%;min-height:82px;resize:vertical}
+    label{display:grid;gap:6px;font-size:12px;color:var(--muted);font-weight:600}
+    label input,label select,label textarea{color:var(--text);font-weight:400}
+    .table-wrap{width:100%;overflow:auto;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow)}
+    table{width:100%;min-width:850px;border-collapse:separate;border-spacing:0;background:#fff}
+    th,td{padding:13px 14px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:middle}
+    th{background:#f8f9fb;color:#59616d;font-size:11px;text-transform:uppercase;letter-spacing:.035em;font-weight:700;position:static}
+    tbody tr:last-child td{border-bottom:0}tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:#fafbfc}
+    td strong{font-size:14px}.cell-sub{display:block;margin-top:3px;color:var(--muted);font-size:11px}
+    .pill{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:700;background:#f1f3f5;color:#4b5563;line-height:1.15}
+    .pill.ok,.ok{color:var(--ok)}.pill.ok{background:var(--ok-bg)}
+    .pill.warn,.warn{color:var(--warn)}.pill.warn{background:var(--warn-bg)}
+    .pill.bad,.bad{color:var(--bad)}.pill.bad{background:var(--bad-bg)}
+    .hidden{display:none!important}
+    .action-list{display:grid;gap:10px}.action-item{display:flex;gap:14px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:#fff}
+    .action-main{min-width:0;flex:1}.action-main b{display:block;font-size:14px}.action-main .muted{margin-top:3px}.legacy-note{color:var(--warn);font-size:11px;margin-top:4px}
+    .empty{border:1px dashed #d7dbe1;border-radius:12px;padding:18px;text-align:center;color:var(--muted);background:#fbfcfd}
+    .drawer,.modal{position:fixed;inset:0;background:rgba(17,24,39,.42);z-index:30;display:flex}
+    .drawer{justify-content:flex-end}.drawer .panel{width:min(720px,100%);height:100%;overflow:auto;background:#fff;padding:0}
+    .drawer-head{position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid var(--line);padding:18px 20px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+    .drawer-body{padding:18px 20px 28px}.drawer-title-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:7px}
+    .modal{justify-content:center;align-items:flex-start;padding:34px 12px;overflow:auto}.modal .panel{width:min(920px,100%);background:#fff;border-radius:16px;padding:20px;box-shadow:0 25px 70px rgba(0,0,0,.18)}
+    .close{background:#fff;color:#111;border:1px solid var(--line);padding:8px 10px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.profile-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .info-card{border:1px solid var(--line);border-radius:12px;padding:13px;background:#fff}.info-label{color:var(--muted);font-size:11px;margin-bottom:4px}.info-value{font-size:20px;font-weight:750;word-break:break-word}
+    .statusline{padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--soft);margin:12px 0}
+    .statusline .muted{display:block;margin-top:7px}.big{font-size:22px;font-weight:750}
+    .test{border:1px solid var(--line);border-radius:12px;padding:14px;margin:11px 0;background:#fff}.test-head{display:flex;justify-content:space-between;gap:12px}.score{width:96px}
+    .loading{position:fixed;bottom:18px;right:18px;background:#111;color:#fff;padding:10px 13px;border-radius:10px;z-index:99;box-shadow:var(--shadow)}
+    .audit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:14px}
+    .audit-card{border:1px solid var(--line);border-radius:13px;background:#fff;padding:14px;box-shadow:var(--shadow)}
+    .audit-card-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.audit-card h4{font-size:14px;margin:0 0 3px}.audit-meta{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+    .mobile-only{display:none}
+    @media(max-width:800px){
+      header{position:static;display:block;padding:14px 16px}nav{margin-top:12px}.wrap{padding:14px}
+      .grid{grid-template-columns:1fr 1fr}.profile-grid,.row{grid-template-columns:1fr}.toolbar input{min-width:100%}
+      .action-item{align-items:flex-start;flex-direction:column}.action-item button{width:100%}
+      .desktop-only{display:none!important}.mobile-only{display:grid}.staff-cards{gap:10px}.staff-card{border:1px solid var(--line);border-radius:13px;background:#fff;padding:14px;box-shadow:var(--shadow)}
+      .staff-card-head{display:flex;gap:10px;justify-content:space-between;align-items:flex-start}.staff-card h4{margin:0;font-size:15px}.staff-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.staff-card-grid .info-value{font-size:14px}
+      .drawer-head,.drawer-body{padding-left:15px;padding-right:15px}.modal{padding:12px}.modal .panel{border-radius:12px}
+    }
+    @media(max-width:480px){.grid{grid-template-columns:1fr}.staff-card-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
-<header><div><h1>NF3 Career & Certification</h1><div class="muted" id="actor">Memuat…</div></div><nav><button class="tab active" data-view="dashboard">Dashboard</button><button class="tab" data-view="staff">Data Staff</button><button class="tab" data-view="audit">Assessment</button></nav></header>
+<header>
+  <div><h1>NF3 Career & Certification</h1><div class="muted" id="actor">Memuat…</div></div>
+  <nav>
+    <button class="tab active" data-view="dashboard">Dashboard</button>
+    <button class="tab" data-view="staff">Data Staff</button>
+    <button class="tab" data-view="audit">Assessment</button>
+  </nav>
+</header>
+
 <div class="wrap">
   <section id="view-dashboard"></section>
   <section id="view-staff" class="hidden"></section>
   <section id="view-audit" class="hidden"></section>
 </div>
-<div id="drawer" class="drawer hidden"><div class="panel"><button class="close" onclick="closeDrawer()">Tutup</button><div id="drawerBody"></div></div></div>
-<div id="modal" class="modal hidden"><div class="panel"><button class="close" onclick="closeModal()">Tutup</button><div id="modalBody"></div></div></div>
+
+<div id="drawer" class="drawer hidden">
+  <div class="panel">
+    <div id="drawerBody"></div>
+  </div>
+</div>
+
+<div id="modal" class="modal hidden">
+  <div class="panel">
+    <button class="close" style="float:right" onclick="closeModal()">Tutup</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
 <div id="loading" class="loading hidden">Memproses…</div>
+
 <script>
 let APP={data:null,currentStaff:null,currentAssessment:null};
 const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-function gas(fn,...args){showLoading(true);return new Promise((res,rej)=>google.script.run.withSuccessHandler(x=>{showLoading(false);res(x)}).withFailureHandler(e=>{showLoading(false);alert(e.message||e);rej(e)})[fn](...args))}
+
+function gas(fn,...args){
+  showLoading(true);
+  return new Promise((res,rej)=>google.script.run
+    .withSuccessHandler(x=>{showLoading(false);res(x)})
+    .withFailureHandler(e=>{showLoading(false);alert(e.message||e);rej(e)})[fn](...args));
+}
 function showLoading(v){$('#loading').classList.toggle('hidden',!v)}
-async function boot(){APP.data=await gas('getBootstrapData');$('#actor').textContent='User: '+APP.data.actor+' • '+APP.data.generatedAt;renderAll()}
+async function boot(){
+  APP.data=await gas('getBootstrapData');
+  $('#actor').textContent='User: '+APP.data.actor+' • '+APP.data.generatedAt;
+  renderAll();
+}
 function renderAll(){renderDashboard();renderStaff();renderAuditHome()}
-function nav(view){document.querySelectorAll('section[id^="view-"]').forEach(x=>x.classList.add('hidden'));$('#view-'+view).classList.remove('hidden');document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.view===view))}
+function nav(view){
+  document.querySelectorAll('section[id^="view-"]').forEach(x=>x.classList.add('hidden'));
+  $('#view-'+view).classList.remove('hidden');
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.view===view));
+}
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>nav(b.dataset.view));
+
 function activeStaff(){return APP.data.staff.filter(x=>String(x.record_status||'').toUpperCase()!=='EXCLUDED')}
 function availableCodes(){return new Set((APP.data.availableCertificationCodes||[]).map(x=>String(x).toUpperCase()))}
-function auditCodeFor(x){const codes=availableCodes();const role=[x.display_level,x.effective_level,x.current_level,x.legacy_level].map(v=>String(v||'').toUpperCase()).find(v=>codes.has(v));if(role)return role;const pt=[x.display_pt_grade,x.pt_effective_grade,x.pt_grade_candidate].map(v=>String(v||'').toUpperCase()).find(v=>codes.has(v));return pt||''}
+function auditCodeFor(x){
+  const codes=availableCodes();
+  const role=[x.display_level,x.effective_level,x.current_level,x.legacy_level].map(v=>String(v||'').toUpperCase()).find(v=>codes.has(v));
+  if(role)return role;
+  const pt=[x.display_pt_grade,x.pt_effective_grade,x.pt_grade_candidate].map(v=>String(v||'').toUpperCase()).find(v=>codes.has(v));
+  return pt||'';
+}
 function isCertified(x){return !!String(x.certified_level||'').trim()||!!String(x.pt_certified_grade||'').trim()}
-function levelStateText(x){if(x.certified_level)return 'Certified '+x.certified_level;if(/LEGACY/.test(String(x.level_status||x.certification_status||'')))return 'Legacy / belum certified';if(/REVIEW/.test(String(x.level_status||x.certification_status||'')))return 'Perlu review';return String(x.level_status||x.certification_status||'-')}
-function dashboardStats(){const active=activeStaff(),ready=active.filter(x=>auditCodeFor(x)),uncertified=active.filter(x=>!isCertified(x)),notReady=active.filter(x=>!isCertified(x)&&!auditCodeFor(x));return {active,ready,uncertified,notReady}}
-function renderDashboard(){const d=APP.data,s=dashboardStats();$('#view-dashboard').innerHTML=`<div class="grid">
-<div class="card"><div class="muted">Staff aktif</div><div class="metric">${s.active.length}</div></div>
-<div class="card"><div class="muted">Siap diaudit sekarang</div><div class="metric warn">${s.ready.length}</div><div class="muted metric-note">Tes sudah tersedia</div></div>
-<div class="card"><div class="muted">Belum certified</div><div class="metric warn">${s.uncertified.length}</div><div class="muted metric-note">Termasuk legacy mapping</div></div>
-<div class="card"><div class="muted">Tes/framework belum tersedia</div><div class="metric">${s.notReady.length}</div></div>
-<div class="card"><div class="muted">Sudah certified</div><div class="metric ok">${d.stats.certified}</div></div>
-<div class="card"><div class="muted">Perlu approval</div><div class="metric ${d.stats.readyApproval?'warn':''}">${d.stats.readyApproval||0}</div></div></div>
-<div class="card section"><h3>Alur kerja</h3><p><b>Cari staff → Audit level yang diklaim → Review hasil → Approve level yang terbukti.</b></p><p class="muted">Level lama tetap ditampilkan sebagai riwayat. Sistem tidak menaikkan atau menurunkan level otomatis tanpa assessment dan approval.</p><div class="toolbar"><button onclick="nav('staff')">Cari Staff</button><button class="secondary" onclick="nav('audit')">Buka Queue Assessment</button></div></div>
-<div class="card section"><h3>Prioritas audit sekarang</h3><div class="action-list">${s.ready.slice(0,8).map(x=>`<div class="action-item"><div class="action-main"><b>${esc(x.name)}</b><div class="muted">${esc(x.track)} • Level saat ini ${esc(x.display_level||'-')}${x.display_pt_grade?` • PT ${esc(x.display_pt_grade)}`:''}</div><div class="legacy-note">${esc(levelStateText(x))} → Audit ${esc(auditCodeFor(x))}</div></div><button onclick="openStaff('${esc(x.staff_id)}')">Buka Profil</button></div>`).join('')||'<div class="muted">Belum ada assessment yang siap dijalankan.</div>'}</div>${s.ready.length>8?`<div class="toolbar"><button class="secondary" onclick="nav('audit')">Lihat semua ${s.ready.length} staff siap audit</button></div>`:''}</div>`}
-function renderStaff(){const s=APP.data.staff;$('#view-staff').innerHTML=`<div class="toolbar"><input id="q" placeholder="Cari nama/role/outlet" oninput="filterStaff()"><select id="trackFilter" onchange="filterStaff()"><option value="">Semua track</option>${[...new Set(s.map(x=>x.track).filter(Boolean))].sort().map(x=>`<option>${esc(x)}</option>`).join('')}</select><select id="typeFilter" onchange="filterStaff()"><option value="">FT + PT</option><option>FT</option><option>PT</option><option>OWNER</option></select></div><div id="staffTable"></div>`;filterStaff()}
-function filterStaff(){const q=($('#q')?.value||'').toLowerCase(),t=$('#trackFilter')?.value||'',e=$('#typeFilter')?.value||'';const rows=APP.data.staff.filter(x=>(!q||JSON.stringify(x).toLowerCase().includes(q))&&(!t||x.track===t)&&(!e||String(x.employment_type).toUpperCase()===e));$('#staffTable').innerHTML=`<table><thead><tr><th>Nama</th><th>Role</th><th>Level saat ini</th><th>Certified</th><th>PT grade</th><th>Status</th></tr></thead><tbody>${rows.map(x=>`<tr onclick="openStaff('${esc(x.staff_id)}')" style="cursor:pointer"><td><b>${esc(x.name)}</b><br><span class="muted">${esc(x.outlet)}</span></td><td>${esc(x.track)}<br><span class="pill">${esc(x.employment_type)}</span></td><td><b>${esc(x.display_level)}</b><br><span class="muted">Mapping awal: ${esc(x.legacy_level||x.current_level||'-')}</span></td><td>${esc(x.certified_level||'-')}</td><td>${esc(x.display_pt_grade||'-')}<br><span class="muted">cert ${esc(x.pt_certified_grade||'-')}</span></td><td>${statusPill(levelStateText(x))}</td></tr>`).join('')}</tbody></table>`}
-function statusPill(s){s=String(s||'');let c=/CERTIFIED|Certified/.test(s)?'ok':/PENDING|REVIEW|PROVISIONAL|Legacy|belum/.test(s)?'warn':'';return `<span class="pill ${c}">${esc(s||'-')}</span>`}
-async function openStaff(id){APP.currentStaff=await gas('getStaffDetail',id);renderDrawer(APP.currentStaff);$('#drawer').classList.remove('hidden')}
+function levelStateText(x){
+  if(String(x.record_status||'').toUpperCase()==='EXCLUDED'&&String(x.level_status||'').toUpperCase()==='RESIGNED')return 'Resigned';
+  if(x.certified_level)return 'Certified '+x.certified_level;
+  if(/LEGACY/.test(String(x.level_status||x.certification_status||'')))return 'Legacy / belum certified';
+  if(/REVIEW|ONBOARDING/.test(String(x.level_status||x.certification_status||'')))return 'Perlu review';
+  return String(x.level_status||x.certification_status||'-');
+}
+function dashboardStats(){
+  const active=activeStaff();
+  const ready=active.filter(x=>auditCodeFor(x));
+  const uncertified=active.filter(x=>!isCertified(x));
+  const notReady=active.filter(x=>!isCertified(x)&&!auditCodeFor(x));
+  return {active,ready,uncertified,notReady};
+}
+function statusPill(s){
+  s=String(s||'');
+  let c=/RESIGN|FAIL|CRITICAL/i.test(s)?'bad':/CERTIFIED|PASS|QUALIFIED/i.test(s)?'ok':/PENDING|REVIEW|PROVISIONAL|LEGACY|BELUM|ONBOARDING/i.test(s)?'warn':'';
+  return `<span class="pill ${c}">${esc(s||'-')}</span>`;
+}
+function typePill(x){return `<span class="pill">${esc(x||'-')}</span>`}
+
+function renderDashboard(){
+  const d=APP.data,s=dashboardStats();
+  $('#view-dashboard').innerHTML=`
+    <div class="section-head">
+      <div><h2 style="font-size:22px">Dashboard</h2><div class="muted">Ringkasan career level dan certification staff aktif.</div></div>
+    </div>
+    <div class="grid">
+      <div class="card metric-card"><div class="muted">Staff aktif</div><div class="metric">${s.active.length}</div></div>
+      <div class="card metric-card"><div><div class="muted">Siap diaudit sekarang</div><div class="metric warn">${s.ready.length}</div></div><div class="muted metric-note">Tes sudah tersedia</div></div>
+      <div class="card metric-card"><div><div class="muted">Belum certified</div><div class="metric warn">${s.uncertified.length}</div></div><div class="muted metric-note">Termasuk legacy mapping</div></div>
+      <div class="card metric-card"><div><div class="muted">Tes/framework belum tersedia</div><div class="metric">${s.notReady.length}</div></div><div class="muted metric-note">Tidak perlu dipaksakan ke track lain</div></div>
+      <div class="card metric-card"><div class="muted">Sudah certified</div><div class="metric ok">${d.stats.certified}</div></div>
+      <div class="card metric-card"><div class="muted">Perlu approval</div><div class="metric ${d.stats.readyApproval?'warn':''}">${d.stats.readyApproval||0}</div></div>
+    </div>
+
+    <div class="card section">
+      <div class="section-head"><div><h3>Alur kerja</h3><div class="muted">Gunakan app ini untuk operasional. Sheet tetap menjadi sumber data di belakang layar.</div></div></div>
+      <p><b>Cari staff → Audit level yang diklaim → Review hasil → Approve level yang terbukti.</b></p>
+      <p class="muted">Level lama tetap menjadi riwayat. Sistem tidak menaikkan atau menurunkan level otomatis tanpa assessment dan approval.</p>
+      <div class="toolbar"><button onclick="nav('staff')">Cari Staff</button><button class="secondary" onclick="nav('audit')">Buka Queue Assessment</button></div>
+    </div>
+
+    <div class="card section">
+      <div class="section-head"><div><h3>Prioritas audit sekarang</h3><div class="muted">Staff yang test master-nya sudah tersedia.</div></div>${s.ready.length>8?`<button class="secondary" onclick="nav('audit')">Lihat semua ${s.ready.length}</button>`:''}</div>
+      <div class="action-list">
+        ${s.ready.slice(0,8).map(x=>`
+          <div class="action-item">
+            <div class="action-main">
+              <b>${esc(x.name)}</b>
+              <div class="muted">${esc(x.outlet||'-')} • ${esc(x.track||'-')} • ${esc(x.employment_type||'-')}</div>
+              <div class="legacy-note">${esc(levelStateText(x))} → Target audit ${esc(auditCodeFor(x))}</div>
+            </div>
+            <button onclick="openStaff('${esc(x.staff_id)}')">Buka Profil</button>
+          </div>`).join('')||'<div class="empty">Belum ada assessment yang siap dijalankan.</div>'}
+      </div>
+    </div>`;
+}
+
+function renderStaff(){
+  const s=APP.data.staff;
+  $('#view-staff').innerHTML=`
+    <div class="section-head">
+      <div><h2 style="font-size:22px">Data Staff</h2><div class="muted">Cari staff, cek level saat ini, status certification, dan target audit.</div></div>
+    </div>
+    <div class="toolbar">
+      <input id="q" placeholder="Cari nama, outlet, atau role…" oninput="filterStaff()">
+      <select id="trackFilter" onchange="filterStaff()"><option value="">Semua track</option>${[...new Set(s.map(x=>x.track).filter(Boolean))].sort().map(x=>`<option>${esc(x)}</option>`).join('')}</select>
+      <select id="typeFilter" onchange="filterStaff()"><option value="">FT + PT + lainnya</option><option>FT</option><option>PT</option><option>OWNER</option></select>
+      <select id="statusFilter" onchange="filterStaff()"><option value="ACTIVE">Staff aktif</option><option value="">Semua termasuk history</option><option value="EXCLUDED">Resigned / excluded</option></select>
+    </div>
+    <div id="staffTable"></div>`;
+  filterStaff();
+}
+function filterStaff(){
+  const q=($('#q')?.value||'').toLowerCase();
+  const t=$('#trackFilter')?.value||'';
+  const e=$('#typeFilter')?.value||'';
+  const st=$('#statusFilter')?.value??'ACTIVE';
+  const rows=APP.data.staff.filter(x=>
+    (!q||JSON.stringify(x).toLowerCase().includes(q))&&
+    (!t||x.track===t)&&
+    (!e||String(x.employment_type).toUpperCase()===e)&&
+    (!st||(st==='ACTIVE'?String(x.record_status||'').toUpperCase()!=='EXCLUDED':String(x.record_status||'').toUpperCase()===st))
+  );
+
+  if(!rows.length){
+    $('#staffTable').innerHTML='<div class="empty">Tidak ada staff yang cocok dengan filter.</div>';
+    return;
+  }
+
+  const desktop=`<div class="table-wrap desktop-only"><table>
+    <thead><tr><th>Nama</th><th>Tipe</th><th>Track</th><th>Level saat ini</th><th>Grade PT</th><th>Target audit</th><th>Status sertifikasi</th><th></th></tr></thead>
+    <tbody>${rows.map(x=>`<tr class="clickable" onclick="openStaff('${esc(x.staff_id)}')">
+      <td><strong>${esc(x.name)}</strong><span class="cell-sub">${esc(x.outlet||'-')}</span></td>
+      <td>${typePill(x.employment_type)}</td>
+      <td>${esc(x.track||'-')}</td>
+      <td><strong>${esc(x.display_level||'-')}</strong><span class="cell-sub">Mapping awal: ${esc(x.legacy_level||x.current_level||'-')}</span></td>
+      <td>${esc(x.display_pt_grade||'-')}<span class="cell-sub">Certified: ${esc(x.pt_certified_grade||'-')}</span></td>
+      <td>${auditCodeFor(x)?`<span class="pill">${esc(auditCodeFor(x))}</span>`:'<span class="muted">Belum tersedia</span>'}</td>
+      <td>${statusPill(levelStateText(x))}</td>
+      <td><button class="secondary" onclick="event.stopPropagation();openStaff('${esc(x.staff_id)}')">Buka</button></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+
+  const mobile=`<div class="staff-cards mobile-only">${rows.map(x=>`
+    <div class="staff-card" onclick="openStaff('${esc(x.staff_id)}')">
+      <div class="staff-card-head"><div><h4>${esc(x.name)}</h4><div class="muted">${esc(x.outlet||'-')} • ${esc(x.track||'-')}</div></div>${typePill(x.employment_type)}</div>
+      <div class="staff-card-grid">
+        <div><div class="info-label">Level saat ini</div><div class="info-value">${esc(x.display_level||'-')}</div></div>
+        <div><div class="info-label">Grade PT</div><div class="info-value">${esc(x.display_pt_grade||'-')}</div></div>
+        <div><div class="info-label">Target audit</div><div class="info-value">${esc(auditCodeFor(x)||'Belum tersedia')}</div></div>
+        <div><div class="info-label">Status</div>${statusPill(levelStateText(x))}</div>
+      </div>
+      <button style="width:100%" onclick="event.stopPropagation();openStaff('${esc(x.staff_id)}')">Buka Profil</button>
+    </div>`).join('')}</div>`;
+
+  $('#staffTable').innerHTML=desktop+mobile;
+}
+
+async function openStaff(id){
+  APP.currentStaff=await gas('getStaffDetail',id);
+  renderDrawer(APP.currentStaff);
+  $('#drawer').classList.remove('hidden');
+}
 function closeDrawer(){$('#drawer').classList.add('hidden')}
 function closeModal(){$('#modal').classList.add('hidden');APP.currentAssessment=null}
-function renderDrawer(d){const s=d.staff;$('#drawerBody').innerHTML=`<h2>${esc(s.name)}</h2><div class="muted">${esc(s.outlet)} • ${esc(s.employment_type)} • ${esc(s.track)}</div>
-<div class="section row"><div class="card"><div class="muted">Mapping awal / legacy</div><div class="big">${esc(s.legacy_level||s.current_level||'-')}</div></div><div class="card"><div class="muted">Level saat ini</div><div class="big">${esc(s.display_level)}</div><div class="legacy-note">${esc(levelStateText(s))}</div></div><div class="card"><div class="muted">Certified level</div><div class="big ok">${esc(s.certified_level||'Belum')}</div></div><div class="card"><div class="muted">PT grade</div><div class="big">${esc(s.display_pt_grade||'-')}</div><div class="muted">Certified: ${esc(s.pt_certified_grade||'Belum')}</div></div></div>
-<div class="statusline">${statusPill(levelStateText(s))} ${statusPill(s.pt_grade_status)}<br><span class="muted">Next: ${esc(s.next_challenge||'-')}</span></div>
-<div class="toolbar"><button onclick="startSuggestedAudit()" ${d.suggestedAudit?'':'disabled'}>Mulai Audit ${esc(d.suggestedAudit||'belum tersedia')}</button><button class="secondary" onclick="openCorrection()">Koreksi Mapping</button><button class="secondary" onclick="editProfile()">Edit Data Staff</button></div>
-${approvalBlock(d)}
-<div class="section"><h3>Riwayat assessment</h3>${simpleTable(d.assessments,['assessment_id','certification_code','total_weighted_score','result','promotion_gate'])}</div>
-<div class="section"><h3>Certification</h3>${simpleTable(d.certifications,['certification_code','test_date','total_score','result','assessor'])}</div>
-<div class="section"><h3>Riwayat perubahan level</h3>${simpleTable(d.history,['changed_at','change_type','from_level','to_level','from_pt_grade','to_pt_grade','approved_by','reason'])}</div>`}
-function approvalBlock(d){const s=d.staff;let out='';if(s.certified_level&&s.certified_level!==s.display_level)out+=`<div class="card section"><b>Certification tersedia: ${esc(s.certified_level)}</b><p class="muted">Level saat ini masih ${esc(s.display_level)}. Management bisa approve relevel.</p><button onclick="approveCertified('${esc(s.certified_level)}','')">Approve Level ${esc(s.certified_level)}</button></div>`;if(s.pt_certified_grade&&s.pt_certified_grade!==s.display_pt_grade)out+=`<div class="card section"><b>PT grade certified: ${esc(s.pt_certified_grade)}</b><p class="muted">PT grade saat ini masih ${esc(s.display_pt_grade||'-')}.</p><button onclick="approveCertified('','${esc(s.pt_certified_grade)}')">Approve ${esc(s.pt_certified_grade)}</button></div>`;return out}
-function simpleTable(rows,cols){if(!rows||!rows.length)return '<div class="muted">Belum ada.</div>';return `<table><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.slice(0,15).map(r=>`<tr>${cols.map(c=>`<td>${esc(r[c]??'')}</td>`).join('')}</tr>`).join('')}</tbody></table>`}
-async function startSuggestedAudit(){const s=APP.currentStaff.staff,code=APP.currentStaff.suggestedAudit;if(!code)return;const a=await gas('startAssessment',{staffId:s.staff_id,certificationCode:code,assessor:APP.data.actor});openAssessment(a)}
-function openAssessment(a){APP.currentAssessment=a;$('#modalBody').innerHTML=`<h2>Assessment ${esc(a.certificationCode)} — ${esc(a.name)}</h2><div class="muted">${esc(a.assessmentId)}</div><div class="row section"><label>Tanggal tes<input id="testDate" type="date" value="${new Date().toISOString().slice(0,10)}"></label><label>Assessor<input id="assessor" value="${esc(APP.data.actor)}"></label></div><div id="testItems">${a.items.map(testHtml).join('')}</div><div class="toolbar"><button onclick="saveAssess(false)">Simpan Draft</button><button onclick="saveAssess(true)">Finalize Assessment</button></div>`;$('#modal').classList.remove('hidden')}
-function testHtml(x){return `<div class="test" data-code="${esc(x.item_code)}"><div class="test-head"><div><b>${esc(x.item_code)} — ${esc(x.competency_tested)}</b><div class="muted">${esc(x.category)} • Bobot ${esc(x.weight)} • ${esc(x.test_method)}</div></div><input class="score" type="number" min="0" max="100" placeholder="0-100" value="${esc(x.score_0_100)}"></div><p>${esc(x.pass_standard)}</p><div class="muted">Untuk staff: ${esc(x.staff_explanation)}</div><div class="row"><label>Critical failure<select class="critical"><option value="">Pilih</option><option ${String(x.critical_failure).toUpperCase()==='NO'?'selected':''}>NO</option><option ${String(x.critical_failure).toUpperCase()==='YES'?'selected':''}>YES</option></select></label><label>Evidence / link<input class="evidence" value="${esc(x.evidence_link)}"></label></div><label>Catatan<textarea class="note">${esc(x.note||'')}</textarea></label></div>`}
-async function saveAssess(finalize){const a=APP.currentAssessment;const items=[...document.querySelectorAll('.test')].map(el=>({itemCode:el.dataset.code,score:el.querySelector('.score').value,criticalFailure:el.querySelector('.critical').value,evidenceLink:el.querySelector('.evidence').value,note:el.querySelector('.note').value}));const saved=await gas('saveAssessment',{assessmentId:a.assessmentId,testDate:$('#testDate').value,assessor:$('#assessor').value,items});APP.currentAssessment=saved;if(!finalize){alert('Draft tersimpan.');openAssessment(saved);return}const out=await gas('finalizeAssessment',{assessmentId:a.assessmentId,reviewer:$('#assessor').value,assessor:$('#assessor').value});alert(out.recommendation.message);closeModal();await refresh();await openStaff(out.staff.staff.staff_id)}
-async function approveCertified(level,pt){const s=APP.currentStaff.staff;const reason=prompt('Alasan approval/relevel (wajib):','Hasil baseline audit dan certification PASS');if(!reason)return;const approvedBy=prompt('Approved by:',APP.data.actor);if(!approvedBy)return;await gas('approveLevelAdjustment',{staffId:s.staff_id,targetLevel:level,targetPtGrade:pt,reason,approvedBy,mode:'CERTIFICATION'});await refresh();await openStaff(s.staff_id)}
-async function openCorrection(){const s=APP.currentStaff.staff;const opt=await gas('getLevelOptions',s.staff_id);let choices=opt.levels.map(x=>x.level_code).join(', ');if(s.is_pt)choices+=' | PT: '+opt.ptGrades.map(x=>x.pt_grade).join(', ');const target=prompt('Koreksi mapping. Pilihan role level: '+choices+'\nIsi kode target (contoh S2/K4/B2/PT2):',s.display_level);if(!target)return;const reason=prompt('Alasan koreksi mapping (wajib). Ini bukan certification:');if(!reason)return;const approvedBy=prompt('Approved by:',APP.data.actor);if(!approvedBy)return;const isPt=/^PT/.test(target.toUpperCase());await gas('approveLevelAdjustment',{staffId:s.staff_id,targetLevel:isPt?'':target,targetPtGrade:isPt?target:'',reason,approvedBy,mode:'MAPPING_CORRECTION'});await refresh();await openStaff(s.staff_id)}
-function editProfile(){const s=APP.currentStaff.staff;$('#modalBody').innerHTML=`<h2>Edit Data Staff</h2><div class="row"><label>Nama<input id="eName" value="${esc(s.name)}"></label><label>Outlet<input id="eOutlet" value="${esc(s.outlet)}"></label><label>Track<input id="eTrack" value="${esc(s.track)}"></label><label>Employment<select id="eEmployment"><option ${s.employment_type==='FT'?'selected':''}>FT</option><option ${s.employment_type==='PT'?'selected':''}>PT</option><option ${s.employment_type==='OWNER'?'selected':''}>OWNER</option></select></label></div><label>Catatan management<textarea id="eNote">${esc(s.management_note||'')}</textarea></label><button onclick="saveProfile()">Simpan</button>`;$('#modal').classList.remove('hidden')}
-async function saveProfile(){const s=APP.currentStaff.staff;await gas('saveStaffProfile',{staffId:s.staff_id,name:$('#eName').value,outlet:$('#eOutlet').value,track:$('#eTrack').value,employment_type:$('#eEmployment').value,management_note:$('#eNote').value,reason:'Edited from Web App'});closeModal();await refresh();await openStaff(s.staff_id)}
-function renderAuditHome(){const rows=dashboardStats().ready;$('#view-audit').innerHTML=`<div class="card"><h3>Queue assessment yang siap dijalankan</h3><p class="muted">Hanya staff yang test master-nya sudah tersedia yang tampil di sini. Klik nama dari Data Staff atau Dashboard untuk membuka profil dan mulai audit.</p></div>${simpleTable(rows.map(x=>({name:x.name,track:x.track,current_level:x.display_level,pt_grade:x.display_pt_grade||'-',audit:auditCodeFor(x),status:levelStateText(x)})),['name','track','current_level','pt_grade','audit','status'])}`}
+
+function renderDrawer(d){
+  const s=d.staff;
+  $('#drawerBody').innerHTML=`
+    <div class="drawer-head">
+      <div>
+        <h2>${esc(s.name)}</h2>
+        <div class="drawer-title-meta">${typePill(s.employment_type)}<span class="pill">${esc(s.track||'-')}</span><span class="muted">${esc(s.outlet||'-')}</span></div>
+      </div>
+      <button class="close" onclick="closeDrawer()">Tutup</button>
+    </div>
+    <div class="drawer-body">
+      <div class="profile-grid">
+        <div class="info-card"><div class="info-label">Mapping awal / legacy</div><div class="info-value">${esc(s.legacy_level||s.current_level||'-')}</div></div>
+        <div class="info-card"><div class="info-label">Level saat ini</div><div class="info-value">${esc(s.display_level||'-')}</div><div class="legacy-note">${esc(levelStateText(s))}</div></div>
+        <div class="info-card"><div class="info-label">Certified level</div><div class="info-value ok">${esc(s.certified_level||'Belum')}</div></div>
+        <div class="info-card"><div class="info-label">Grade PT</div><div class="info-value">${esc(s.display_pt_grade||'-')}</div><div class="muted">Certified: ${esc(s.pt_certified_grade||'Belum')}</div></div>
+      </div>
+
+      <div class="statusline">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${statusPill(levelStateText(s))}${s.pt_grade_status&&s.pt_grade_status!=='N/A'?statusPill(s.pt_grade_status):''}</div>
+        <span class="muted"><b>Next:</b> ${esc(s.next_challenge||'-')}</span>
+      </div>
+
+      <div class="toolbar">
+        <button onclick="startSuggestedAudit()" ${d.suggestedAudit?'':'disabled'}>Mulai Audit ${esc(d.suggestedAudit||'belum tersedia')}</button>
+        <button class="secondary" onclick="editProfile()">Edit Data Staff</button>
+        <button class="secondary" onclick="openCorrection()">Koreksi Mapping</button>
+      </div>
+
+      ${approvalBlock(d)}
+
+      <div class="section">
+        <div class="section-head"><div><h3>Riwayat assessment</h3><div class="muted">Draft dan hasil assessment staff ini.</div></div></div>
+        ${simpleTable(d.assessments,['assessment_id','certification_code','total_weighted_score','result','promotion_gate'])}
+      </div>
+
+      <div class="section">
+        <div class="section-head"><div><h3>Certification</h3><div class="muted">Certification yang sudah tercatat.</div></div></div>
+        ${simpleTable(d.certifications,['certification_code','test_date','total_score','result','assessor'])}
+      </div>
+
+      <div class="section">
+        <div class="section-head"><div><h3>Riwayat perubahan level</h3><div class="muted">Jejak mapping, relevel, dan approval.</div></div></div>
+        ${simpleTable(d.history,['changed_at','change_type','from_level','to_level','from_pt_grade','to_pt_grade','approved_by','reason'])}
+      </div>
+    </div>`;
+}
+
+function approvalBlock(d){
+  const s=d.staff;
+  let out='';
+  if(s.certified_level&&s.certified_level!==s.display_level){
+    out+=`<div class="card section"><b>Certification tersedia: ${esc(s.certified_level)}</b><p class="muted">Level saat ini masih ${esc(s.display_level)}. Management bisa review lalu approve relevel.</p><button onclick="approveCertified('${esc(s.certified_level)}','')">Approve Level ${esc(s.certified_level)}</button></div>`;
+  }
+  if(s.pt_certified_grade&&s.pt_certified_grade!==s.display_pt_grade){
+    out+=`<div class="card section"><b>Grade PT certified: ${esc(s.pt_certified_grade)}</b><p class="muted">Grade PT saat ini masih ${esc(s.display_pt_grade||'-')}.</p><button onclick="approveCertified('','${esc(s.pt_certified_grade)}')">Approve ${esc(s.pt_certified_grade)}</button></div>`;
+  }
+  return out;
+}
+
+const COLUMN_LABELS={
+  assessment_id:'Assessment ID',certification_code:'Kode',total_weighted_score:'Nilai',result:'Hasil',promotion_gate:'Gate',
+  test_date:'Tanggal tes',total_score:'Nilai',assessor:'Assessor',changed_at:'Tanggal',change_type:'Perubahan',
+  from_level:'Dari level',to_level:'Ke level',from_pt_grade:'Dari PT',to_pt_grade:'Ke PT',approved_by:'Approved by',reason:'Alasan'
+};
+function simpleTable(rows,cols){
+  if(!rows||!rows.length)return '<div class="empty">Belum ada data.</div>';
+  return `<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${esc(COLUMN_LABELS[c]||c)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.slice(0,15).map(r=>`<tr>${cols.map(c=>`<td>${esc(r[c]??'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+async function startSuggestedAudit(){
+  const s=APP.currentStaff.staff,code=APP.currentStaff.suggestedAudit;
+  if(!code)return;
+  const a=await gas('startAssessment',{staffId:s.staff_id,certificationCode:code,assessor:APP.data.actor});
+  openAssessment(a);
+}
+function openAssessment(a){
+  APP.currentAssessment=a;
+  $('#modalBody').innerHTML=`
+    <h2>Assessment ${esc(a.certificationCode)} — ${esc(a.name)}</h2>
+    <div class="muted">${esc(a.assessmentId)}</div>
+    <div class="row section">
+      <label>Tanggal tes<input id="testDate" type="date" value="${new Date().toISOString().slice(0,10)}"></label>
+      <label>Assessor<input id="assessor" value="${esc(APP.data.actor)}"></label>
+    </div>
+    <div id="testItems">${a.items.map(testHtml).join('')}</div>
+    <div class="toolbar"><button class="secondary" onclick="saveAssess(false)">Simpan Draft</button><button onclick="saveAssess(true)">Finalize Assessment</button></div>`;
+  $('#modal').classList.remove('hidden');
+}
+function testHtml(x){
+  return `<div class="test" data-code="${esc(x.item_code)}">
+    <div class="test-head"><div><b>${esc(x.item_code)} — ${esc(x.competency_tested)}</b><div class="muted">${esc(x.category)} • Bobot ${esc(x.weight)} • ${esc(x.test_method)}</div></div><input class="score" type="number" min="0" max="100" placeholder="0-100" value="${esc(x.score_0_100)}"></div>
+    <p>${esc(x.pass_standard)}</p>
+    <div class="muted">Untuk staff: ${esc(x.staff_explanation)}</div>
+    <div class="row section">
+      <label>Critical failure<select class="critical"><option value="">Pilih</option><option ${String(x.critical_failure).toUpperCase()==='NO'?'selected':''}>NO</option><option ${String(x.critical_failure).toUpperCase()==='YES'?'selected':''}>YES</option></select></label>
+      <label>Evidence / link<input class="evidence" value="${esc(x.evidence_link)}"></label>
+    </div>
+    <label>Catatan<textarea class="note">${esc(x.note||'')}</textarea></label>
+  </div>`;
+}
+async function saveAssess(finalize){
+  const a=APP.currentAssessment;
+  const items=[...document.querySelectorAll('.test')].map(el=>({
+    itemCode:el.dataset.code,
+    score:el.querySelector('.score').value,
+    criticalFailure:el.querySelector('.critical').value,
+    evidenceLink:el.querySelector('.evidence').value,
+    note:el.querySelector('.note').value
+  }));
+  const saved=await gas('saveAssessment',{assessmentId:a.assessmentId,testDate:$('#testDate').value,assessor:$('#assessor').value,items});
+  APP.currentAssessment=saved;
+  if(!finalize){alert('Draft tersimpan.');openAssessment(saved);return}
+  const out=await gas('finalizeAssessment',{assessmentId:a.assessmentId,reviewer:$('#assessor').value,assessor:$('#assessor').value});
+  alert(out.recommendation.message);
+  closeModal();
+  await refresh();
+  await openStaff(out.staff.staff.staff_id);
+}
+async function approveCertified(level,pt){
+  const s=APP.currentStaff.staff;
+  const reason=prompt('Alasan approval/relevel (wajib):','Hasil baseline audit dan certification PASS');
+  if(!reason)return;
+  const approvedBy=prompt('Approved by:',APP.data.actor);
+  if(!approvedBy)return;
+  await gas('approveLevelAdjustment',{staffId:s.staff_id,targetLevel:level,targetPtGrade:pt,reason,approvedBy,mode:'CERTIFICATION'});
+  await refresh();await openStaff(s.staff_id);
+}
+async function openCorrection(){
+  const s=APP.currentStaff.staff;
+  const opt=await gas('getLevelOptions',s.staff_id);
+  let choices=opt.levels.map(x=>x.level_code).join(', ');
+  if(s.is_pt)choices+=' | PT: '+opt.ptGrades.map(x=>x.pt_grade).join(', ');
+  const target=prompt('Koreksi mapping. Pilihan role level: '+choices+'\nIsi kode target (contoh S2/K4/B2/PT2):',s.display_level);
+  if(!target)return;
+  const reason=prompt('Alasan koreksi mapping (wajib). Ini bukan certification:');
+  if(!reason)return;
+  const approvedBy=prompt('Approved by:',APP.data.actor);
+  if(!approvedBy)return;
+  const isPt=/^PT/.test(target.toUpperCase());
+  await gas('approveLevelAdjustment',{staffId:s.staff_id,targetLevel:isPt?'':target,targetPtGrade:isPt?target:'',reason,approvedBy,mode:'MAPPING_CORRECTION'});
+  await refresh();await openStaff(s.staff_id);
+}
+function editProfile(){
+  const s=APP.currentStaff.staff;
+  $('#modalBody').innerHTML=`
+    <h2>Edit Data Staff</h2><div class="muted">Perubahan data profil tercatat di audit log.</div>
+    <div class="row section">
+      <label>Nama<input id="eName" value="${esc(s.name)}"></label>
+      <label>Outlet<input id="eOutlet" value="${esc(s.outlet)}"></label>
+      <label>Track<input id="eTrack" value="${esc(s.track)}"></label>
+      <label>Employment<select id="eEmployment"><option ${s.employment_type==='FT'?'selected':''}>FT</option><option ${s.employment_type==='PT'?'selected':''}>PT</option><option ${s.employment_type==='OWNER'?'selected':''}>OWNER</option></select></label>
+    </div>
+    <label>Catatan management<textarea id="eNote">${esc(s.management_note||'')}</textarea></label>
+    <div class="toolbar"><button onclick="saveProfile()">Simpan Perubahan</button></div>`;
+  $('#modal').classList.remove('hidden');
+}
+async function saveProfile(){
+  const s=APP.currentStaff.staff;
+  await gas('saveStaffProfile',{staffId:s.staff_id,name:$('#eName').value,outlet:$('#eOutlet').value,track:$('#eTrack').value,employment_type:$('#eEmployment').value,management_note:$('#eNote').value,reason:'Edited from Web App'});
+  closeModal();await refresh();await openStaff(s.staff_id);
+}
+
+function renderAuditHome(){
+  const rows=dashboardStats().ready;
+  $('#view-audit').innerHTML=`
+    <div class="section-head">
+      <div><h2 style="font-size:22px">Queue Assessment</h2><div class="muted">Hanya staff dengan test master yang sudah tersedia.</div></div>
+      <button class="secondary" onclick="nav('staff')">Cari Staff</button>
+    </div>
+    ${rows.length?`<div class="audit-grid">${rows.map(x=>`
+      <div class="audit-card">
+        <div class="audit-card-top"><div><h4>${esc(x.name)}</h4><div class="muted">${esc(x.outlet||'-')} • ${esc(x.track||'-')}</div></div>${typePill(x.employment_type)}</div>
+        <div class="audit-meta"><span class="pill">Level ${esc(x.display_level||'-')}</span>${x.display_pt_grade?`<span class="pill">PT ${esc(x.display_pt_grade)}</span>`:''}${statusPill(levelStateText(x))}</div>
+        <div class="muted">Target audit</div><div class="big" style="font-size:18px;margin:2px 0 12px">${esc(auditCodeFor(x))}</div>
+        <button style="width:100%" onclick="openStaff('${esc(x.staff_id)}')">Buka Profil & Mulai Audit</button>
+      </div>`).join('')}</div>`:'<div class="empty">Belum ada staff yang siap diaudit dengan test master saat ini.</div>'}`;
+}
+
 async function refresh(){APP.data=await gas('getBootstrapData');renderAll()}
 boot();
 </script>
