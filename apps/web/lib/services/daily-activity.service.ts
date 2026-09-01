@@ -23,6 +23,7 @@ import {
   mapStaffReportLink,
 } from "@/lib/mappers/daily-activity";
 import { normalizePositionGroup } from "@/lib/position-groups";
+import { getEffectiveStaffPositionGroups } from "@/lib/services/staff-job-profile.service";
 import { TaskWriteError } from "@/lib/services/task-errors";
 
 export { normalizePositionGroup };
@@ -72,6 +73,24 @@ function matchesPositionGroup(
   const tpl = templateGroup.trim().toLowerCase();
   if (staffGroup.toLowerCase() === tpl) return true;
   return staffPosition.trim().toLowerCase() === tpl;
+}
+
+async function effectivePositionGroupsForStaff(
+  staffId: string,
+  position: string,
+  date = todayISO(),
+): Promise<string[]> {
+  try {
+    const groups = await getEffectiveStaffPositionGroups(staffId, position, date);
+    if (groups.length) return groups;
+  } catch (error) {
+    // Multi-job bersifat additive. Jika tabel/fitur belum siap, aktivitas utama tidak boleh ikut mati.
+    console.error("[daily-activity multi-job fallback]", staffId, error);
+  }
+
+  const normalized = normalizePositionGroup(position);
+  if (normalized) return [normalized];
+  return position.trim() ? [position.trim()] : [];
 }
 
 function isIssueCondition(c: ReportConditionStatus): boolean {
@@ -426,7 +445,6 @@ export async function generateStaffReportLink(
   if (staff.status !== "ACTIVE") {
     throw new DailyActivityError("Staff tidak aktif", "STAFF_INACTIVE", 400);
   }
-
   const shortCode = await ensureUniqueShortCode(slugifyStaffName(staff.name));
 
   const link = await prisma.$transaction(async (tx) => {
@@ -550,9 +568,22 @@ export async function getStaffReportByToken(
   }
 
   const outletCode = staff.outlet?.code ?? "";
-  const templates = await matchTemplatesForStaff(
-    outletCode,
-    staff.position ?? "",
+  const basePosition = staff.position ?? "";
+  const effectivePositions = await effectivePositionGroupsForStaff(
+    staff.staffId,
+    basePosition,
+  );
+  const templateSets = await Promise.all(
+    effectivePositions.map((position) =>
+      matchTemplatesForStaff(outletCode, position),
+    ),
+  );
+  const templateMap = new Map<string, ReportTemplate>();
+  for (const set of templateSets) {
+    for (const template of set) templateMap.set(template.id, template);
+  }
+  const templates = [...templateMap.values()].sort(
+    (a, b) => a.sort_order - b.sort_order,
   );
 
   const today = parseDateOnly(todayISO());
@@ -564,14 +595,18 @@ export async function getStaffReportByToken(
     },
   });
 
+  const displayPosition = effectivePositions.length
+    ? effectivePositions.join(" + ")
+    : basePosition;
+
   return {
     link: mapStaffReportLink(link),
     staff: {
       staff_id: staff.staffId,
       name: staff.name,
       outlet: outletCode,
-      position: staff.position ?? "",
-      position_group: normalizePositionGroup(staff.position ?? ""),
+      position: displayPosition,
+      position_group: normalizePositionGroup(basePosition),
     },
     templates,
     today_submissions: submissions.map((sub) =>
@@ -790,12 +825,19 @@ export async function buildDailyReportDashboard(
 
   for (const staff of staffList) {
     const outletCode = staff.outlet?.code ?? "";
+    const effectivePositions = await effectivePositionGroupsForStaff(
+      staff.staffId,
+      staff.position ?? "",
+      date,
+    );
+    const displayPosition = effectivePositions.length
+      ? effectivePositions.join(" + ")
+      : staff.position ?? "";
     const matched = templates
       .filter((t) => {
         const outletOk = !t.outletId || t.outlet?.code === outletCode;
-        const positionOk = matchesPositionGroup(
-          t.positionGroup,
-          staff.position ?? "",
+        const positionOk = effectivePositions.some((position) =>
+          matchesPositionGroup(t.positionGroup, position),
         );
         return outletOk && positionOk;
       })
@@ -836,7 +878,7 @@ export async function buildDailyReportDashboard(
         staff_id: staff.staffId,
         staff_name: staff.name,
         outlet: outletCode,
-        position: staff.position ?? "",
+        position: displayPosition,
         report_template_id: template.id,
         report_title: template.title,
         category: template.category,
