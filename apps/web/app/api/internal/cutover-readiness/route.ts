@@ -3,6 +3,8 @@ import { ok } from "@/lib/api/response"
 import { requireAuth } from "@/lib/require-auth"
 import { emergencyFallbackEnabled, getV1AppUrl } from "@/lib/emergency-fallback"
 import { checkGasFallback } from "@/lib/services/gas-adapter.service"
+import { checkStorageHealth } from "@/lib/services/storage.service"
+import { verifyPassword } from "@/lib/users.service"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -48,6 +50,98 @@ export async function GET() {
     id: "users_seeded",
     ok: userCount > 0,
     detail: userCount >= 0 ? `${userCount} user_accounts` : "count failed",
+  })
+
+  const storage = await checkStorageHealth()
+  checks.push({
+    id: "storage",
+    ok: storage === "ok",
+    detail: `Supabase Storage=${storage}`,
+  })
+
+  const [activeStaffCount, activeLeaderStaff, activeLeaderAccounts] =
+    await Promise.all([
+      prisma.staff.count({ where: { status: "ACTIVE" } }).catch(() => -1),
+      prisma.staff
+        .findMany({
+          where: { status: "ACTIVE", role: "LEADER" },
+          select: { staffId: true },
+        })
+        .catch(() => []),
+      prisma.userAccount
+        .findMany({
+          where: {
+            role: "LEADER",
+            loginEnabled: true,
+            staff: { is: { status: "ACTIVE", outlet: { is: { isActive: true } } } },
+          },
+          select: { staffId: true },
+        })
+        .catch(() => []),
+    ])
+
+  checks.push({
+    id: "active_staff_migrated",
+    ok: activeStaffCount > 0,
+    detail:
+      activeStaffCount >= 0
+        ? `${activeStaffCount} staff aktif`
+        : "gagal menghitung staff aktif",
+  })
+
+  const leaderAccountIds = new Set(
+    activeLeaderAccounts.map((account) => account.staffId).filter(Boolean),
+  )
+  const missingLeaderAccounts = activeLeaderStaff.filter(
+    (staff) => !leaderAccountIds.has(staff.staffId),
+  ).length
+  checks.push({
+    id: "leader_accounts_linked",
+    ok: activeLeaderStaff.length > 0 && missingLeaderAccounts === 0,
+    detail: `${activeLeaderAccounts.length}/${activeLeaderStaff.length} leader aktif punya akun + outlet`,
+  })
+
+  const passwordRows = await prisma.userAccount
+    .findMany({
+      where: { loginEnabled: true },
+      select: { passwordHash: true },
+    })
+    .catch(() => [])
+  const defaultPasswordMatches = await Promise.all(
+    passwordRows.map(async (user) =>
+        (await verifyPassword("admin123", user.passwordHash)) ||
+        (await verifyPassword("leader123", user.passwordHash)),
+    ),
+  )
+  const defaultPasswordCount = defaultPasswordMatches.filter(
+    Boolean,
+  ).length
+  checks.push({
+    id: "default_passwords_removed",
+    ok: defaultPasswordCount === 0,
+    detail:
+      defaultPasswordCount === 0
+        ? "tidak ada akun aktif memakai password demo"
+        : `${defaultPasswordCount} akun aktif masih memakai password demo`,
+  })
+
+  const schemaRows = await prisma
+    .$queryRaw<
+      Array<{ leader_monitor: string | null; staff_jobs: string | null }>
+    >`SELECT
+      to_regclass('public.leader_monitor_templates')::text AS leader_monitor,
+      to_regclass('public.staff_job_profiles')::text AS staff_jobs`
+    .catch(() => [])
+  const latestSchemaReady = Boolean(
+    schemaRows[0]?.leader_monitor && schemaRows[0]?.staff_jobs,
+  )
+  checks.push({
+    id: "latest_schema",
+    ok: latestSchemaReady,
+    detail:
+      latestSchemaReady
+        ? "Leader Monitoring + multi-jabatan tersedia"
+        : "migration schema terbaru belum lengkap",
   })
 
   const v1Url = getV1AppUrl()

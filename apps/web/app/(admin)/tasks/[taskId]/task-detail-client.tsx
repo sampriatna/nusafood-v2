@@ -517,7 +517,8 @@ export function TaskDetailClient({
           <Card className="border-destructive/20 p-4">
             <h3 className="mb-2 font-semibold text-destructive">Zona bahaya</h3>
             <p className="mb-3 text-sm text-muted-foreground">
-              Hapus tugas dari daftar v2. Link laporan staff tidak lagi aktif.
+              Hanya tugas yang belum dibuka atau dilaporkan staff yang dapat
+              dihapus. Tugas dengan histori operasional tetap disimpan.
             </p>
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -531,7 +532,7 @@ export function TaskDetailClient({
                   <AlertDialogTitle>Hapus tugas ini?</AlertDialogTitle>
                   <AlertDialogDescription>
                     {task.task_id} — {task.task_title} akan dihapus permanen
-                    dari database v2.
+                    jika belum memiliki aktivitas atau laporan staff.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

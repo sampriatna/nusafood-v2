@@ -12,9 +12,9 @@ Dokumen ini merangkum penilaian kondisi v2, prioritas perbaikan, dan urutan codi
 |------|------|---------|
 | Fitur inti | ~80% | Alur utama buat → lapor → approve sudah jalan |
 | Kesiapan pilot | ~90% | Soft launch KBU feasible dengan v1 fallback |
-| Kesiapan cutover penuh | ~65–70% | Gap WA recurring, monitoring, RBAC outlet |
-| Keamanan & kontrol akses | ~60% | Outlet RBAC + rate limit belum lengkap |
-| Otomatisasi | ~45% | Cron recurring belum ada |
+| Kesiapan cutover penuh | ~85% | Bukti production, migrasi akun leader, dan pilot masih wajib |
+| Keamanan & kontrol akses | ~90% | RBAC outlet + rate limit + upload token sudah tersedia |
+| Otomatisasi | ~85% | Cron recurring sudah tersedia; jadwal production perlu diverifikasi |
 
 **Yang sudah kuat:** Admin/leader buat tugas → staff buka link → kirim laporan/foto → leader approve/revisi → dashboard memantau.
 
@@ -125,12 +125,15 @@ Leader KBU lihat task KBU ✅ · Leader KBU akses task Kisamen via URL/API → *
 5. ✅ Endpoint generate recurring idempotent
 6. ✅ Vercel Cron
 7. ✅ Monitoring & error log
-8. ⬜ Pilot KBU 7 hari
-9. ⬜ Isi checklist go/no-go dari hasil nyata
-10. ⬜ Putuskan cutover
+8. ✅ Leader Monitoring persisten + upload public bertoken
+9. ✅ Build mandiri dari Google Fonts + CI wajib
+10. ⬜ Jalankan readiness ADMIN dan sync tim production
+11. ⬜ Pilot KBU 7 hari
+12. ⬜ Isi checklist go/no-go dari hasil nyata
+13. ⬜ Putuskan cutover
 
 **Jangan menambah modul baru** sampai empat lubang utama tertutup: otorisasi outlet, checklist consistency, WhatsApp, recurring cron.
 
 ---
 
-*Terakhir diperbarui: Juli 2026*
+*Terakhir diperbarui: 9 September 2026*

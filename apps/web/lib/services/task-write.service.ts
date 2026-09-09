@@ -844,25 +844,29 @@ export async function deleteTask(
   taskId: string,
   options?: { deletedBy?: string },
 ): Promise<void> {
-  const task = await prisma.task.findUnique({ where: { taskId } });
+  const task = await prisma.task.findUnique({
+    where: { taskId },
+    include: { _count: { select: { checklistReports: true } } },
+  });
   if (!task) {
     throw new TaskWriteError("Tugas tidak ditemukan", "TASK_NOT_FOUND", 404);
   }
 
-  await prisma.$transaction(async (tx) => {
-    const reports = await tx.checklistReport.findMany({
-      where: { taskId },
-      select: { reportId: true },
-    });
-    const reportIds = reports.map((report) => report.reportId);
-    if (reportIds.length) {
-      await tx.checklistReportItem.deleteMany({
-        where: { reportId: { in: reportIds } },
-      });
-      await tx.checklistReport.deleteMany({ where: { taskId } });
-    }
-    await tx.task.delete({ where: { taskId } });
-  });
+  const hasOperationalHistory = Boolean(
+    task._count.checklistReports > 0 ||
+      task.openedAt ||
+      task.submittedAt ||
+      task.verifiedAt,
+  );
+  if (hasOperationalHistory) {
+    throw new TaskWriteError(
+      "Tugas sudah memiliki aktivitas/laporan dan tidak boleh dihapus. Simpan sebagai histori.",
+      "TASK_HAS_HISTORY",
+      409,
+    );
+  }
+
+  await prisma.task.delete({ where: { taskId } });
 
   let v1Status: "success" | "failed" | null = null;
   let gasError: string | null = null;

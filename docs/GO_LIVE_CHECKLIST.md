@@ -2,8 +2,25 @@
 
 Panduan operasional untuk transisi dari **v1** (GAS + Google Sheets) ke **v2** (Vercel + PostgreSQL) secara **soft launch** — v1 dan v2 jalan parallel sampai v2 terbukti stabil.
 
-**Production v2:** https://nusafood-v2.vercel.app  
+**Production v2:** https://tugas.nf3.company
 **Dokumen terkait:** [SPRINT7_CUTOVER.md](./SPRINT7_CUTOVER.md) (go/no-go teknis) · [V2_ROLLBACK_PLAN.md](./V2_ROLLBACK_PLAN.md) (rollback) · [VERCEL_DEPLOY.md](./VERCEL_DEPLOY.md) (env Vercel)
+
+## Status audit — 9 September 2026
+
+| Bukti | Status |
+|---|---|
+| Production `/api/health` | ✅ HTTP 200; database OK; storage OK; GAS fallback disabled |
+| Unit test | ✅ 42/42 |
+| Typecheck workspace | ✅ |
+| Lint | ✅ |
+| Production build | ✅ tidak lagi mengambil Google Fonts saat build |
+| CI GitHub | ✅ workflow test/typecheck/lint/build ditambahkan |
+| Readiness admin lengkap | ⏳ jalankan setelah deploy; kini memeriksa staff aktif, akun leader+outlet, password demo, storage, dan schema terbaru |
+| Sync tim + akun leader production | ⏳ membutuhkan sesi ADMIN production |
+| Uji HP + training/cutover tim | ⏳ bukti operasional nyata, tidak boleh dicentang hanya dari kode |
+
+Status di atas adalah bukti yang sudah tersedia. Kotak fase berikut tetap menjadi
+lembar eksekusi production dan hanya dicentang setelah hasil nyata terverifikasi.
 
 ---
 
@@ -26,12 +43,12 @@ Panduan operasional untuk transisi dari **v1** (GAS + Google Sheets) ke **v2** (
 | 1 | `DATABASE_URL` + `DIRECT_URL` Supabase benar (password `@` → `%40`) | ⬜ |
 | 2 | `SESSION_SECRET` sudah di-set (random, panjang) | ⬜ |
 | 3 | `AUTH_REQUIRED=true` di production | ⬜ |
-| 4 | `GAS_WEB_APP_URL` → GAS v1 aktif | ⬜ |
-| 5 | `ADMIN_API_KEY` = `admin_secret` GAS (bukan `api_key`) | ⬜ |
-| 6 | `DUAL_WRITE_ENABLED=true` jika mau WA + tulis balik ke v1 | ⬜ |
-| 7 | `GAS_FALLBACK_ENABLED=true` | ⬜ |
+| 4 | `WA_PROVIDER=wame` (mode production mandiri) | ⬜ |
+| 5 | `DUAL_WRITE_ENABLED=false` | ⬜ |
+| 6 | `GAS_FALLBACK_ENABLED=false` | ⬜ |
+| 7 | `GAS_WEB_APP_URL` + `ADMIN_API_KEY` hanya diperlukan saat menjalankan sync v1→v2 | ⬜ |
 | 8 | Supabase Storage: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `STORAGE_BUCKET` | ⬜ |
-| 9 | `NEXT_PUBLIC_APP_URL=https://nusafood-v2.vercel.app` | ⬜ |
+| 9 | `NEXT_PUBLIC_APP_URL=https://tugas.nf3.company` | ⬜ |
 | 10 | `V1_APP_URL` = URL v1 (untuk emergency rollback) | ⬜ |
 | 11 | Deploy Vercel terbaru status **Ready** (bukan deployment lama) | ⬜ |
 
@@ -43,7 +60,7 @@ Panduan operasional untuk transisi dari **v1** (GAS + Google Sheets) ke **v2** (
 | 2 | Seed sudah jalan (outlet, area, kategori dasar) | ⬜ |
 | 3 | **Sync Semua dari v1** sudah dijalankan sekali (UI atau CLI) | ⬜ |
 | 4 | Sync logs — tidak ada error fatal | ⬜ |
-| 5 | User login leader sudah dibuat manual (tidak auto-sync dari v1) | ⬜ |
+| 5 | Setiap staff ber-role LEADER sudah punya user login, terhubung ke staff + outlet | ⬜ |
 
 **CLI sync (opsional, setara tombol UI):**
 
@@ -58,14 +75,14 @@ pnpm sync:all-from-v1 -- --gas
 | 1 | `GET /api/health` → status OK | ⬜ |
 | 2 | DB: connected | ⬜ |
 | 3 | Storage: connected (atau fallback lokal OK) | ⬜ |
-| 4 | GAS: connected (jika pakai dual-write) | ⬜ |
+| 4 | `GET /api/internal/cutover-readiness` dengan ADMIN → `ready=true` | ⬜ |
 
 ### D. Akun uji
 
 | Role | Username | Password default | Catatan |
 |------|----------|------------------|---------|
-| Admin | `admin` | `admin123` | **Ganti sebelum go-live** |
-| Leader | `leader.kbu` | `leader123` | Buat akun per outlet jika perlu |
+| Admin | `admin` | Tidak boleh memakai `admin123` | Gunakan password production yang kuat |
+| Leader | akun masing-masing | Tidak boleh memakai `leader123` | Satu akun per leader; wajib terhubung ke staff + outlet |
 
 | # | Item | Hasil |
 |---|------|-------|
@@ -103,13 +120,13 @@ pnpm sync:all-from-v1 -- --gas
 | 2 | Buka Sync Logs — waktu tampil **WIB** | ⬜ |
 | 3 | Catat waktu sync terakhir | ⬜ |
 
-### Dual-write (jika aktif)
+### Validasi sync satu arah
 
 | # | Item | Hasil |
 |---|------|-------|
-| 1 | Buat 1 tugas uji di v2 → muncul di v1 Sheets/GAS | ⬜ |
-| 2 | Staff submit uji → update di v1 | ⬜ |
-| 3 | Leader approve uji → status benar di v1 | ⬜ |
+| 1 | Sync v1→v2 idempotent: run kedua tidak membuat duplikat | ⬜ |
+| 2 | Data v2 tetap benar setelah v1 tidak tersedia sementara | ⬜ |
+| 3 | `wa.me` terbuka dengan pesan siap kirim tanpa GAS | ⬜ |
 
 ---
 
@@ -236,9 +253,9 @@ pnpm sync:all-from-v1 -- --gas
 
 | Fitur | Status |
 |-------|--------|
-| Auto-generate tugas recurring pagi (cron) | ❌ Belum |
-| WA otomatis saat generate checklist | ❌ Belum |
-| Hapus tugas dari UI | ❌ Belum |
+| Auto-generate tugas recurring pagi (cron) | ✅ Sudah; verifikasi cron production |
+| WA checklist | ✅ `wa.me`; pengiriman tetap dikonfirmasi leader |
+| Hapus tugas dari UI | ✅ Admin-only; histori yang sudah dibuka/dilaporkan tidak boleh dihapus |
 | Sync user login dari v1 | ❌ Buat manual |
 | Edit master data v2 → sync balik ke v1 | ❌ Belum |
 
@@ -280,6 +297,7 @@ Centang minimal ini sebelum leader wajib pindah ke v2:
 | 5 | Waktu WIB benar di UI | ⬜ |
 | 6 | Foto upload jalan di HP staff | ⬜ |
 | 7 | Rollback plan (kembali v1) sudah dipahami leader | ⬜ |
+| 8 | Readiness admin `ready=true` | ⬜ |
 
 **Keputusan soft launch:** ⬜ GO · ⬜ NO-GO · Tanggal: ____ · Owner: ____
 
@@ -364,7 +382,7 @@ Halo tim Leader,
 Kami mulai pakai dashboard Nusa Food v2 (soft launch).
 v1 masih jalan sebagai cadangan.
 
-Login: https://nusafood-v2.vercel.app/login
+Login: https://tugas.nf3.company/login
 Username: [USERNAME]
 Password: [PASSWORD SEMENTARA — ganti setelah login pertama]
 
@@ -389,12 +407,12 @@ Terima kasih.
 
 | URL | Fungsi |
 |-----|--------|
-| https://nusafood-v2.vercel.app | Landing v2 |
-| https://nusafood-v2.vercel.app/login | Login leader/admin |
-| https://nusafood-v2.vercel.app/dashboard | Dashboard operasional |
-| https://nusafood-v2.vercel.app/settings | Pengaturan + Sync Semua dari v1 |
-| https://nusafood-v2.vercel.app/api/health | Health check teknis |
+| https://tugas.nf3.company | Landing v2 |
+| https://tugas.nf3.company/login | Login leader/admin |
+| https://tugas.nf3.company/dashboard | Dashboard operasional |
+| https://tugas.nf3.company/settings | Pengaturan + Sync Semua dari v1 |
+| https://tugas.nf3.company/api/health | Health check teknis |
 
 ---
 
-*Terakhir diperbarui: Juli 2026 — sesuai status repo setelah PR #5 (timezone WIB).*
+*Terakhir diperbarui: 9 September 2026 — audit main setelah PR #48.*

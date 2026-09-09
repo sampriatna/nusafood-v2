@@ -253,8 +253,7 @@ export function DashboardClient() {
       .then((json: { success?: boolean; data?: { role?: string } }) => {
         const role = json.data?.role;
         setCanDeleteTasks(
-          json.success === true &&
-            (role === "ADMIN" || role === "LEADER"),
+          json.success === true && role === "ADMIN",
         );
       })
       .catch(() => setCanDeleteTasks(false));
