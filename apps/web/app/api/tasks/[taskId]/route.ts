@@ -42,7 +42,9 @@ export async function GET(_request: Request, { params }: Params) {
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
-  const auth = await requireAuth(["ADMIN", "LEADER"]);
+  // Hard delete is intentionally admin-only. Leaders may verify/revise tasks,
+  // but cannot erase operational history.
+  const auth = await requireAuth(["ADMIN"]);
   if (!auth.ok) return auth.response;
 
   try {

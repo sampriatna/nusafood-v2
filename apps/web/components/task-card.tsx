@@ -132,7 +132,7 @@ export function TaskCard({
                     <AlertDialogTitle>Hapus tugas?</AlertDialogTitle>
                     <AlertDialogDescription>
                       {task.task_id} — {task.task_title} akan dihapus dari
-                      daftar. Link laporan staff tidak lagi aktif di v2.
+                      daftar jika belum memiliki aktivitas atau laporan staff.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

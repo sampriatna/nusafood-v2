@@ -34,7 +34,7 @@ Owner mengisi kolom **Hasil** lalu putuskan.
 | 2 | Load baseline | error rate health < 1%, p95 < 1.5s | ⬜ |
 | 3 | Rollback drill | `pnpm rollback:drill` exit 0; redirect drill < 5 menit | ⬜ |
 | 4 | Staff link WA (pilot outlet) | 100% buka + submit di HP nyata | ⬜ |
-| 5 | Dual-write / sync_logs | tidak ada gagal kritis 48 jam | ⬜ |
+| 5 | Sync logs / `wa.me` | tidak ada gagal kritis 48 jam | ⬜ |
 | 6 | Auth multi-user | leader pilot bisa login + buat tugas | ⬜ |
 | 7 | Snapshot DB + export Sheets | backup < 24 jam | ⬜ |
 | 8 | DNS TTL diturunkan | 60s, ≥ 24 jam sebelum cutover | ⬜ |
@@ -60,7 +60,7 @@ Owner mengisi kolom **Hasil** lalu putuskan.
 1. Login pakai **username + password** (bukan hanya password owner)
 2. Dashboard membaca PostgreSQL (bukan Sheets langsung)
 3. Menu **Users** (ADMIN) untuk aktif/nonaktif akun
-4. **Sync logs** untuk pantau dual-write
+4. **Sync logs** untuk pantau sync, upload, recurring, dan WA
 5. Checklist & recurring punya halaman terpisah
 
 ### Demo singkat
@@ -82,9 +82,9 @@ V1_APP_URL="https://<v1-production>"
 EMERGENCY_FALLBACK_V1="false"   # true hanya saat insiden Level 2
 AUTH_REQUIRED="true"
 SESSION_SECRET="<production-secret>"
-DUAL_WRITE_ENABLED="true"       # sesuai fase migrasi
-DUAL_WRITE_PRIMARY="gas"
-GAS_FALLBACK_ENABLED="true"
+WA_PROVIDER="wame"
+DUAL_WRITE_ENABLED="false"
+GAS_FALLBACK_ENABLED="false"
 ```
 
 ## Catatan
