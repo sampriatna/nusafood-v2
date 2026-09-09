@@ -14,6 +14,8 @@ Mulai dari [`docs/V2_README.md`](./docs/V2_README.md), lalu:
 5. [Rollback plan](./docs/V2_ROLLBACK_PLAN.md)
 6. [Sprint 7 cutover prep](./docs/SPRINT7_CUTOVER.md)
 7. [Checklist go-live per role](./docs/GO_LIVE_CHECKLIST.md)
+8. [Audit progres Task V2 / Teguran](./docs/AUDIT_PROGRES_TASK_V2.md)
+9. [Laporan progres implementasi Teguran](./docs/LAPORAN_PROGRES_IMPLEMENTASI_TEGURAN.md)
 
 ## Struktur
 
