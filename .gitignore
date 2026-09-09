@@ -39,3 +39,4 @@ coverage
 # local photo uploads (dev fallback storage)
 apps/web/public/uploads/**
 !apps/web/public/uploads/.gitkeep
+hris-presensigpsv2/

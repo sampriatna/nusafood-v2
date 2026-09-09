@@ -1,6 +1,7 @@
 /** Shared domain types for Nusa Food Task System v2 */
 
 export * from "./position-groups";
+export * from "./hris";
 
 export type TaskStatus =
   | "CREATED"
@@ -205,6 +206,16 @@ export interface Staff {
   role: StaffRole;
   status: StaffStatus;
   login_enabled?: boolean;
+  hris_staff_id?: string | null;
+  hris_employee_code?: string | null;
+  hris_outlet_code?: string | null;
+  hris_division_code?: string | null;
+  hris_division_name?: string | null;
+  hris_position_code?: string | null;
+  hris_position_name?: string | null;
+  hris_link_status?: import("./hris").HrisLinkStatus;
+  hris_synced_at?: string | null;
+  wa_needs_completion?: boolean;
   created_at: string;
   updated_at: string;
 }
