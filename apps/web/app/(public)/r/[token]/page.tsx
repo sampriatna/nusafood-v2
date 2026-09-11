@@ -2,8 +2,10 @@ import {
   DailyActivityError,
   getStaffReportByToken,
 } from "@/lib/services/daily-activity.service";
+import { listActionableTasksForStaff } from "@/lib/services/staff-task-cycle.service";
 import type { ReportTemplate } from "@/lib/daily-activity-types";
 import { DailyActivityClient } from "./daily-activity-client";
+import { TaskCyclePanel } from "./task-cycle-panel";
 
 type Props = {
   params: Promise<{ token: string }>;
@@ -16,16 +18,21 @@ export default async function DailyActivityPage({ params }: Props) {
 
   try {
     const data = await getStaffReportByToken(token);
+    const tasks = await listActionableTasksForStaff(data.staff.staff_id);
+
     return (
-      <DailyActivityClient
-        token={token}
-        initialData={{
-          staff: data.staff,
-          templates: data.templates as ReportTemplate[],
-          today_submissions: data.today_submissions,
-          link_active: data.link.is_active,
-        }}
-      />
+      <>
+        <TaskCyclePanel tasks={tasks} />
+        <DailyActivityClient
+          token={token}
+          initialData={{
+            staff: data.staff,
+            templates: data.templates as ReportTemplate[],
+            today_submissions: data.today_submissions,
+            link_active: data.link.is_active,
+          }}
+        />
+      </>
     );
   } catch (error) {
     const message =
