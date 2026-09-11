@@ -19,6 +19,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { buildTaskCycleDescription } from "@/lib/task-cycle";
 
 type Option = { value: string; label: string; outlet?: string | null };
 
@@ -92,6 +93,17 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
     }
 
     const formData = new FormData(event.currentTarget);
+    const purpose = String(formData.get("task_purpose") || "").trim();
+    const nextAction = String(formData.get("task_next_action") || "").trim();
+    const doneWhen = String(formData.get("task_done_when") || "").trim();
+
+    if (!purpose || !nextAction || !doneWhen) {
+      setError(
+        "Buat apa, next action, dan selesai kalau wajib diisi agar PIC tidak menebak tugas.",
+      );
+      return;
+    }
+
     const deadlineLocal = String(formData.get("deadline") || "");
     let deadline = "";
     if (deadlineLocal) {
@@ -108,7 +120,14 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
       area: effectiveArea,
       category,
       task_title: String(formData.get("task_title") || ""),
-      task_description: String(formData.get("task_description") || ""),
+      task_description: buildTaskCycleDescription({
+        purpose,
+        trigger: String(formData.get("task_trigger") || ""),
+        target: String(formData.get("task_target") || ""),
+        nextAction,
+        doneWhen,
+        escalation: String(formData.get("task_escalation") || ""),
+      }),
       priority,
       pic_name: picName.trim(),
       pic_wa: picWa.trim(),
@@ -173,7 +192,9 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
         } else if (json.notify) {
           toast({
             title: "Tugas dibuat — WA belum tersedia",
-            description: json.notify.wa_error || "Buka halaman detail untuk menyalin link tugas.",
+            description:
+              json.notify.wa_error ||
+              "Buka halaman detail untuk menyalin link tugas.",
             variant: "destructive",
           });
         } else {
@@ -302,27 +323,89 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Detail Tugas</CardTitle>
+          <CardTitle className="text-base">Task Cycle — Bikin PIC Paham</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Isi seolah PIC belum pernah dengar konteks tugas ini. Sistem akan
+            menampilkan bagian pentingnya langsung di halaman kerja staff.
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="task_title">Judul Tugas *</Label>
+            <Label htmlFor="task_title">Apa task-nya? *</Label>
             <Input
               id="task_title"
               name="task_title"
               required
-              placeholder="Contoh: Bersihkan Kitchen Hood"
+              placeholder="Contoh: Pastikan 5 KOL datang ke Kisamen weekend ini"
             />
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="task_description">Deskripsi Tugas</Label>
+            <Label htmlFor="task_purpose">Buat apa? *</Label>
             <Textarea
-              id="task_description"
-              name="task_description"
-              rows={4}
-              placeholder="Jelaskan detail tugas yang harus dikerjakan…"
+              id="task_purpose"
+              name="task_purpose"
+              rows={2}
+              required
+              placeholder="Contoh: Supaya weekend Kisamen punya exposure dan traffic dari creator lokal."
             />
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="task_trigger">Kapan mulai bergerak?</Label>
+              <Input
+                id="task_trigger"
+                name="task_trigger"
+                placeholder="Contoh: Mulai H-3 sebelum weekend"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="task_target">Target / hasil angka</Label>
+              <Input
+                id="task_target"
+                name="task_target"
+                placeholder="Contoh: 4–5 KOL confirmed/visit"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="task_next_action">Next action sekarang *</Label>
+            <Textarea
+              id="task_next_action"
+              name="task_next_action"
+              rows={2}
+              required
+              placeholder="Contoh: Hari ini hubungi 8 KOL dan follow up semua yang belum jawab."
+            />
+            <p className="text-xs text-muted-foreground">
+              Harus berupa tindakan konkret, bukan “pantau”, “usahakan”, atau
+              “koordinasi”.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="task_done_when">Selesai kalau apa? *</Label>
+            <Textarea
+              id="task_done_when"
+              name="task_done_when"
+              rows={2}
+              required
+              placeholder="Contoh: Minimal 4 KOL confirmed/visit dan jadwalnya sudah tercatat."
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="task_escalation">Kalau terhambat harus bagaimana?</Label>
+            <Textarea
+              id="task_escalation"
+              name="task_escalation"
+              rows={2}
+              placeholder="Contoh: Kalau H-1 masih di bawah 3 confirmed, lapor leader dengan gap + daftar kandidat + rencana recovery."
+            />
+          </div>
+
           <PhotoUploader
             label="Foto Before (opsional)"
             value={beforePhotoPreview}
