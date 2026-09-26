@@ -123,7 +123,12 @@ function getClient(): Anthropic {
   return client;
 }
 
-export async function generateTaskDraft(input: TaskDraftInput): Promise<TaskDraft> {
+/** Panggil Claude dengan output terstruktur (zod) + penanganan error standar. */
+export async function runStructuredAi<S extends z.ZodType>(
+  system: string,
+  prompt: string,
+  schema: S,
+): Promise<z.infer<S>> {
   const model = process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL;
 
   if (!readApiKey().startsWith("sk-ant-")) {
@@ -141,12 +146,12 @@ export async function generateTaskDraft(input: TaskDraftInput): Promise<TaskDraf
       max_tokens: 4000,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      system: SYSTEM_PROMPT,
+      system,
       output_config: {
         effort: "low",
-        format: betaZodOutputFormat(TaskDraftSchema),
+        format: betaZodOutputFormat(schema),
       },
-      messages: [{ role: "user", content: buildTaskDraftPrompt(input) }],
+      messages: [{ role: "user", content: prompt }],
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
@@ -181,8 +186,12 @@ export async function generateTaskDraft(input: TaskDraftInput): Promise<TaskDraf
   if (response.stop_reason === "max_tokens" || !response.parsed_output) {
     throw new TaskDraftError("Jawaban AI tidak lengkap, coba lagi", "AI_INCOMPLETE");
   }
+  return response.parsed_output as z.infer<S>;
+}
 
-  const { task_title, task_description } = response.parsed_output;
+export async function generateTaskDraft(input: TaskDraftInput): Promise<TaskDraft> {
+  const output = await runStructuredAi(SYSTEM_PROMPT, buildTaskDraftPrompt(input), TaskDraftSchema);
+  const { task_title, task_description } = output;
   return {
     task_title: task_title.trim().slice(0, 120),
     task_description: task_description.trim(),

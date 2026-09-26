@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DISCIPLINARY_SOURCE_OPTIONS,
@@ -18,7 +18,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { Eye, Loader2, Sparkles } from "lucide-react";
+import type { DisciplinaryLetter } from "@nusafood/types";
+import { checkLetterTimeline } from "@/lib/letter/letter-format";
+import { buildLetterDocumentHtml } from "@/lib/letter/letter-html";
 
 type ApiResponse<T> =
   | { success: true; data: T; error: null }
@@ -40,7 +50,7 @@ const defaultForm = (): CreateDisciplinaryLetterPayload => ({
   employee_id: "",
   outlet_name: "",
   source_type: "TASK_LATE",
-  incident_date: new Date().toISOString().slice(0, 10),
+  incident_date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date()),
   chronology: "",
   violation_detail: "",
   correction_instruction:
@@ -59,6 +69,10 @@ export default function NewTeguranForm() {
   const [employeeWarning, setEmployeeWarning] = useState<string | null>(null);
   const [evidenceNote, setEvidenceNote] = useState("");
   const [loadingPrefill, setLoadingPrefill] = useState(false);
+  const [taskInfo, setTaskInfo] = useState<{ title?: string; deadline?: string } | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [polishing, setPolishing] = useState(false);
+  const submittingRef = useRef(false);
 
   const taskId = search.get("task_id");
   const editId = search.get("edit");
@@ -124,6 +138,7 @@ export default function NewTeguranForm() {
           return;
         }
         const p = json.data;
+        setTaskInfo({ title: p.task_title, deadline: p.task_deadline });
         setIntegrityWarning(p.integrity_warning || p.source_type === "FAKE_REPORT");
         setEmployeeWarning(
           p.employee_valid
@@ -227,6 +242,138 @@ export default function NewTeguranForm() {
     [staff, form.employee_id],
   );
 
+  // Edit / input manual: ambil deadline task terkait untuk validasi tanggal.
+  const relatedTaskId = form.related_task_id?.trim() || "";
+  useEffect(() => {
+    if (!relatedTaskId || taskInfo?.deadline) return;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => {
+      void fetch(`/api/tasks/${encodeURIComponent(relatedTaskId)}`, {
+        credentials: "include",
+        signal: ctrl.signal,
+      })
+        .then((res) => res.json())
+        .then((json: { success?: boolean; data?: { task_title?: string; deadline?: string } }) => {
+          if (json.success && json.data?.deadline) {
+            setTaskInfo({ title: json.data.task_title, deadline: json.data.deadline });
+          }
+        })
+        .catch(() => undefined);
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [relatedTaskId, taskInfo?.deadline]);
+
+  const timelineIssues = useMemo(
+    () =>
+      checkLetterTimeline({
+        incident_date: form.incident_date,
+        correction_deadline: form.correction_deadline,
+        task_deadline: taskInfo?.deadline,
+      }),
+    [form.incident_date, form.correction_deadline, taskInfo?.deadline],
+  );
+  const timelineBlocked = timelineIssues.some((i) => i.level === "error");
+
+  function openPreview() {
+    const now = new Date().toISOString();
+    const letter: DisciplinaryLetter = {
+      id: editId || "preview",
+      letter_number: "",
+      type: form.type,
+      level: form.level,
+      status: "DRAFT",
+      employee_id: form.employee_id || "",
+      employee_name_snapshot: form.employee_name || selectedStaff?.name || "(pilih karyawan)",
+      employee_position_snapshot: form.employee_position || selectedStaff?.position || null,
+      outlet_id: form.outlet_id,
+      outlet_name_snapshot: form.outlet_name || selectedStaff?.outlet || "",
+      related_task_id: form.related_task_id,
+      source_type: form.source_type,
+      incident_date: form.incident_date || now.slice(0, 10),
+      created_by: "",
+      title: form.title || "",
+      chronology: form.chronology,
+      violation_detail: form.violation_detail,
+      operational_impact: form.operational_impact,
+      correction_instruction: form.correction_instruction,
+      correction_deadline: form.correction_deadline,
+      sop_reference: form.sop_reference,
+      consequence: form.consequence,
+      created_at: now,
+      updated_at: now,
+      evidence: (form.evidence || []).map((e, i) => ({
+        id: String(i),
+        disciplinary_letter_id: "",
+        evidence_type: e.evidence_type,
+        file_url: e.file_url,
+        text_note: e.text_note,
+        created_by: "",
+        created_at: now,
+      })),
+    };
+    setPreviewHtml(
+      buildLetterDocumentHtml(letter, {
+        origin: window.location.origin,
+        preview: true,
+        embed: true,
+      }),
+    );
+  }
+
+  async function polishWithAi() {
+    if (polishing) return;
+    setPolishing(true);
+    try {
+      const res = await fetch("/api/ai/letter-polish", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          letter_type: form.type,
+          employee_name: form.employee_name || selectedStaff?.name,
+          task_title: taskInfo?.title,
+          incident_date: form.incident_date,
+          chronology: form.chronology,
+          violation_detail: form.violation_detail,
+          operational_impact: form.operational_impact || "",
+          correction_instruction: form.correction_instruction,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as ApiResponse<{
+        chronology: string;
+        violation_detail: string;
+        operational_impact: string;
+        correction_instruction: string;
+      }>;
+      if (!json.success || !json.data) {
+        throw new Error(json.error || `Server error (${res.status})`);
+      }
+      const d = json.data;
+      setForm((prev) => ({
+        ...prev,
+        chronology: d.chronology || prev.chronology,
+        violation_detail: d.violation_detail || prev.violation_detail,
+        operational_impact: d.operational_impact || prev.operational_impact,
+        correction_instruction: d.correction_instruction || prev.correction_instruction,
+      }));
+      toast({
+        title: "Bahasa surat dirapikan",
+        description: "Periksa kembali — fakta & tanggal harus tetap sama.",
+      });
+    } catch (cause) {
+      toast({
+        title: "AI gagal merapikan",
+        description: cause instanceof Error ? cause.message : "Coba lagi",
+        variant: "destructive",
+      });
+    } finally {
+      setPolishing(false);
+    }
+  }
+
   function update<K extends keyof CreateDisciplinaryLetterPayload>(
     key: K,
     value: CreateDisciplinaryLetterPayload[K],
@@ -273,6 +420,15 @@ export default function NewTeguranForm() {
   }
 
   function save(submitForApproval = false) {
+    if (submittingRef.current) return;
+    if (timelineBlocked) {
+      toast({
+        title: "Tanggal surat belum logis",
+        description: timelineIssues.find((i) => i.level === "error")?.message,
+        variant: "destructive",
+      });
+      return;
+    }
     if (submitForApproval && !employeeValid) {
       toast({
         title: "Karyawan belum valid",
@@ -292,7 +448,9 @@ export default function NewTeguranForm() {
       return;
     }
 
+    submittingRef.current = true;
     startTransition(async () => {
+      try {
       const payload: CreateDisciplinaryLetterPayload = {
         ...form,
         employee_name: form.employee_name || selectedStaff?.name,
@@ -366,6 +524,9 @@ export default function NewTeguranForm() {
           : "Draft teguran tersimpan",
       });
       router.push(`/teguran/${json.data.id}`);
+      } finally {
+        submittingRef.current = false;
+      }
     });
   }
 
@@ -522,6 +683,26 @@ export default function NewTeguranForm() {
             />
           </div>
 
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              Tulis apa adanya, lalu rapikan jadi bahasa surat formal. Fakta &amp;
+              tanggal tidak diubah.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void polishWithAi()}
+              disabled={polishing || pending}
+            >
+              {polishing ? (
+                <Loader2 className="mr-1.5 size-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1.5 size-4" />
+              )}
+              Rapikan bahasa (AI)
+            </Button>
+          </div>
           <div className="space-y-1.5">
             <Label>Kronologi singkat</Label>
             <Textarea
@@ -531,7 +712,7 @@ export default function NewTeguranForm() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Detail kesalahan</Label>
+            <Label>Bentuk pelanggaran</Label>
             <Textarea
               rows={3}
               value={form.violation_detail}
@@ -654,11 +835,35 @@ export default function NewTeguranForm() {
         </CardContent>
       </Card>
 
+      {timelineIssues.length ? (
+        <Card
+          className={
+            timelineBlocked ? "border-red-300 bg-red-50" : "border-amber-300 bg-amber-50"
+          }
+        >
+          <CardContent className="space-y-1 p-4 text-sm">
+            <p className="font-semibold">
+              {timelineBlocked ? "Tanggal belum logis — perbaiki dulu" : "Cek urutan tanggal"}
+            </p>
+            <ul className="list-disc space-y-0.5 pl-5">
+              {timelineIssues.map((issue) => (
+                <li key={issue.message}>{issue.message}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Button type="button" variant="outline" onClick={openPreview}>
+        <Eye className="mr-2 size-4" />
+        Preview Surat
+      </Button>
+
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button
           className="flex-1"
           variant="secondary"
-          disabled={pending}
+          disabled={pending || timelineBlocked}
           onClick={() => save(false)}
         >
           Simpan Draft Teguran
@@ -666,7 +871,7 @@ export default function NewTeguranForm() {
         {form.type === "PERINGATAN" ? (
           <Button
             className="flex-1"
-            disabled={pending || !employeeValid || evidenceIncomplete}
+            disabled={pending || !employeeValid || evidenceIncomplete || timelineBlocked}
             onClick={() => save(true)}
           >
             Ajukan Approval SP
@@ -684,6 +889,24 @@ export default function NewTeguranForm() {
           (menandai status di sistem saja, bukan WA/email).
         </p>
       )}
+      <Dialog open={previewHtml !== null} onOpenChange={(open) => !open && setPreviewHtml(null)}>
+        <DialogContent className="flex h-[90vh] max-w-[min(900px,96vw)] flex-col gap-2 p-3 sm:max-w-[min(900px,96vw)]">
+          <DialogHeader>
+            <DialogTitle>Preview surat (draft)</DialogTitle>
+          </DialogHeader>
+          {previewHtml ? (
+            <iframe
+              title="Preview surat"
+              srcDoc={previewHtml}
+              className="min-h-0 w-full flex-1 rounded border bg-neutral-200"
+            />
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            Nomor surat dibuat saat draft disimpan. Cetak / Save PDF dari halaman
+            detail surat.
+          </p>
+        </DialogContent>
+      </Dialog>
     </AdminPage>
   );
 }

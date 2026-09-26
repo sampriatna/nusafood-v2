@@ -5,6 +5,7 @@ import {
   DisciplinaryError,
   getDisciplinaryLetter,
 } from "@/lib/services/disciplinary.service";
+import { prisma } from "@/lib/db";
 import { buildFormalLetterHtml } from "@/lib/services/disciplinary-pdf.service";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,13 @@ export async function GET(request: Request, { params }: Params) {
       return fail("Surat tidak ditemukan.", { code: "NOT_FOUND", status: 404 });
     }
     const origin = new URL(request.url).origin;
-    const html = buildFormalLetterHtml(letter, origin);
+    const outlet = letter.outlet_id
+      ? await prisma.outlet.findUnique({ where: { id: letter.outlet_id }, select: { name: true } })
+      : await prisma.outlet.findUnique({
+          where: { code: letter.outlet_name_snapshot.toUpperCase() },
+          select: { name: true },
+        });
+    const html = buildFormalLetterHtml(letter, origin, { outletFullName: outlet?.name });
     return new NextResponse(html, {
       status: 200,
       headers: {

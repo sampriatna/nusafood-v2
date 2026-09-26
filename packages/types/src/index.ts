@@ -965,6 +965,9 @@ export interface DisciplinaryTaskPrefill {
   evidence: DisciplinaryEvidenceInput[];
   task_link?: string | null;
   previous_letter_count: number;
+  task_title?: string;
+  /** ISO — untuk validasi urutan tanggal di generator */
+  task_deadline?: string;
 }
 
 export const DISCIPLINARY_TYPE_OPTIONS: {
