@@ -82,7 +82,7 @@ export default async function SettingsPage() {
         href="/settings/daily-activity"
         icon={ClipboardList}
         title="Daily Activity SOP"
-        description="Link report staff, template kegiatan harian, leader monitoring"
+        description="Template kegiatan harian, link report staff, dan audit SOP"
       />
       <SettingsLinkCard
         href="/settings/recurring-tasks"
@@ -90,12 +90,6 @@ export default async function SettingsPage() {
         title="Template Tugas Berulang"
         description="Kelola jadwal, PIC, dan checklist harian"
         meta={`${recurring.length} template · ${recurring.filter((t) => t.active_status).length} aktif`}
-      />
-      <SettingsLinkCard
-        href="/settings/daily-activity"
-        icon={ClipboardList}
-        title="Daily Activity SOP"
-        description="Template kegiatan harian, link staff, dan dashboard audit"
       />
       <SettingsLinkCard
         href="/settings/staff"
