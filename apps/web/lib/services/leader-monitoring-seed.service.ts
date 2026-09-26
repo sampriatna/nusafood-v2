@@ -5,8 +5,27 @@ import {
   photoModeToDb,
 } from "@/lib/leader-monitoring-seed-data";
 
-/** Idempotent seed — upsert templates by kind when DB empty or outdated count. */
-export async function ensureLeaderMonitorTemplatesSeeded(): Promise<number> {
+let syncedThisInstance: Promise<unknown> | null = null;
+
+/**
+ * Pastikan template leader monitoring ada, tanpa memperlambat tiap request.
+ * - DB belum lengkap → seed dulu (blocking, hanya pertama kali).
+ * - Sudah lengkap → sinkron definisi terbaru sekali per instance server di
+ *   background; request tidak menunggu upsert satu per satu.
+ */
+export async function ensureLeaderMonitorTemplatesSeeded(): Promise<void> {
+  if (!(await isLeaderMonitorSeeded())) {
+    syncedThisInstance = syncLeaderMonitorTemplates();
+    await syncedThisInstance;
+    return;
+  }
+  syncedThisInstance ??= syncLeaderMonitorTemplates().catch((error) => {
+    console.error("[leader-monitoring] sync templates gagal", error);
+  });
+}
+
+/** Idempotent seed — upsert templates by kind. */
+export async function syncLeaderMonitorTemplates(): Promise<number> {
   let upserted = 0;
 
   for (const def of LEADER_MONITOR_SEED_TEMPLATES) {
