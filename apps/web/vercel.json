@@ -1,4 +1,7 @@
 {
+  "regions": [
+    "icn1"
+  ],
   "installCommand": "cd ../.. && pnpm install",
   "buildCommand": "cd ../.. && pnpm db:generate && pnpm --filter @nusafood/web build",
   "crons": [
