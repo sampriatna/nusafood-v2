@@ -243,6 +243,8 @@ export interface RecurringTemplate {
   requires_photo: boolean;
   active_status: boolean;
   template_version: number;
+  /** PIC berdasarkan posisi (mis. "Kasir"); pic_name/pic_wa jadi cadangan. */
+  pic_position?: string | null;
   created_at: string;
   updated_at: string;
 }
