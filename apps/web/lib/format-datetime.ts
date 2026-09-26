@@ -65,7 +65,7 @@ function parseDateKey(key: string): Date {
   return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
 }
 
-function addDaysToDateKey(key: string, days: number): string {
+export function addDaysToDateKey(key: string, days: number): string {
   const dt = parseDateKey(key);
   dt.setUTCDate(dt.getUTCDate() + days);
   return dateKeyInAppTz(dt);
