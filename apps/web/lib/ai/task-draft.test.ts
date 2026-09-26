@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTaskDraftPrompt } from "./task-draft";
+import { buildTaskDraftPrompt, readApiKey } from "./task-draft";
 
 describe("buildTaskDraftPrompt", () => {
   it("includes note, context and category focus", () => {
@@ -29,5 +29,13 @@ describe("buildTaskDraftPrompt", () => {
     });
     expect(prompt).toContain("Bersihkan hood");
     expect(prompt).toContain("pakai degreaser");
+  });
+});
+
+describe("readApiKey", () => {
+  it("strips whitespace, newlines and wrapping quotes", () => {
+    expect(readApiKey('  "sk-ant-abc"\n')).toBe("sk-ant-abc");
+    expect(readApiKey("'sk-ant-abc'")).toBe("sk-ant-abc");
+    expect(readApiKey(undefined)).toBe("");
   });
 });
