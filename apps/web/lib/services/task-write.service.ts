@@ -30,7 +30,11 @@ import {
   verifyChecklistReport,
 } from "@/lib/services/checklist.service";
 import { TaskWriteError } from "@/lib/services/task-errors";
-import { buildTaskWaMessage, buildWaMeLink } from "@/lib/wa-message";
+import {
+  buildTaskWaMessage,
+  buildWaMeLink,
+  buildWaShareLink,
+} from "@/lib/wa-message";
 
 export { TaskWriteError };
 
@@ -50,6 +54,7 @@ async function finalizeTaskCreateWa(input: {
     outlet: String(input.payload.outlet),
   });
   const wa_link = buildWaMeLink(input.payload.pic_wa, waMessage) || undefined;
+  const wa_share_link = buildWaShareLink(waMessage);
 
   if (!input.gasSynced && isGasEnabled()) {
     const gas = await callGasAction<Record<string, unknown>>("createTask", {
@@ -77,6 +82,7 @@ async function finalizeTaskCreateWa(input: {
         wa_sent: false,
         wa_error: gas.error ?? "GAS sync gagal — gunakan link manual",
         wa_link,
+        wa_share_link,
       };
     }
   }
@@ -99,6 +105,7 @@ async function finalizeTaskCreateWa(input: {
     wa_sent: wa.sent,
     wa_error: wa.error,
     wa_link: wa.sent ? undefined : wa_link,
+    wa_share_link,
   };
 }
 

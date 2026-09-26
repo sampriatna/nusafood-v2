@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { DisciplinaryLetter } from "@nusafood/types";
-import { buildDisciplinaryWaMessage, buildTaskWaMessage, normalizeWa } from "./wa-message";
+import {
+  buildDisciplinaryWaMessage,
+  buildTaskWaMessage,
+  buildWaShareLink,
+  normalizeWa,
+} from "./wa-message";
 
 const sampleLetter: DisciplinaryLetter = {
   id: "abc",
@@ -50,5 +55,12 @@ describe("buildTaskWaMessage", () => {
     expect(msg).toContain("Bersihkan hood");
     expect(msg).toContain("tugas.nf3.company");
     expect(msg).toContain("*Andi*");
+  });
+});
+
+describe("buildWaShareLink", () => {
+  it("builds wa.me link without phone number so user picks chat/group", () => {
+    const link = buildWaShareLink("Halo tim\nTugas baru");
+    expect(link).toBe("https://wa.me/?text=Halo%20tim%0ATugas%20baru");
   });
 });
