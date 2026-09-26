@@ -19,6 +19,7 @@ const PUBLIC_PATHS = [
   "/api/auth/logout",
   "/api/uploads/photo",
   "/uploads",
+  "/verifikasi",
 ]
 
 function isPublicPath(pathname: string) {

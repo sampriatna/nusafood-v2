@@ -6,7 +6,14 @@ export const NF3_COMPANY = {
   founderName: "Sampriatna",
   founderTitle: "Founder",
   brands: ["Kisamen", "Samtaro Space", "Buri Umah Coffee & Eatery"],
+  /** Baris brand di kop surat. */
+  letterheadBrands: ["Kisamen", "Samtaro", "Kopi Buri Umah"],
 } as const;
+
+/** Halaman publik verifikasi keaslian surat (dibuka dari QR). */
+export function buildVerifyUrl(letterId: string, origin = ""): string {
+  return `${origin.replace(/\/$/, "")}/verifikasi/surat/${encodeURIComponent(letterId)}`;
+}
 
 export function buildFounderQrPayload(input: {
   letterNumber: string;

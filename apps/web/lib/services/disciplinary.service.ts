@@ -15,6 +15,12 @@ import type {
 } from "@nusafood/types";
 import type { SessionPayload } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { dateKeyInAppTz } from "@/lib/format-datetime";
+import {
+  buildTaskChronology,
+  buildViolationText,
+  checkLetterTimeline,
+} from "@/lib/letter/letter-format";
 import { TaskWriteError } from "@/lib/services/task-errors";
 import {
   buildLetterPreviewText,
@@ -32,8 +38,9 @@ const ACTIVE_STATUSES: DisciplinaryLetterStatus[] = [
   "ACKNOWLEDGED",
 ];
 
+/** Tanggal hari ini dalam WIB (server Vercel berjalan di UTC). */
 function todayISO(d = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return dateKeyInAppTz(d);
 }
 
 function parseDateOnly(iso: string): Date {
@@ -203,9 +210,7 @@ async function nextLetterNumber(
   type: DisciplinaryLetterType,
   outletCode: string,
 ): Promise<string> {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const [y, m] = todayISO().split("-");
   const prefix = type === "TEGURAN" ? "ST" : "SP";
   const code = (outletCode || "ALL").toUpperCase().slice(0, 8);
   const base = `${prefix}/${code}/${y}/${m}/`;
@@ -256,6 +261,21 @@ function validateDraftBasics(payload: CreateDisciplinaryLetterPayload) {
       400,
     );
   }
+  const blocking = checkLetterTimeline({
+    incident_date: payload.incident_date,
+    correction_deadline: payload.correction_deadline,
+  }).find((issue) => issue.level === "error");
+  if (blocking) {
+    throw new DisciplinaryError(blocking.message, "TIMELINE_INVALID", 400);
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: string }).code === "P2002"
+  );
 }
 
 function assertFormalEmployee(
@@ -458,52 +478,65 @@ export async function createDisciplinaryLetter(
       ? "WAITING_APPROVAL"
       : "DRAFT";
 
-  const letterNumber = await nextLetterNumber(payload.type, outletName);
   const title =
     payload.title?.trim() ||
     `${payload.type === "TEGURAN" ? "Surat Teguran" : "Surat Peringatan"} ${payload.level} — ${employeeName}`;
 
-  const created = await prisma.disciplinaryLetter.create({
-    data: {
-      letterNumber,
-      type: payload.type,
-      level: payload.level,
-      status: initialStatus,
-      employeeId,
-      employeeNameSnapshot: employeeName,
-      employeePositionSnapshot: employeePosition,
-      outletId,
-      outletNameSnapshot: outletName,
-      relatedTaskId: payload.related_task_id || null,
-      sourceType: payload.source_type,
-      incidentDate: parseDateOnly(payload.incident_date || todayISO()),
-      createdBy: a.id,
-      createdByName: a.name,
-      title,
-      chronology: payload.chronology.trim(),
-      violationDetail: payload.violation_detail.trim(),
-      operationalImpact: payload.operational_impact?.trim() || null,
-      correctionInstruction: payload.correction_instruction.trim(),
-      correctionDeadline: payload.correction_deadline
-        ? parseDateOnly(payload.correction_deadline)
-        : null,
-      sopReference: payload.sop_reference?.trim() || null,
-      consequence: payload.consequence?.trim() || null,
-      internalNote: payload.internal_note?.trim() || null,
-      evidence: payload.evidence?.length
-        ? {
-            create: payload.evidence.map((e) => ({
-              evidenceType: e.evidence_type,
-              fileUrl: e.file_url || null,
-              textNote: e.text_note || null,
-              relatedTaskPhotoId: e.related_task_photo_id || null,
-              createdBy: a.id,
-            })),
-          }
-        : undefined,
-    },
-    include: includeAll,
-  });
+  // Nomor unik: kalau dua surat dibuat bersamaan / double-submit, ambil nomor berikutnya.
+  const createWithNumber = async (letterNumber: string) =>
+    prisma.disciplinaryLetter.create({
+      data: {
+        letterNumber,
+        type: payload.type,
+        level: payload.level,
+        status: initialStatus,
+        employeeId,
+        employeeNameSnapshot: employeeName,
+        employeePositionSnapshot: employeePosition,
+        outletId,
+        outletNameSnapshot: outletName,
+        relatedTaskId: payload.related_task_id || null,
+        sourceType: payload.source_type,
+        incidentDate: parseDateOnly(payload.incident_date || todayISO()),
+        createdBy: a.id,
+        createdByName: a.name,
+        title,
+        chronology: payload.chronology.trim(),
+        violationDetail: payload.violation_detail.trim(),
+        operationalImpact: payload.operational_impact?.trim() || null,
+        correctionInstruction: payload.correction_instruction.trim(),
+        correctionDeadline: payload.correction_deadline
+          ? parseDateOnly(payload.correction_deadline)
+          : null,
+        sopReference: payload.sop_reference?.trim() || null,
+        consequence: payload.consequence?.trim() || null,
+        internalNote: payload.internal_note?.trim() || null,
+        evidence: payload.evidence?.length
+          ? {
+              create: payload.evidence.map((e) => ({
+                evidenceType: e.evidence_type,
+                fileUrl: e.file_url || null,
+                textNote: e.text_note || null,
+                relatedTaskPhotoId: e.related_task_photo_id || null,
+                createdBy: a.id,
+              })),
+            }
+          : undefined,
+      },
+      include: includeAll,
+    });
+
+  let created: Awaited<ReturnType<typeof createWithNumber>> | null = null;
+  for (let attempt = 0; attempt < 5 && !created; attempt++) {
+    try {
+      created = await createWithNumber(await nextLetterNumber(payload.type, outletName));
+    } catch (error) {
+      if (!isUniqueViolation(error) || attempt === 4) throw error;
+    }
+  }
+  if (!created) {
+    throw new DisciplinaryError("Gagal membuat nomor surat.", "NUMBER_FAILED", 500);
+  }
 
   const integrityNote =
     payload.source_type === "FAKE_REPORT"
@@ -1096,7 +1129,6 @@ export async function buildPrefillFromTask(
     });
   }
 
-  const deadlineStr = task.deadline.toISOString();
   return {
     related_task_id: task.taskId,
     employee_id: resolved.employee_id,
@@ -1107,10 +1139,17 @@ export async function buildPrefillFromTask(
     source_type: isLate ? "TASK_LATE" : "TASK_INCOMPLETE",
     incident_date: todayISO(),
     title: `Teguran — ${task.taskTitle}`,
-    chronology: `Task ${task.taskId} berjudul "${task.taskTitle}" memiliki deadline ${deadlineStr}. Status saat ini: ${task.status}${task.isLate || isLate ? " (terlambat)" : ""}.`,
-    violation_detail: isLate
-      ? `Karyawan terlambat menyelesaikan / melaporkan task "${task.taskTitle}".`
-      : `Task "${task.taskTitle}" belum selesai sesuai standar.`,
+    chronology: buildTaskChronology({
+      taskId: task.taskId,
+      taskTitle: task.taskTitle,
+      taskCreatedAt: task.createdAt,
+      taskDeadline: task.deadline,
+      taskStatus: task.status,
+      isLate: task.isLate || isLate,
+    }),
+    violation_detail: buildViolationText(task.taskTitle, task.isLate || isLate),
+    task_title: task.taskTitle,
+    task_deadline: task.deadline.toISOString(),
     correction_instruction:
       "Selesaikan tugas sesuai standar, kirim laporan dengan foto asli dan jelas, serta laporkan kendala ke leader sebelum deadline.",
     suggested_type: "TEGURAN",

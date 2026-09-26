@@ -347,7 +347,22 @@ export default function TeguranDetailPage() {
 
       <Card>
         <CardContent className="space-y-2 p-4">
-          <h3 className="font-semibold">Preview isi surat</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold">Surat</h3>
+            <a
+              href={`/api/disciplinary/${letter.id}/document`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Button size="sm">Lihat / Cetak Surat (A4)</Button>
+            </a>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {letter.status === "DRAFT" || letter.status === "WAITING_APPROVAL"
+              ? "Masih draft — dokumen diberi tanda DRAFT sampai diterbitkan."
+              : "Buka dokumen lalu pilih Print / Save PDF."}
+          </p>
+          <p className="pt-1 text-xs font-medium text-muted-foreground">Ringkasan isi (untuk WhatsApp)</p>
           <pre className="whitespace-pre-wrap rounded bg-muted/50 p-3 text-xs leading-relaxed">
             {preview}
           </pre>
