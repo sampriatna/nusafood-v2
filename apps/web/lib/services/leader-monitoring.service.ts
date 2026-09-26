@@ -418,27 +418,26 @@ export async function buildLeaderMonitorDashboard(
 ): Promise<LeaderMonitorDashboardData> {
   const date = filters.date || todayISO();
   const outlet = filters.outlet;
-  const [submissions, templates] = await Promise.all([
+  const [submissions, templates, needingFix] = await Promise.all([
     listLeaderMonitorSubmissions({ ...filters, date }),
     listLeaderMonitorTemplates(outlet),
+    listSubmissionsNeedingFix(date).catch((error) => {
+      console.error(
+        "[buildLeaderMonitorDashboard] listSubmissionsNeedingFix failed",
+        error,
+      );
+      return [] as DailyReportSubmission[];
+    }),
   ]);
 
-  let staff_need_fix: DailyReportSubmission[] = [];
-  try {
-    staff_need_fix = (await listSubmissionsNeedingFix(date)).filter((s) => {
-      if (!outlet || outlet === "ALL") return true;
-      const code = normalizeOutletCode(outlet);
-      return (
-        normalizeOutletCode(s.outlet_id) === code ||
-        normalizeOutletCode(s.outlet) === code
-      );
-    });
-  } catch (error) {
-    console.error(
-      "[buildLeaderMonitorDashboard] listSubmissionsNeedingFix failed",
-      error,
-    );
-  }
+  const outletCode = outlet && outlet !== "ALL" ? normalizeOutletCode(outlet) : null;
+  const staff_need_fix = outletCode
+    ? needingFix.filter(
+        (s) =>
+          normalizeOutletCode(s.outlet_id) === outletCode ||
+          normalizeOutletCode(s.outlet) === outletCode,
+      )
+    : needingFix;
 
   const summary: LeaderMonitorDashboardSummary = {
     total_today: submissions.length,

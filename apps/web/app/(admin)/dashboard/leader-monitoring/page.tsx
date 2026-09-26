@@ -21,7 +21,6 @@ import {
   getLeaderStaffOptions,
   submitLeaderMonitor,
   updateLeaderMonitorFollowUp,
-  fetchStaffList,
 } from "@/lib/api/daily-report-client";
 import { OUTLET_FILTER_OPTIONS, normalizeOutletCode } from "@/lib/outlet-codes";
 import type {
@@ -61,6 +60,9 @@ export default function LeaderMonitoringPage() {
   const [outlet, setOutlet] = useState<string>("KBU");
   const [data, setData] = useState<LeaderMonitorDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  /** Tunggu outlet sesi diketahui dulu supaya data tidak dimuat dua kali. */
+  const [sessionReady, setSessionReady] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
 
   const [template, setTemplate] = useState<LeaderMonitorTemplate | null>(null);
@@ -91,32 +93,41 @@ export default function LeaderMonitoringPage() {
           setOutlet(code);
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setSessionReady(true));
   }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const staffRes = await fetchStaffList({ status: "ACTIVE" });
-      if (staffRes.success && staffRes.data) {
-        const opt = await getLeaderStaffOptions(
-          outlet === "ALL" ? sessionOutlet : outlet,
-        );
-        if (opt.success && opt.data) setStaffOptions(opt.data);
+      // Dashboard & opsi staff diambil paralel (dulu berurutan + ambil semua staff).
+      const [dash, opt] = await Promise.all([
+        getLeaderMonitorDashboard({ date, outlet }),
+        getLeaderStaffOptions(outlet === "ALL" ? sessionOutlet : outlet).catch(
+          () => null,
+        ),
+      ]);
+      if (opt?.success && opt.data) setStaffOptions(opt.data);
+      if (dash.success && dash.data) {
+        setData(dash.data);
+      } else {
+        setLoadError(dash.error || "Gagal memuat data monitoring");
       }
-      const dash = await getLeaderMonitorDashboard({
-        date,
-        outlet,
-      });
-      if (dash.success && dash.data) setData(dash.data);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error && !error.message.includes("fetch")
+          ? error.message
+          : "Tidak bisa menghubungi server. Cek koneksi internet.",
+      );
     } finally {
       setLoading(false);
     }
   }, [date, outlet, sessionOutlet]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (sessionReady) load();
+  }, [load, sessionReady]);
 
   const summary = data?.summary;
   const templates = data?.templates || [];
@@ -530,6 +541,15 @@ export default function LeaderMonitoringPage() {
           <SummaryCard label="Issue selesai" value={summary?.issue_selesai ?? "—"} tone="green" />
         </div>
 
+        {loadError && !loading ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3">
+            <p className="text-sm text-red-700">{loadError}</p>
+            <Button size="sm" variant="outline" onClick={() => void load()}>
+              Coba lagi
+            </Button>
+          </div>
+        ) : null}
+
         <section className="space-y-2.5">
           <h2 className="font-semibold text-slate-800 flex items-center gap-2 text-sm">
             <ClipboardCheck className="h-4 w-4" />
@@ -537,6 +557,10 @@ export default function LeaderMonitoringPage() {
           </h2>
           {loading && !templates.length ? (
             <p className="text-sm text-muted-foreground">Memuat…</p>
+          ) : !templates.length && !loadError ? (
+            <p className="text-sm text-muted-foreground">
+              Belum ada template checklist kontrol untuk outlet ini.
+            </p>
           ) : (
             templates.map((t) => (
               <button
