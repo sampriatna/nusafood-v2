@@ -19,6 +19,7 @@ import {
   DashboardSummaryCards,
 } from "@/components/dashboard-summary";
 import { MobileHeader } from "@/components/mobile-header";
+import { PendingSendPanel } from "@/components/pending-send-panel";
 import { TaskCard, TaskCardSkeleton } from "@/components/task-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -547,6 +548,8 @@ export function DashboardClient() {
             </CardContent>
           </Card>
         )}
+
+        <PendingSendPanel onGenerated={() => void loadData()} />
 
         <div className="grid grid-cols-2 gap-2">
           {QUICK_LINKS.map((item) => (

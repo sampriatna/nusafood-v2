@@ -74,10 +74,24 @@ function repeatLabel(template: RecurringTemplate): string {
       .join(", ");
     return `Mingguan (${labels})`;
   }
+  if (template.repeat_type === "monthly") {
+    const dates = monthlyDates(template.repeat_days);
+    return dates.length ? `Bulanan (tgl ${dates.join(", ")})` : "Bulanan";
+  }
   return template.repeat_type;
 }
 
+const MONTH_DATES = Array.from({ length: 31 }, (_, i) => String(i + 1));
+
+function monthlyDates(days: readonly string[]): number[] {
+  return days
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 31)
+    .sort((a, b) => a - b);
+}
+
 function defaultDays(repeatType: string): string[] {
+  if (repeatType === "monthly") return ["15"];
   if (repeatType === "weekdays") return DAYS.slice(0, 5).map((d) => d.value);
   if (repeatType === "weekly") return ["senin"];
   if (repeatType === "daily") return DAYS.map((d) => d.value);
@@ -168,6 +182,17 @@ export function RecurringManager({
   function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+
+    if (
+      (repeatType === "monthly" || repeatType === "weekly" || repeatType === "custom") &&
+      repeatDays.length === 0
+    ) {
+      toast({
+        title: repeatType === "monthly" ? "Pilih tanggal dulu" : "Pilih hari dulu",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const payload = {
       template_name: String(formData.get("template_name") || ""),
@@ -486,9 +511,50 @@ export function RecurringManager({
               </div>
             ) : null}
 
+            {repeatType === "monthly" ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: "Tgl 1", days: ["1"] },
+                    { label: "Tgl 15", days: ["15"] },
+                    { label: "1 & 15 (2x sebulan)", days: ["1", "15"] },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setRepeatDays(preset.days)}
+                      className="rounded-full border border-dashed border-primary/60 px-3 py-1 text-xs font-medium text-primary"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-1.5">
+                  {MONTH_DATES.map((date) => (
+                    <button
+                      key={date}
+                      type="button"
+                      onClick={() => toggleDay(date)}
+                      className={`rounded-md border py-1.5 text-xs font-medium transition-colors ${
+                        repeatDays.includes(date)
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-muted-foreground"
+                      }`}
+                    >
+                      {date}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Boleh pilih lebih dari satu tanggal. Tanggal 29–31 otomatis
+                  jatuh ke hari terakhir di bulan yang lebih pendek.
+                </p>
+              </div>
+            ) : null}
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="repeat_time">Waktu Mulai</Label>
+                <Label htmlFor="repeat_time">Jam Mulai Kerja</Label>
                 <Input
                   id="repeat_time"
                   name="repeat_time"
@@ -508,6 +574,10 @@ export function RecurringManager({
                 />
               </div>
             </div>
+            <p className="-mt-1 text-xs text-muted-foreground">
+              Tugas muncul otomatis tiap pagi (jam 08.00) atau saat admin buka
+              dashboard, lalu tampil di kotak &quot;Siap Dikirim&quot;.
+            </p>
 
             <label className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
               <span className="text-sm">Wajib foto bukti</span>
