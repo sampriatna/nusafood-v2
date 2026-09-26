@@ -94,8 +94,13 @@ export function buildTaskDraftPrompt(input: TaskDraftInput): string {
   return lines.filter(Boolean).join("\n");
 }
 
+/** Bersihkan salah tempel umum di dashboard env: spasi/enter dan tanda kutip. */
+export function readApiKey(raw = process.env.ANTHROPIC_API_KEY): string {
+  return (raw ?? "").trim().replace(/^["']+|["']+$/g, "").trim();
+}
+
 export function isAiConfigured(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+  return Boolean(readApiKey());
 }
 
 export class TaskDraftError extends Error {
@@ -110,12 +115,24 @@ export class TaskDraftError extends Error {
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
-  client ??= new Anthropic({ timeout: 45_000, maxRetries: 1 });
+  client ??= new Anthropic({
+    apiKey: readApiKey(),
+    timeout: 45_000,
+    maxRetries: 1,
+  });
   return client;
 }
 
 export async function generateTaskDraft(input: TaskDraftInput): Promise<TaskDraft> {
   const model = process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL;
+
+  if (!readApiKey().startsWith("sk-ant-")) {
+    throw new TaskDraftError(
+      "Format API key AI salah (harus diawali sk-ant-). Cek env ANTHROPIC_API_KEY di Vercel.",
+      "AI_KEY_FORMAT",
+      500,
+    );
+  }
 
   let response;
   try {
@@ -133,7 +150,18 @@ export async function generateTaskDraft(input: TaskDraftInput): Promise<TaskDraf
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
-      throw new TaskDraftError("API key AI tidak valid", "AI_AUTH_FAILED", 500);
+      throw new TaskDraftError(
+        "API key AI ditolak Anthropic (salah/dicabut). Buat key baru di console.anthropic.com lalu redeploy.",
+        "AI_AUTH_FAILED",
+        500,
+      );
+    }
+    if (error instanceof Anthropic.PermissionDeniedError) {
+      throw new TaskDraftError(
+        "API key tidak punya akses ke model ini. Cek akun/saldo Anthropic atau isi ANTHROPIC_MODEL lain.",
+        "AI_PERMISSION_DENIED",
+        500,
+      );
     }
     if (error instanceof Anthropic.RateLimitError) {
       throw new TaskDraftError("AI sedang sibuk, coba lagi sebentar", "AI_RATE_LIMITED", 429);
