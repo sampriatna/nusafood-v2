@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
-  ChevronRight,
   ClipboardList,
   FileWarning,
   Filter,
@@ -50,6 +49,33 @@ import {
   todayKeyInAppTz,
   weekRangeKeysInAppTz,
 } from "@/lib/format-datetime";
+
+const QUICK_LINKS = [
+  {
+    href: "/dashboard/daily-reports",
+    icon: ClipboardList,
+    title: "Laporan Harian",
+    subtitle: "Daily report & SOP",
+  },
+  {
+    href: "/dashboard/leader-monitoring",
+    icon: ShieldCheck,
+    title: "Leader Monitoring",
+    subtitle: "Kontrol lapangan",
+  },
+  {
+    href: "/settings/recurring-tasks",
+    icon: RefreshCw,
+    title: "Tugas Berulang",
+    subtitle: "Template & jadwal",
+  },
+  {
+    href: "/teguran",
+    icon: FileWarning,
+    title: "Teguran",
+    subtitle: "ST / SP & disiplin",
+  },
+] as const;
 
 const statusOptions: { value: TaskStatus | "ALL"; label: string }[] = [
   { value: "ALL", label: "Semua Status" },
@@ -522,115 +548,26 @@ export function DashboardClient() {
           </Card>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <Link href="/dashboard/daily-reports">
-            <Card className="cursor-pointer transition-colors hover:border-primary/50">
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <ClipboardList className="size-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Daily Reports
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Laporan kegiatan harian staff
-                  </p>
-                </div>
-                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          </Link>
-          <Link href="/dashboard/leader-monitoring">
-            <Card className="cursor-pointer transition-colors hover:border-primary/50">
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <ShieldCheck className="size-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Leader Monitoring
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Kontrol lapangan & validasi
-                  </p>
-                </div>
-                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          </Link>
-          <Link href="/settings/recurring-tasks">
-            <Card className="cursor-pointer transition-colors hover:border-primary/50">
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <RefreshCw className="size-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Tugas Berulang
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Template & jadwal
-                  </p>
-                </div>
-                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          </Link>
-          <Link href="/dashboard/daily-reports">
-            <Card className="cursor-pointer transition-colors hover:border-primary/50">
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <ClipboardList className="size-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Daily Activity
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Audit SOP harian
-                  </p>
-                </div>
-                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          </Link>
-          <Link href="/teguran">
-            <Card className="cursor-pointer transition-colors hover:border-primary/50">
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <FileWarning className="size-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Teguran Center
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    ST / SP & disiplin operasional
-                  </p>
-                </div>
-                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          </Link>
-          <Link href="/tasks/new">
-            <Card className="cursor-pointer transition-colors hover:border-primary/50">
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <Plus className="size-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Tugas Baru
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Buat tugas manual
-                  </p>
-                </div>
-                <ChevronRight className="ml-auto size-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          </Link>
+        <div className="grid grid-cols-2 gap-2">
+          {QUICK_LINKS.map((item) => (
+            <Link key={item.href} href={item.href}>
+              <Card className="h-full cursor-pointer gap-0 py-0 transition-colors hover:border-primary/50">
+                <CardContent className="space-y-2 p-3">
+                  <div className="w-fit rounded-lg bg-primary/10 p-1.5">
+                    <item.icon className="size-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium leading-tight text-foreground">
+                      {item.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.subtitle}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
         </div>
 
         <Tabs
