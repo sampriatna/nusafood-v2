@@ -1,4 +1,7 @@
+import Link from "next/link";
+import { CalendarDays } from "lucide-react";
 import { AdminPage } from "@/components/admin-page";
+import { Button } from "@/components/ui/button";
 import { authRequired, getSession } from "@/lib/auth";
 import { todayKeyInAppTz } from "@/lib/format-datetime";
 import { resolveListOutletFilter } from "@/lib/outlet-scope";
@@ -33,6 +36,14 @@ export default async function StaffDutyPage() {
 
   return (
     <AdminPage title="Posisi Kerja Hari Ini" backHref="/dashboard/daily-reports" maxWidth="3xl">
+      {canSetDuty ? (
+        <Button asChild variant="outline" className="w-full">
+          <Link href="/dashboard/staff-duty/weekly">
+            <CalendarDays className="mr-2 size-4" />
+            Atur jadwal satu minggu sekaligus
+          </Link>
+        </Button>
+      ) : null}
       <StaffDutyClient
         staff={staff}
         settings={settings}

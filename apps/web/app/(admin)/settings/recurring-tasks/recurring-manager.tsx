@@ -590,8 +590,11 @@ export function RecurringManager({
               {picPosition !== NO_POSITION ? (
                 <p className="text-xs text-muted-foreground">
                   Tiap hari PIC diambil dari yang bertugas sebagai{" "}
-                  <strong>{getPositionGroupLabel(picPosition)}</strong> di menu
-                  Posisi Kerja. Kalau tidak ada yang dijadwalkan, dipakai staff
+                  <strong>{getPositionGroupLabel(picPosition)}</strong> di{" "}
+                  <a href="/dashboard/staff-duty/weekly" className="underline">
+                    Jadwal Posisi Mingguan
+                  </a>
+                  . Kalau tidak ada yang dijadwalkan, dipakai staff
                   berjabatan {getPositionGroupLabel(picPosition)}, lalu PIC cadangan
                   di bawah. PIC tetap bisa diganti sebelum kirim.
                 </p>
