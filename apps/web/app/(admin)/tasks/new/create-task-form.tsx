@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Staff } from "@nusafood/types";
-import { Send, User } from "lucide-react";
+import { Loader2, Send, Sparkles, User } from "lucide-react";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +43,10 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
   const [picName, setPicName] = useState("");
   const [picWa, setPicWa] = useState("");
   const [shareToGroup, setShareToGroup] = useState(false);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [aiNote, setAiNote] = useState("");
+  const [aiPending, setAiPending] = useState(false);
   const [beforePhotoPreview, setBeforePhotoPreview] = useState<string | undefined>();
 
   const filteredAreas = useMemo(
@@ -83,6 +87,65 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
     setPicWa(selected?.wa_number ?? "");
   }
 
+  async function handleAiDraft() {
+    if (aiPending) return;
+    if (!aiNote.trim() && !taskTitle.trim() && !taskDescription.trim()) {
+      toast({
+        title: "Tulis catatan singkat dulu",
+        description: "Contoh: hood dapur berminyak, stok gas sering telat",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAiPending(true);
+    try {
+      const res = await fetch("/api/ai/task-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          note: aiNote,
+          outlet,
+          area: effectiveArea,
+          category,
+          category_label: categories.find((c) => c.value === category)?.label,
+          priority,
+          current_title: taskTitle,
+          current_description: taskDescription,
+        }),
+      });
+      let json: {
+        success: boolean;
+        data?: { task_title: string; task_description: string } | null;
+        error?: string | null;
+      };
+      try {
+        json = (await res.json()) as typeof json;
+      } catch {
+        throw new Error(`Server error (${res.status})`);
+      }
+      if (!json.success || !json.data) {
+        throw new Error(json.error || "Gagal membuat draft AI");
+      }
+      setTaskTitle(json.data.task_title);
+      setTaskDescription(json.data.task_description);
+      toast({
+        title: "Draft AI siap",
+        description: "Cek dan edit dulu sebelum kirim ke staff.",
+      });
+    } catch (cause) {
+      toast({
+        title: "AI gagal membantu",
+        description:
+          cause instanceof Error ? cause.message : "Coba lagi atau isi manual.",
+        variant: "destructive",
+      });
+    } finally {
+      setAiPending(false);
+    }
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -108,8 +171,8 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
       outlet,
       area: effectiveArea,
       category,
-      task_title: String(formData.get("task_title") || ""),
-      task_description: String(formData.get("task_description") || ""),
+      task_title: taskTitle.trim(),
+      task_description: taskDescription.trim(),
       priority,
       pic_name: picName.trim(),
       pic_wa: picWa.trim(),
@@ -316,11 +379,50 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
           <CardTitle className="text-base">Detail Tugas</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2 rounded-md border border-dashed p-3">
+            <Label htmlFor="ai_note" className="flex items-center gap-1.5">
+              <Sparkles className="size-4 text-primary" />
+              Bantu Tulis (AI)
+            </Label>
+            <Textarea
+              id="ai_note"
+              value={aiNote}
+              onChange={(e) => setAiNote(e.target.value)}
+              rows={2}
+              maxLength={2000}
+              placeholder="Tulis singkat saja, mis. hood dapur berminyak"
+            />
+            <p className="text-xs text-muted-foreground">
+              AI menyusun judul, tujuan, langkah, dan standar selesai sesuai
+              Jenis Tugas. Hasilnya tetap bisa diedit.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleAiDraft}
+              disabled={aiPending || pending}
+            >
+              {aiPending ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  AI sedang menulis…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 size-4" />
+                  Buat Judul & Deskripsi
+                </>
+              )}
+            </Button>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="task_title">Judul Tugas *</Label>
             <Input
               id="task_title"
               name="task_title"
+              value={taskTitle}
+              onChange={(e) => setTaskTitle(e.target.value)}
               required
               placeholder="Contoh: Bersihkan Kitchen Hood"
             />
@@ -330,7 +432,9 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
             <Textarea
               id="task_description"
               name="task_description"
-              rows={4}
+              value={taskDescription}
+              onChange={(e) => setTaskDescription(e.target.value)}
+              rows={taskDescription ? 10 : 4}
               placeholder="Jelaskan detail tugas yang harus dikerjakan…"
             />
           </div>
