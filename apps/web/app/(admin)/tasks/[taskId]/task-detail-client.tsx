@@ -17,6 +17,7 @@ import {
   Send,
   Trash2,
   User,
+  Users,
 } from "lucide-react";
 import { MobileHeader } from "@/components/mobile-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -48,6 +49,11 @@ import {
   formatDateTimeId,
   formatTimeId,
 } from "@/lib/format-datetime";
+import {
+  buildChecklistWaMessage,
+  buildTaskWaMessage,
+  buildWaShareLink,
+} from "@/lib/wa-message";
 
 type Props = {
   task: Task;
@@ -90,6 +96,27 @@ export function TaskDetailClient({
     task.status,
   );
   const canRemind = openStatuses.includes(task.status);
+
+  const groupShareLink = useMemo(() => {
+    if (!task.report_link) return "";
+    const outlet = typeof task.outlet === "string" ? task.outlet : undefined;
+    const message = task.checklist_mode
+      ? buildChecklistWaMessage({
+          pic_name: task.pic_name,
+          report_link: task.report_link,
+          template_title: task.task_title,
+          deadline: task.deadline,
+          outlet,
+        })
+      : buildTaskWaMessage({
+          task_title: task.task_title,
+          pic_name: task.pic_name,
+          deadline: task.deadline,
+          report_link: task.report_link,
+          outlet,
+        });
+    return buildWaShareLink(message);
+  }, [task]);
 
   const showBeforePhoto = Boolean(task.before_photo_url);
   const showAfterPhoto =
@@ -491,6 +518,22 @@ export function TaskDetailClient({
                   >
                     <Send className="mr-2 size-4" />
                     Kirim Ulang WA
+                  </Button>
+                ) : null}
+                {canResendWA && groupShareLink ? (
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="w-full sm:w-auto"
+                  >
+                    <a
+                      href={groupShareLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Users className="mr-2 size-4" />
+                      Share ke Grup WA
+                    </a>
                   </Button>
                 ) : null}
                 {canRemind ? (

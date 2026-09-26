@@ -42,6 +42,7 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [picName, setPicName] = useState("");
   const [picWa, setPicWa] = useState("");
+  const [shareToGroup, setShareToGroup] = useState(false);
   const [beforePhotoPreview, setBeforePhotoPreview] = useState<string | undefined>();
 
   const filteredAreas = useMemo(
@@ -136,6 +137,7 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
             wa_sent: boolean;
             wa_error?: string;
             wa_link?: string;
+            wa_share_link?: string;
           };
           error?: string;
         };
@@ -158,7 +160,16 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
         const taskId = json.data.task_id;
         let waFallbackLink: string | undefined;
 
-        if (json.notify?.wa_sent) {
+        if (shareToGroup && json.notify?.wa_share_link) {
+          waFallbackLink = json.notify.wa_share_link;
+          toast({
+            title: json.notify.wa_sent
+              ? "Tugas dibuat & WA terkirim ke PIC"
+              : "Tugas dibuat — lanjut share ke grup",
+            description:
+              "WhatsApp akan dibuka dengan pesan tugas. Pilih grup tujuan, lalu tekan Kirim.",
+          });
+        } else if (json.notify?.wa_sent) {
           toast({
             title: "Tugas dibuat & WA terkirim",
             description: `Notifikasi dikirim ke ${picName.trim()}`,
@@ -409,6 +420,23 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
                 placeholder="628xxxxxxxxxx"
               />
             </div>
+          </div>
+
+          <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+            <div className="space-y-1">
+              <Label htmlFor="share-to-group" className="font-medium">
+                Kirim ke Grup WA
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Setelah tugas dibuat, WhatsApp dibuka dan Anda pilih grup
+                tujuannya sendiri.
+              </p>
+            </div>
+            <Switch
+              id="share-to-group"
+              checked={shareToGroup}
+              onCheckedChange={setShareToGroup}
+            />
           </div>
 
           <div className="space-y-2">

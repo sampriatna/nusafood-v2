@@ -63,6 +63,11 @@ export function buildWaMeLink(waNumber: string, message: string): string {
   return `https://wa.me/${wa}?text=${encodeURIComponent(message)}`;
 }
 
+/** Link wa.me tanpa nomor — WhatsApp minta pilih chat/grup tujuan secara manual. */
+export function buildWaShareLink(message: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
+}
+
 export function buildDisciplinaryWaMessage(letter: DisciplinaryLetter): string {
   const kind =
     letter.type === "TEGURAN"

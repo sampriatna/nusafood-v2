@@ -146,6 +146,8 @@ export interface TaskWaNotifyResult {
   wa_sent: boolean;
   wa_error?: string;
   wa_link?: string;
+  /** wa.me tanpa nomor — untuk share manual ke grup WA. */
+  wa_share_link?: string;
 }
 
 export interface CreateTaskResult {
