@@ -4,6 +4,34 @@ import { normalizeOutletCode } from "@nusafood/database/normalizers";
 import { prisma } from "@/lib/db";
 import { generateRecurringTemplateId } from "@/lib/id";
 import { ChecklistError } from "@/lib/services/checklist.service";
+import {
+  getPicPositions,
+  normalizePicPosition,
+  setPicPosition,
+} from "@/lib/services/recurring-pic.service";
+
+async function withPicPositions(
+  templates: RecurringTemplate[],
+): Promise<RecurringTemplate[]> {
+  const positions = await getPicPositions(templates.map((t) => t.template_id));
+  return templates.map((t) => ({
+    ...t,
+    pic_position: positions.get(t.template_id) ?? null,
+  }));
+}
+
+async function applyPicPosition(
+  templateId: string,
+  value: string | null | undefined,
+): Promise<string | null | undefined> {
+  if (value === undefined) return undefined;
+  const position = normalizePicPosition(value);
+  if (value && !position) {
+    throw new ChecklistError(`Posisi tidak dikenal: ${value}`, "VALIDATION", 422);
+  }
+  await setPicPosition(templateId, position);
+  return position;
+}
 
 function parseTime(value: string): Date {
   // Store as UTC time-of-day on epoch date
@@ -85,7 +113,7 @@ export async function listRecurringTemplates(outlet?: string) {
     include,
     orderBy: { updatedAt: "desc" },
   });
-  return rows.map(mapRecurring);
+  return withPicPositions(rows.map(mapRecurring));
 }
 
 export async function getRecurringTemplate(templateId: string) {
@@ -93,7 +121,7 @@ export async function getRecurringTemplate(templateId: string) {
     where: { templateId },
     include,
   });
-  return row ? mapRecurring(row) : null;
+  return row ? (await withPicPositions([mapRecurring(row)]))[0] : null;
 }
 
 export async function createRecurringTemplate(input: {
@@ -110,7 +138,11 @@ export async function createRecurringTemplate(input: {
   repeat_time: string;
   deadline_time: string;
   requires_photo?: boolean;
+  pic_position?: string | null;
 }) {
+  if (input.pic_position && !normalizePicPosition(input.pic_position)) {
+    throw new ChecklistError(`Posisi tidak dikenal: ${input.pic_position}`, "VALIDATION", 422);
+  }
   const outletCode = normalizeOutletCode(input.outlet);
   const outlet = await prisma.outlet.findUnique({ where: { code: outletCode } });
   if (!outlet) {
@@ -184,7 +216,8 @@ export async function createRecurringTemplate(input: {
     },
   });
 
-  return mapRecurring(row);
+  const pic_position = await applyPicPosition(row.templateId, input.pic_position ?? null);
+  return { ...mapRecurring(row), pic_position: pic_position ?? null };
 }
 
 export async function toggleRecurringTemplate(templateId: string) {
@@ -222,6 +255,7 @@ export async function updateRecurringTemplate(
     repeat_time?: string;
     deadline_time?: string;
     requires_photo?: boolean;
+    pic_position?: string | null;
   },
 ) {
   const row = await prisma.recurringTemplate.findUnique({ where: { templateId } });
@@ -270,5 +304,6 @@ export async function updateRecurringTemplate(
     },
   });
 
-  return mapRecurring(updated);
+  await applyPicPosition(templateId, input.pic_position);
+  return (await withPicPositions([mapRecurring(updated)]))[0];
 }

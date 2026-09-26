@@ -3,7 +3,13 @@ import type { Task } from "@nusafood/types";
 import { prisma } from "@/lib/db";
 import { mapTaskToApi } from "@/lib/mappers/task";
 import { buildOutletWhere } from "@/lib/outlet-scope";
+import { dateKeyInAppTz } from "@/lib/format-datetime";
 import { logSyncOperation } from "@/lib/services/dual-write.service";
+import {
+  getPicPositions,
+  resolvePicCandidates,
+  type PicCandidate,
+} from "@/lib/services/recurring-pic.service";
 import {
   buildChecklistWaMessage,
   buildTaskWaMessage,
@@ -18,6 +24,10 @@ const LOOKBACK_DAYS = 3;
 export type PendingSendTask = Task & {
   wa_link: string;
   wa_share_link: string;
+  /** Posisi PIC dari template berulang (mis. "Kasir"), kalau ada. */
+  pic_position?: string;
+  /** Staff yang bertugas di posisi itu pada tanggal deadline — untuk ganti PIC. */
+  pic_options?: PicCandidate[];
 };
 
 export function buildTaskMessage(task: Task): string {
@@ -61,15 +71,37 @@ export async function listPendingSend(
     take: 50,
   });
 
-  return rows.map((row) => {
-    const task = mapTaskToApi(row);
-    const message = buildTaskMessage(task);
-    return {
-      ...task,
-      wa_link: buildWaMeLink(task.pic_wa, message),
-      wa_share_link: buildWaShareLink(message),
-    };
-  });
+  const positions = await getPicPositions(
+    [...new Set(rows.map((r) => r.recurringTemplateId).filter((id): id is string => Boolean(id)))],
+  );
+  const optionCache = new Map<string, Promise<PicCandidate[]>>();
+
+  return Promise.all(
+    rows.map(async (row) => {
+      const task = mapTaskToApi(row);
+      const message = buildTaskMessage(task);
+      const position = row.recurringTemplateId
+        ? positions.get(row.recurringTemplateId)
+        : undefined;
+
+      let pic_options: PicCandidate[] | undefined;
+      if (position) {
+        const dateKey = dateKeyInAppTz(row.deadline);
+        const key = `${row.outletId}|${position}|${dateKey}`;
+        if (!optionCache.has(key)) {
+          optionCache.set(key, resolvePicCandidates(row.outletId, position, dateKey));
+        }
+        pic_options = await optionCache.get(key)!;
+      }
+
+      return {
+        ...task,
+        wa_link: buildWaMeLink(task.pic_wa, message),
+        wa_share_link: buildWaShareLink(message),
+        ...(position ? { pic_position: position, pic_options } : {}),
+      };
+    }),
+  );
 }
 
 /** Tandai tugas sudah dikirim manual lewat wa.me. */
@@ -99,4 +131,39 @@ export async function markTaskSent(taskId: string): Promise<Task | null> {
   });
 
   return mapTaskToApi(updated);
+}
+
+/** Ganti PIC tugas yang belum dikirim (mis. sesuai jadwal posisi minggu ini). */
+export async function reassignTaskPic(
+  taskId: string,
+  staffId: string,
+): Promise<PendingSendTask | null> {
+  const [task, staff] = await Promise.all([
+    prisma.task.findUnique({ where: { taskId } }),
+    prisma.staff.findUnique({
+      where: { staffId },
+      select: { staffId: true, name: true, waNumber: true, outletId: true, status: true },
+    }),
+  ]);
+  if (!task) return null;
+  if (!staff || staff.status !== "ACTIVE" || staff.outletId !== task.outletId) {
+    throw new Error("Staff tidak ditemukan di outlet tugas ini");
+  }
+
+  const updated = await prisma.task.update({
+    where: { taskId },
+    data: { picName: staff.name, picWa: staff.waNumber, staffId: staff.staffId },
+  });
+  await prisma.checklistReport.updateMany({
+    where: { taskId },
+    data: { picName: staff.name, picWa: staff.waNumber },
+  });
+
+  const mapped = mapTaskToApi(updated);
+  const message = buildTaskMessage(mapped);
+  return {
+    ...mapped,
+    wa_link: buildWaMeLink(mapped.pic_wa, message),
+    wa_share_link: buildWaShareLink(message),
+  };
 }

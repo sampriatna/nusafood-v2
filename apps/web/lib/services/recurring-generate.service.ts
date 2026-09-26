@@ -4,6 +4,10 @@ import { dateKeyInAppTz, todayKeyInAppTz } from "@/lib/format-datetime";
 import { generateChecklistReport } from "@/lib/services/checklist.service";
 import { logSyncOperation } from "@/lib/services/dual-write.service";
 import { createTask } from "@/lib/services/task-write.service";
+import {
+  getPicPositions,
+  resolvePicCandidates,
+} from "@/lib/services/recurring-pic.service";
 
 const WIB_TO_ID: Record<string, string> = {
   Mon: "senin",
@@ -174,6 +178,7 @@ export async function generateRecurringTasks(input?: {
   });
 
   const results: RecurringGenerateResult[] = [];
+  const picPositions = await getPicPositions(templates.map((t) => t.templateId));
 
   for (const tpl of templates) {
     // Semua tugas yang jadwalnya hari ini dibuat sekaligus (cron pagi / saat admin
@@ -200,6 +205,15 @@ export async function generateRecurringTasks(input?: {
 
     try {
       const deadline = buildDeadline(dateKey, tpl.deadlineTime);
+
+      // PIC berdasarkan posisi → siapa yang bertugas hari itu; template PIC jadi cadangan.
+      let pic = { name: tpl.picName, wa: tpl.picWa, staffId: tpl.staffId ?? undefined };
+      const position = picPositions.get(tpl.templateId);
+      if (position) {
+        const [first] = await resolvePicCandidates(tpl.outletId, position, dateKey);
+        if (first) pic = { name: first.name, wa: first.wa_number, staffId: first.staff_id };
+      }
+
       const checklist = await prisma.checklistTemplate.findUnique({
         where: { templateId: tpl.templateId },
         include: {
@@ -210,8 +224,8 @@ export async function generateRecurringTasks(input?: {
       if (checklist && checklist.items.length > 0) {
         const gen = await generateChecklistReport({
           template_id: tpl.templateId,
-          pic_name: tpl.picName,
-          pic_wa: tpl.picWa,
+          pic_name: pic.name,
+          pic_wa: pic.wa,
           deadline: deadline.toISOString(),
           recurring_template_id: tpl.templateId,
           send_whatsapp: input?.send_whatsapp !== false,
@@ -228,8 +242,9 @@ export async function generateRecurringTasks(input?: {
           category: tpl.category?.name ?? "",
           task_title: tpl.taskTitle,
           task_description: tpl.taskDescription ?? "",
-          pic_name: tpl.picName,
-          pic_wa: tpl.picWa,
+          pic_name: pic.name,
+          pic_wa: pic.wa,
+          ...(pic.staffId ? { staff_id: pic.staffId } : {}),
           deadline: deadline.toISOString(),
           priority: "Medium",
         });

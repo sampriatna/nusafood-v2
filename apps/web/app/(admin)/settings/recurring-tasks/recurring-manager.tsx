@@ -38,6 +38,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import {
+  POSITION_GROUP_LABELS,
+  REPORT_POSITION_GROUPS,
+  getPositionGroupLabel,
+} from "@/lib/position-groups";
+
+const NO_POSITION = "__none__";
 
 type Option = { value: string; label: string; outlet?: string | null };
 
@@ -121,6 +128,7 @@ export function RecurringManager({
   const [picName, setPicName] = useState("");
   const [picWa, setPicWa] = useState("");
   const [editing, setEditing] = useState<RecurringTemplate | null>(null);
+  const [picPosition, setPicPosition] = useState<string>(NO_POSITION);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [aiPending, setAiPending] = useState(false);
@@ -159,6 +167,7 @@ export function RecurringManager({
     setPicName("");
     setPicWa("");
     setEditing(null);
+    setPicPosition(NO_POSITION);
     setTaskTitle("");
     setTaskDescription("");
     setDialogOpen(true);
@@ -178,6 +187,7 @@ export function RecurringManager({
     setRequiresPhoto(template.requires_photo);
     setPicName(template.pic_name);
     setPicWa(template.pic_wa);
+    setPicPosition(template.pic_position || NO_POSITION);
     setTaskTitle(template.task_title);
     setTaskDescription(template.task_description);
     setDialogOpen(true);
@@ -275,6 +285,7 @@ export function RecurringManager({
       category: formCategory,
       pic_name: picName,
       pic_wa: picWa,
+      pic_position: picPosition === NO_POSITION ? null : picPosition,
       task_title: taskTitle,
       task_description: taskDescription,
       repeat_type: repeatType,
@@ -401,7 +412,9 @@ export function RecurringManager({
                           </span>
                           <span className="inline-flex items-center gap-1">
                             <User className="size-3.5" />
-                            {template.pic_name}
+                            {template.pic_position
+                              ? `${getPositionGroupLabel(template.pic_position)} (sesuai jadwal) · cadangan ${template.pic_name}`
+                              : template.pic_name}
                           </span>
                           <span className="inline-flex items-center gap-1">
                             <Calendar className="size-3.5" />
@@ -560,7 +573,33 @@ export function RecurringManager({
             )}
 
             <div className="space-y-2">
-              <Label>PIC (Staff)</Label>
+              <Label>PIC berdasarkan posisi</Label>
+              <Select value={picPosition} onValueChange={setPicPosition}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_POSITION}>Tidak — PIC selalu orang yang sama</SelectItem>
+                  {REPORT_POSITION_GROUPS.map((group) => (
+                    <SelectItem key={group} value={group}>
+                      {POSITION_GROUP_LABELS[group]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {picPosition !== NO_POSITION ? (
+                <p className="text-xs text-muted-foreground">
+                  Tiap hari PIC diambil dari yang bertugas sebagai{" "}
+                  <strong>{getPositionGroupLabel(picPosition)}</strong> di menu
+                  Posisi Kerja. Kalau tidak ada yang dijadwalkan, dipakai staff
+                  berjabatan {getPositionGroupLabel(picPosition)}, lalu PIC cadangan
+                  di bawah. PIC tetap bisa diganti sebelum kirim.
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label>{picPosition !== NO_POSITION ? "PIC Cadangan" : "PIC (Staff)"}</Label>
               <Select
                 value={picName}
                 onValueChange={(name) => {
