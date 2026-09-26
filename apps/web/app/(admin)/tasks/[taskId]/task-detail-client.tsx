@@ -260,6 +260,11 @@ export function TaskDetailClient({
       const data = result.data;
       if (data?.wa_link && !data.auto_sent) {
         window.open(data.wa_link, "_blank", "noopener,noreferrer");
+        void fetch(`/api/tasks/${encodeURIComponent(task.task_id)}/mark-sent`, {
+          method: "POST",
+          credentials: "same-origin",
+          keepalive: true,
+        }).catch(() => undefined);
         toast({
           title: "Buka WhatsApp",
           description:

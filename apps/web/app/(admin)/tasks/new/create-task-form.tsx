@@ -288,6 +288,12 @@ export function CreateTaskForm({ outlets, areas, categories, staff }: Props) {
         }
 
         if (waFallbackLink) {
+          // Kirim manual via wa.me → tandai terkirim agar tidak muncul lagi di "Siap Dikirim"
+          void fetch(`/api/tasks/${encodeURIComponent(taskId)}/mark-sent`, {
+            method: "POST",
+            credentials: "same-origin",
+            keepalive: true,
+          }).catch(() => undefined);
           window.location.assign(waFallbackLink);
           return;
         }

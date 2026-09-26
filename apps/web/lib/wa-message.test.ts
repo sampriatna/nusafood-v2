@@ -64,3 +64,17 @@ describe("buildWaShareLink", () => {
     expect(link).toBe("https://wa.me/?text=Halo%20tim%0ATugas%20baru");
   });
 });
+
+describe("task WA deadline", () => {
+  it("formats ISO deadline in WIB", () => {
+    const msg = buildTaskWaMessage({
+      task_title: "Bersihkan rumput",
+      pic_name: "Andi",
+      deadline: "2026-09-27T10:00:00.000Z",
+      report_link: "https://x/report/T1?token=a",
+    });
+    expect(msg).toContain("Deadline: 27 Sep 2026");
+    expect(msg).toContain("17.00 WIB");
+    expect(msg).not.toContain("2026-09-27T10");
+  });
+});

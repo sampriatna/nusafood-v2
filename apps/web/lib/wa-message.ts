@@ -3,6 +3,14 @@ import type {
   ReportConditionStatus,
 } from "@nusafood/types";
 import { getLetterPreview } from "@/lib/services/disciplinary-preview";
+import { formatDateTimeId } from "@/lib/format-datetime";
+
+/** ISO → "27 Sep 2026, 17.00 WIB"; teks bebas dibiarkan apa adanya. */
+function formatDeadline(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return value;
+  const formatted = formatDateTimeId(value);
+  return formatted === "—" ? value : `${formatted} WIB`;
+}
 
 export function normalizeWa(wa: string): string {
   const digits = (wa || "").replace(/\D/g, "");
@@ -111,7 +119,7 @@ export function buildTaskWaMessage(input: {
     `*${input.task_title}*`,
   ];
   if (input.outlet) lines.push(`Outlet: ${input.outlet}`);
-  lines.push(`Deadline: ${input.deadline}`);
+  lines.push(`Deadline: ${formatDeadline(input.deadline)}`);
   lines.push(``, `Link laporan:`, input.report_link);
   lines.push(``, `Mohon segera dikerjakan. Terima kasih.`);
   return lines.join("\n");
@@ -133,7 +141,7 @@ export function buildChecklistWaMessage(input: {
     lines.push(`Checklist: *${input.template_title}*`);
   }
   if (input.outlet) lines.push(`Outlet: ${input.outlet}`);
-  if (input.deadline) lines.push(`Deadline: ${input.deadline}`);
+  if (input.deadline) lines.push(`Deadline: ${formatDeadline(input.deadline)}`);
   lines.push(``, `Link checklist:`, input.report_link);
   lines.push(``, `Mohon segera dikerjakan. Terima kasih.`);
   return lines.join("\n");

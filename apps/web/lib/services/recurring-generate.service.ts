@@ -80,11 +80,47 @@ export function matchesRepeatSchedule(
   }
 }
 
-/** Monthly: jalankan pada tanggal yang sama dengan hari repeat_time day-of-month stored in UTC hours hack — use created day */
-function matchesMonthly(templateCreatedAt: Date, now: Date): boolean {
-  const createdDom = Number(dateKeyInAppTz(templateCreatedAt).split("-")[2]);
-  const { dayOfMonth } = wibParts(now);
-  return createdDom === dayOfMonth;
+/** Tanggal bulanan dari repeat_days (mis. ["1","15"]); abaikan nilai non-angka. */
+export function parseMonthlyDates(repeatDays: string[]): number[] {
+  return [
+    ...new Set(
+      repeatDays
+        .map((d) => Number(String(d).trim()))
+        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 31),
+    ),
+  ].sort((a, b) => a - b);
+}
+
+/**
+ * Bulanan: jalan di tanggal yang dipilih (bisa lebih dari satu).
+ * Tanggal 29–31 di bulan yang lebih pendek jatuh ke hari terakhir bulan itu.
+ * Template lama tanpa tanggal → pakai tanggal template dibuat.
+ */
+export function matchesMonthly(
+  repeatDays: string[],
+  templateCreatedAt: Date,
+  now: Date,
+): boolean {
+  const [year, month, day] = dateKeyInAppTz(now).split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  let dates = parseMonthlyDates(repeatDays);
+  if (!dates.length) {
+    dates = [Number(dateKeyInAppTz(templateCreatedAt).split("-")[2])];
+  }
+  return dates.some((d) => Math.min(d, lastDay) === day);
+}
+
+/** Apakah template dijadwalkan pada tanggal `now` (WIB), tanpa melihat jam. */
+export function isScheduledOnDate(
+  tpl: { repeatType: RepeatType; repeatDays: string[]; repeatTime: Date; createdAt: Date },
+  now: Date,
+): boolean {
+  if (tpl.repeatType === "monthly") {
+    return matchesMonthly(tpl.repeatDays, tpl.createdAt, now);
+  }
+  return matchesRepeatSchedule(tpl.repeatType, tpl.repeatDays, tpl.repeatTime, now, {
+    ignoreTime: true,
+  });
 }
 
 export async function hasRecurringGenerationForDate(
@@ -140,19 +176,9 @@ export async function generateRecurringTasks(input?: {
   const results: RecurringGenerateResult[] = [];
 
   for (const tpl of templates) {
-    const scheduled =
-      input?.force ||
-      (tpl.repeatType === "monthly"
-        ? matchesMonthly(tpl.createdAt, now) &&
-          wibParts(now).hour >= repeatTimeParts(tpl.repeatTime).hour &&
-          wibParts(now).minute >= repeatTimeParts(tpl.repeatTime).minute
-        : matchesRepeatSchedule(
-            tpl.repeatType,
-            tpl.repeatDays,
-            tpl.repeatTime,
-            now,
-            { ignoreTime: Boolean(input?.force) },
-          ));
+    // Semua tugas yang jadwalnya hari ini dibuat sekaligus (cron pagi / saat admin
+    // buka dashboard); jam template dipakai untuk deadline, bukan syarat generate.
+    const scheduled = input?.force || isScheduledOnDate(tpl, now);
 
     if (!scheduled) {
       results.push({

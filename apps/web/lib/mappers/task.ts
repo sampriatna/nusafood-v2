@@ -1,6 +1,6 @@
 import type { Task as DbTask } from "@nusafood/database";
 import type { Task, TaskPriority, TaskStatus } from "@nusafood/types";
-import { buildReportLink } from "@/lib/id";
+import { buildChecklistLink, buildReportLink } from "@/lib/id";
 
 function iso(value: Date | null | undefined): string | undefined {
   return value ? value.toISOString() : undefined;
@@ -24,7 +24,9 @@ export function mapTaskToApi(task: DbTask): Task {
     deadline: task.deadline.toISOString(),
     before_photo_url: task.beforePhotoUrl ?? undefined,
     status: task.status as TaskStatus,
-    report_link: buildReportLink(task.taskId, task.token),
+    report_link: task.checklistMode
+      ? buildChecklistLink(task.taskId, task.token)
+      : buildReportLink(task.taskId, task.token),
     wa_sent_at: iso(task.waSentAt),
     opened_at: iso(task.openedAt),
     submitted_at: iso(task.submittedAt),
