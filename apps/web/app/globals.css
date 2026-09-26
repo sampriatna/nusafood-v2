@@ -144,3 +144,24 @@
     @apply bg-background text-foreground;
   }
 }
+
+/*
+ * iOS Safari: input tanggal/waktu native punya lebar & tinggi intrinsik
+ * sendiri sehingga melebar keluar card. Samakan dengan input teks biasa.
+ */
+@supports (-webkit-touch-callout: none) {
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="time"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  input::-webkit-date-and-time-value {
+    text-align: left;
+    min-height: 1.5em;
+  }
+}
