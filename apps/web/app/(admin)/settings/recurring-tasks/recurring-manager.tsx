@@ -10,8 +10,10 @@ import {
   ListChecks,
   Loader2,
   MapPin,
+  Pencil,
   Plus,
   RefreshCw,
+  Sparkles,
   User,
 } from "lucide-react";
 import { ChecklistInlinePanel } from "@/components/checklist-inline-panel";
@@ -118,6 +120,10 @@ export function RecurringManager({
   const [requiresPhoto, setRequiresPhoto] = useState(true);
   const [picName, setPicName] = useState("");
   const [picWa, setPicWa] = useState("");
+  const [editing, setEditing] = useState<RecurringTemplate | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [aiPending, setAiPending] = useState(false);
 
   const filteredAreas = useMemo(
     () =>
@@ -152,7 +158,75 @@ export function RecurringManager({
     setRequiresPhoto(true);
     setPicName("");
     setPicWa("");
+    setEditing(null);
+    setTaskTitle("");
+    setTaskDescription("");
     setDialogOpen(true);
+  }
+
+  function openEditDialog(template: RecurringTemplate) {
+    setEditing(template);
+    setFormOutlet(template.outlet);
+    setFormArea(template.area);
+    setFormCategory(template.category);
+    setRepeatType(template.repeat_type);
+    setRepeatDays(
+      template.repeat_days.length
+        ? [...template.repeat_days]
+        : defaultDays(template.repeat_type),
+    );
+    setRequiresPhoto(template.requires_photo);
+    setPicName(template.pic_name);
+    setPicWa(template.pic_wa);
+    setTaskTitle(template.task_title);
+    setTaskDescription(template.task_description);
+    setDialogOpen(true);
+  }
+
+  async function handleAiImprove() {
+    if (aiPending) return;
+    if (!taskTitle.trim() && !taskDescription.trim()) {
+      toast({ title: "Isi judul tugas dulu", variant: "destructive" });
+      return;
+    }
+    setAiPending(true);
+    try {
+      const res = await fetch("/api/ai/task-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          note: taskTitle,
+          outlet: formOutlet,
+          area: formArea,
+          category: formCategory,
+          current_title: taskTitle,
+          current_description: taskDescription,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        data?: { task_title: string; task_description: string } | null;
+        error?: string | null;
+      };
+      if (!json.success || !json.data) {
+        throw new Error(json.error || `Server error (${res.status})`);
+      }
+      setTaskTitle(json.data.task_title);
+      setTaskDescription(json.data.task_description);
+      toast({
+        title: "Instruksi diperbaiki AI",
+        description: "Cek dan sesuaikan dulu sebelum disimpan.",
+      });
+    } catch (cause) {
+      toast({
+        title: "AI gagal membantu",
+        description: cause instanceof Error ? cause.message : "Coba lagi",
+        variant: "destructive",
+      });
+    } finally {
+      setAiPending(false);
+    }
   }
 
   function toggleActive(template: RecurringTemplate) {
@@ -201,8 +275,8 @@ export function RecurringManager({
       category: formCategory,
       pic_name: picName,
       pic_wa: picWa,
-      task_title: String(formData.get("task_title") || ""),
-      task_description: String(formData.get("task_description") || ""),
+      task_title: taskTitle,
+      task_description: taskDescription,
       repeat_type: repeatType,
       repeat_days: repeatDays,
       repeat_time: String(formData.get("repeat_time") || "08:00"),
@@ -210,22 +284,33 @@ export function RecurringManager({
       requires_photo: requiresPhoto,
     };
 
+    const editingId = editing?.template_id;
     startTransition(async () => {
-      const res = await fetch("/api/recurring-templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(
+        editingId
+          ? `/api/recurring-templates/${encodeURIComponent(editingId)}`
+          : "/api/recurring-templates",
+        {
+          method: editingId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
       const json = (await res.json()) as { success?: boolean; error?: string };
       if (!res.ok || json.success === false) {
         toast({
-          title: "Gagal membuat template",
+          title: editingId ? "Gagal menyimpan template" : "Gagal membuat template",
           description: json.error || "Coba lagi",
           variant: "destructive",
         });
         return;
       }
-      toast({ title: "Template dibuat" });
+      toast({
+        title: editingId ? "Template disimpan" : "Template dibuat",
+        description: editingId
+          ? "Berlaku untuk tugas yang dibuat berikutnya."
+          : undefined,
+      });
       setDialogOpen(false);
       router.refresh();
     });
@@ -354,6 +439,15 @@ export function RecurringManager({
                         <ListChecks className="mr-1.5 size-4" />
                         Checklist
                       </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditDialog(template)}
+                      >
+                        <Pencil className="mr-1.5 size-4" />
+                        Edit
+                      </Button>
                     </div>
                   </div>
 
@@ -374,13 +468,32 @@ export function RecurringManager({
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Buat Template Berulang</DialogTitle>
+            <DialogTitle>
+              {editing ? "Edit Template Berulang" : "Buat Template Berulang"}
+            </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4">
+          <form
+            key={editing?.template_id ?? "new"}
+            onSubmit={handleCreate}
+            className="space-y-4"
+          >
             <div className="space-y-2">
               <Label htmlFor="template_name">Nama Template</Label>
-              <Input id="template_name" name="template_name" required />
+              <Input
+                id="template_name"
+                name="template_name"
+                defaultValue={editing?.template_name}
+                required
+              />
             </div>
+
+            {editing ? (
+              <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                {editing.outlet} · {editing.area || "—"} · {editing.category || "—"}
+                {" "}(outlet, area, dan kategori tidak bisa diubah)
+              </p>
+            ) : (
+              <>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
@@ -443,6 +556,8 @@ export function RecurringManager({
                 </SelectContent>
               </Select>
             </div>
+              </>
+            )}
 
             <div className="space-y-2">
               <Label>PIC (Staff)</Label>
@@ -458,6 +573,11 @@ export function RecurringManager({
                   <SelectValue placeholder="Pilih staff…" />
                 </SelectTrigger>
                 <SelectContent>
+                  {picName && !filteredStaff.some((s) => s.name === picName) ? (
+                    <SelectItem value={picName}>
+                      {picName} · {picWa}
+                    </SelectItem>
+                  ) : null}
                   {filteredStaff.map((s) => (
                     <SelectItem key={s.staff_id} value={s.name}>
                       {s.name} · {s.wa_number}
@@ -469,11 +589,40 @@ export function RecurringManager({
 
             <div className="space-y-2">
               <Label htmlFor="task_title">Judul Tugas</Label>
-              <Input id="task_title" name="task_title" required />
+              <Input
+                id="task_title"
+                name="task_title"
+                value={taskTitle}
+                onChange={(e) => setTaskTitle(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="task_description">Deskripsi</Label>
-              <Textarea id="task_description" name="task_description" rows={3} />
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="task_description">Instruksi Kerja</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAiImprove}
+                  disabled={aiPending || pending}
+                >
+                  {aiPending ? (
+                    <Loader2 className="mr-1.5 size-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-1.5 size-4" />
+                  )}
+                  {taskDescription.trim() ? "Perbaiki dengan AI" : "Tulis dengan AI"}
+                </Button>
+              </div>
+              <Textarea
+                id="task_description"
+                name="task_description"
+                value={taskDescription}
+                onChange={(e) => setTaskDescription(e.target.value)}
+                rows={taskDescription.length > 120 ? 12 : 4}
+                placeholder="Tujuan, langkah kerja, dan standar selesai. Tekan tombol AI untuk dibantu."
+              />
             </div>
 
             <div className="space-y-2">
@@ -559,7 +708,7 @@ export function RecurringManager({
                   id="repeat_time"
                   name="repeat_time"
                   type="time"
-                  defaultValue="08:00"
+                  defaultValue={editing?.repeat_time ?? "08:00"}
                   required
                 />
               </div>
@@ -569,7 +718,7 @@ export function RecurringManager({
                   id="deadline_time"
                   name="deadline_time"
                   type="time"
-                  defaultValue="17:00"
+                  defaultValue={editing?.deadline_time ?? "17:00"}
                   required
                 />
               </div>

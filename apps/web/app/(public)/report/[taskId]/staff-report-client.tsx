@@ -11,6 +11,7 @@ import {
   Send,
 } from "lucide-react";
 import { PhotoUploader } from "@/components/photo-uploader";
+import { TaskInstructions } from "@/components/task-instructions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTimeId } from "@/lib/format-datetime";
@@ -29,7 +30,7 @@ export function StaffReportClient({ taskId, token }: Props) {
   const [errorMessage, setErrorMessage] = useState("");
   const [afterPhotoUrl, setAfterPhotoUrl] = useState<string | undefined>();
   const [staffNote, setStaffNote] = useState("");
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
 
   useEffect(() => {
     void loadTask();
@@ -252,7 +253,7 @@ export function StaffReportClient({ taskId, token }: Props) {
               onClick={() => setShowDetails(!showDetails)}
               className="flex w-full items-center justify-between p-4 text-left"
             >
-              <span className="font-semibold">Lihat Instruksi Tugas</span>
+              <span className="font-semibold">Instruksi Kerja</span>
               {showDetails ? (
                 <ChevronUp className="h-5 w-5 text-muted-foreground" />
               ) : (
@@ -261,14 +262,7 @@ export function StaffReportClient({ taskId, token }: Props) {
             </button>
             {showDetails ? (
               <div className="space-y-4 border-t border-border px-4 pb-4 pt-4">
-                <div>
-                  <p className="mb-2 text-sm font-medium text-muted-foreground">
-                    INSTRUKSI:
-                  </p>
-                  <p className="whitespace-pre-wrap text-base leading-relaxed">
-                    {task?.task_description || "—"}
-                  </p>
-                </div>
+                <TaskInstructions description={task?.task_description} />
                 {task?.before_photo_url ? (
                   <div>
                     <p className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">

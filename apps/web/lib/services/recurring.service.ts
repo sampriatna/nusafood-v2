@@ -207,3 +207,68 @@ export async function toggleRecurringTemplate(templateId: string) {
 
   return mapRecurring(updated);
 }
+
+/** Edit template: isi tugas, PIC, jadwal. Outlet/area/kategori tetap. */
+export async function updateRecurringTemplate(
+  templateId: string,
+  input: {
+    template_name?: string;
+    pic_name?: string;
+    pic_wa?: string;
+    task_title?: string;
+    task_description?: string;
+    repeat_type?: RepeatType;
+    repeat_days?: string[];
+    repeat_time?: string;
+    deadline_time?: string;
+    requires_photo?: boolean;
+  },
+) {
+  const row = await prisma.recurringTemplate.findUnique({ where: { templateId } });
+  if (!row) {
+    throw new ChecklistError("Template tidak ditemukan", "NOT_FOUND", 404);
+  }
+
+  const text = (value: string | undefined, required: boolean) => {
+    if (value === undefined) return undefined;
+    const trimmed = value.trim();
+    if (required && !trimmed) {
+      throw new ChecklistError("Judul, nama template, dan PIC wajib diisi", "VALIDATION", 422);
+    }
+    return trimmed;
+  };
+
+  const updated = await prisma.recurringTemplate.update({
+    where: { templateId },
+    data: {
+      templateName: text(input.template_name, true),
+      picName: text(input.pic_name, true),
+      picWa: text(input.pic_wa, true),
+      taskTitle: text(input.task_title, true),
+      ...(input.task_description !== undefined
+        ? { taskDescription: input.task_description.trim() || null }
+        : {}),
+      ...(input.repeat_type ? { repeatType: input.repeat_type } : {}),
+      ...(input.repeat_days ? { repeatDays: input.repeat_days } : {}),
+      ...(input.repeat_time ? { repeatTime: parseTime(input.repeat_time) } : {}),
+      ...(input.deadline_time ? { deadlineTime: parseTime(input.deadline_time) } : {}),
+      ...(input.requires_photo !== undefined ? { requiresPhoto: input.requires_photo } : {}),
+      templateVersion: { increment: 1 },
+    },
+    include,
+  });
+
+  await prisma.checklistTemplate.updateMany({
+    where: { templateId },
+    data: {
+      templateName: updated.templateName,
+      taskTitle: updated.taskTitle,
+      checklistTitle: updated.taskTitle,
+      picName: updated.picName,
+      picWa: updated.picWa,
+      requiresPhoto: updated.requiresPhoto,
+    },
+  });
+
+  return mapRecurring(updated);
+}
