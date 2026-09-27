@@ -5,6 +5,7 @@ import {
   dateKeyInAppTz,
   monthKeyInAppTz,
 } from "@/lib/format-datetime";
+import { parseSopDescription } from "@/lib/daily-activity-sop";
 import { outletShortName } from "@/lib/outlet-codes";
 import { buildOutletWhere, buildStaffOutletWhere } from "@/lib/outlet-scope";
 import {
@@ -168,7 +169,14 @@ export async function getPerformance(options: {
       }),
       prisma.reportTemplate.findMany({
         where: { active: true, isRequiredDaily: true },
-        select: { id: true, title: true, outletId: true, positionGroup: true },
+        select: {
+          id: true,
+          title: true,
+          outletId: true,
+          positionGroup: true,
+          description: true,
+          createdAt: true,
+        },
       }),
       prisma.dailyReportSubmission.findMany({
         where: {
@@ -194,9 +202,16 @@ export async function getPerformance(options: {
     });
     const sop = computeSopCompliance({
       staff: staffInput,
-      templates: templates.map((t) => ({ id: t.id, outlet_id: t.outletId, position_group: t.positionGroup })),
+      templates: templates.map((t) => ({
+        id: t.id,
+        outlet_id: t.outletId,
+        position_group: t.positionGroup,
+        shift_codes: parseSopDescription(t.description).shift_codes ?? [],
+        created_date: t.createdAt.toISOString().slice(0, 10),
+      })),
       dates: sopDates,
       duties: jobData.duties,
+      shifts: jobData.shifts,
       submissions: new Set(
         submissions.map((x) => `${x.staffId}|${x.reportTemplateId}|${x.reportDate.toISOString().slice(0, 10)}`),
       ),

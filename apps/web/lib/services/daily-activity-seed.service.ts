@@ -4,6 +4,12 @@ import {
   DAILY_ACTIVITY_OPERATIONAL_OVERRIDES,
   DEPRECATED_DAILY_ACTIVITY_TEMPLATE_CODES,
 } from "@/lib/daily-activity-operational-overrides";
+import { encodeSopDescription } from "@/lib/daily-activity-sop";
+import {
+  WAITER_V1_TEMPLATE_CODES,
+  WAITER_V2_TEMPLATES,
+} from "@/lib/daily-activity-waiter-v2";
+import type { DailyActivitySeedDef } from "@/lib/daily-activity-seed-types";
 export { listPositionDailyTemplateSummary } from "@/lib/daily-activity-seed";
 
 export class DailyActivitySeedError extends Error {
@@ -37,12 +43,34 @@ function normalizeChecklistText(text: string): string {
   return text.trim().replace(/\s+/g, " ");
 }
 
+function seedDescription(def: DailyActivitySeedDef): string {
+  const hasStructuredInstruction = Boolean(
+    def.why_text ||
+      def.operational_impact ||
+      def.instruction_note ||
+      def.shift_codes?.length,
+  );
+  if (!hasStructuredInstruction) return def.standard_result;
+  return encodeSopDescription(
+    {
+      why_text: def.why_text,
+      operational_impact: def.operational_impact,
+      instruction_note: def.instruction_note,
+      shift_codes: def.shift_codes,
+    },
+    def.standard_result,
+  );
+}
+
 function getEffectiveSeedTemplates() {
-  const byCode = new Map(
-    DAILY_ACTIVITY_SEED_TEMPLATES.map((def) => [def.code, def] as const),
+  const byCode = new Map<string, DailyActivitySeedDef>(
+    DAILY_ACTIVITY_SEED_TEMPLATES.map((def) => [def.code, def]),
   );
   for (const override of DAILY_ACTIVITY_OPERATIONAL_OVERRIDES) {
     byCode.set(override.code, override);
+  }
+  for (const waiter of WAITER_V2_TEMPLATES) {
+    byCode.set(waiter.code, waiter);
   }
   return [...byCode.values()];
 }
@@ -129,6 +157,7 @@ export async function seedDailyActivityTemplates(): Promise<DailyActivitySeedRes
     const outletId = def.outlet_code
       ? (outletByCode.get(def.outlet_code)?.id ?? null)
       : null;
+    const description = seedDescription(def);
 
     const template = await prisma.reportTemplate.upsert({
       where: { code: def.code },
@@ -139,7 +168,7 @@ export async function seedDailyActivityTemplates(): Promise<DailyActivitySeedRes
         outletId,
         positionGroup: def.position_group,
         standardResult: def.standard_result,
-        description: def.standard_result,
+        description,
         requiresPhoto: def.requires_photo,
         isRequiredDaily: def.is_required_daily,
         kind:
@@ -156,7 +185,7 @@ export async function seedDailyActivityTemplates(): Promise<DailyActivitySeedRes
         outletId,
         positionGroup: def.position_group,
         standardResult: def.standard_result,
-        description: def.standard_result,
+        description,
         requiresPhoto: def.requires_photo,
         isRequiredDaily: def.is_required_daily,
         kind:
@@ -177,9 +206,13 @@ export async function seedDailyActivityTemplates(): Promise<DailyActivitySeedRes
     }
   }
 
+  const deprecatedCodes = [
+    ...DEPRECATED_DAILY_ACTIVITY_TEMPLATE_CODES,
+    ...WAITER_V1_TEMPLATE_CODES,
+  ];
   const deprecated = await prisma.reportTemplate.updateMany({
     where: {
-      code: { in: [...DEPRECATED_DAILY_ACTIVITY_TEMPLATE_CODES] },
+      code: { in: [...deprecatedCodes] },
     },
     data: {
       active: false,

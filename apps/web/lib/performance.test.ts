@@ -114,6 +114,63 @@ describe("computeSopCompliance", () => {
     }).get("S1")!;
     expect(r).toMatchObject({ required: 1, done: 1 });
   });
+
+  it("counts only templates for the assigned work shift", () => {
+    const waiter = [
+      { staff_id: "W1", name: "Anka", outlet: "KBU", outlet_id: "o1", primary: "Waiters", secondary: [] },
+    ];
+    const waiterTemplates = [
+      { id: "OPEN", outlet_id: null, position_group: "Waiters", shift_codes: ["1K"] },
+      { id: "TAKEOVER", outlet_id: null, position_group: "Waiters", shift_codes: ["2K", "3K"] },
+      { id: "RUSH", outlet_id: null, position_group: "Waiters", shift_codes: ["1K", "2K", "3K"] },
+    ];
+    const r = computeSopCompliance({
+      staff: waiter,
+      templates: waiterTemplates,
+      dates: ["2026-09-26"],
+      duties: new Map(),
+      shifts: new Map([["W1|2026-09-26", "1K"]]),
+      submissions: new Set(["W1|OPEN|2026-09-26"]),
+      matchesPosition: match,
+    }).get("W1")!;
+    expect(r.required).toBe(2);
+    expect(r.done).toBe(1);
+    expect(r.missed).toEqual([{ date: "2026-09-26", template_id: "RUSH" }]);
+  });
+
+  it("does not penalize shift-specific SOP when historical shift is unknown", () => {
+    const waiter = [
+      { staff_id: "W1", name: "Anka", outlet: "KBU", outlet_id: "o1", primary: "Waiters", secondary: [] },
+    ];
+    const r = computeSopCompliance({
+      staff: waiter,
+      templates: [
+        { id: "OPEN", outlet_id: null, position_group: "Waiters", shift_codes: ["1K"] },
+      ],
+      dates: ["2026-09-26"],
+      duties: new Map(),
+      shifts: new Map(),
+      submissions: new Set(),
+      matchesPosition: match,
+    }).get("W1")!;
+    expect(r.required).toBe(0);
+    expect(r.done).toBe(0);
+  });
+
+  it("does not count a newly-created SOP before its creation date", () => {
+    const r = computeSopCompliance({
+      staff,
+      templates: [
+        { id: "NEW", outlet_id: null, position_group: "kasir", created_date: "2026-09-26" },
+      ],
+      dates: ["2026-09-25", "2026-09-26"],
+      duties: new Map(),
+      submissions: new Set(),
+      matchesPosition: match,
+    }).get("S1")!;
+    expect(r.required).toBe(1);
+    expect(r.missed).toEqual([{ date: "2026-09-26", template_id: "NEW" }]);
+  });
 });
 
 describe("worstScore", () => {
