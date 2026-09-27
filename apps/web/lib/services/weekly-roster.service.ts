@@ -81,12 +81,16 @@ async function loadOutletStaff(outletCode: string) {
   await ensureStaffJobTables();
   const ids = staff.map((s) => s.staffId);
   const profiles = ids.length
-    ? await prisma.$queryRaw<{ staff_id: string; secondary_positions: string | null }[]>`
+    ? await prisma.$queryRaw<
+        { staff_id: string; secondary_positions: string | null }[]
+      >`
         SELECT "staff_id", "secondary_positions" FROM "staff_job_profiles"
         WHERE "staff_id" = ANY(${ids})
       `
     : [];
-  const secondary = new Map(profiles.map((p) => [p.staff_id, parseList(p.secondary_positions)]));
+  const secondary = new Map(
+    profiles.map((p) => [p.staff_id, parseList(p.secondary_positions)]),
+  );
 
   const qualified = new Map<string, Set<string>>(); // staff → positions
   for (const s of staff) {
@@ -110,7 +114,9 @@ export async function getWeeklyRoster(
   await ensureRecurringPicTable();
   const [duties, templatePositions] = await Promise.all([
     ids.length
-      ? prisma.$queryRaw<{ staff_id: string; duty_date: string; active_positions: string | null }[]>`
+      ? prisma.$queryRaw<
+          { staff_id: string; duty_date: string; active_positions: string | null }[]
+        >`
           SELECT "staff_id", "duty_date"::text AS "duty_date", "active_positions"
           FROM "staff_daily_duties"
           WHERE "staff_id" = ANY(${ids})
@@ -177,9 +183,9 @@ export function buildDutyRows(
 }
 
 /**
- * Simpan jadwal seminggu. Untuk tanggal di minggu itu, jadwal harian staff
- * outlet ini diganti isi grid; staff yang tidak dijadwalkan kembali ke
- * jabatan utamanya.
+ * Simpan jadwal seminggu. Active position diganti dari grid, tetapi shift_code
+ * yang dipilih staff/leader dipertahankan. Ini penting karena shift dan posisi
+ * adalah dua dimensi berbeda pada baris staff_daily_duties yang sama.
  */
 export async function saveWeeklyRoster(input: {
   outletCode: string;
@@ -193,13 +199,18 @@ export async function saveWeeklyRoster(input: {
   const ids = staff.map((s) => s.staffId);
 
   await prisma.$transaction(async (tx) => {
+    // Kosongkan hanya posisi. Jangan DELETE row: shift_code dapat sudah terisi.
     if (ids.length) {
       await tx.$executeRaw`
-        DELETE FROM "staff_daily_duties"
+        UPDATE "staff_daily_duties"
+        SET "active_positions" = '[]',
+            "updated_by" = ${input.actor ?? null},
+            "updated_at" = NOW()
         WHERE "staff_id" = ANY(${ids})
           AND "duty_date" BETWEEN CAST(${dates[0]} AS DATE) AND CAST(${dates[6]} AS DATE)
       `;
     }
+
     for (const [date, perStaff] of rows) {
       for (const [staffId, positions] of perStaff) {
         await tx.$executeRaw`
@@ -207,8 +218,23 @@ export async function saveWeeklyRoster(input: {
             ("staff_id", "duty_date", "active_positions", "updated_by", "created_at", "updated_at")
           VALUES
             (${staffId}, CAST(${date} AS DATE), ${JSON.stringify(positions)}, ${input.actor ?? null}, NOW(), NOW())
+          ON CONFLICT ("staff_id", "duty_date") DO UPDATE SET
+            "active_positions" = EXCLUDED."active_positions",
+            "updated_by" = EXCLUDED."updated_by",
+            "updated_at" = NOW()
         `;
       }
+    }
+
+    // Baris tanpa posisi dan tanpa shift tidak menyimpan informasi apa pun.
+    if (ids.length) {
+      await tx.$executeRaw`
+        DELETE FROM "staff_daily_duties"
+        WHERE "staff_id" = ANY(${ids})
+          AND "duty_date" BETWEEN CAST(${dates[0]} AS DATE) AND CAST(${dates[6]} AS DATE)
+          AND "active_positions" = '[]'
+          AND "shift_code" IS NULL
+      `;
     }
   });
 
