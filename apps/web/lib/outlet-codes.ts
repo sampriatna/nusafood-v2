@@ -29,3 +29,10 @@ export const OUTLET_FILTER_OPTIONS = [
   { value: "NUSAFISHING", label: "Nusa Fishing" },
   { value: "ALL", label: "Semua" },
 ] as const;
+
+/** Nama outlet yang enak dibaca di kartu/daftar (kode mentah → nama). */
+export function outletShortName(outlet: string | null | undefined): string {
+  const code = normalizeOutletCode(outlet);
+  const hit = OUTLET_FILTER_OPTIONS.find((o) => o.value === code && o.value !== "ALL");
+  return hit ? hit.label : (outlet ?? "").trim();
+}

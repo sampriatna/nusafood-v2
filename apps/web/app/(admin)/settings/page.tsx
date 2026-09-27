@@ -1,11 +1,10 @@
 import {
   Building2,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   Database,
-  FileWarning,
   History,
-  Info,
   Layers,
   Repeat,
   ShieldCheck,
@@ -15,7 +14,6 @@ import { AdminPage } from "@/components/admin-page";
 import { SettingsLinkCard } from "@/components/settings-link-card";
 import { SettingsLogoutCard } from "@/components/settings-logout-card";
 import { V1FullSyncButton } from "@/components/v1-full-sync-button";
-import { Card } from "@/components/ui/card";
 import { authRequired, getSession } from "@/lib/auth";
 import { listRecurringTemplates } from "@/lib/services/recurring.service";
 import { listStaff } from "@/lib/services/staff.service";
@@ -41,101 +39,92 @@ export default async function SettingsPage() {
 
   return (
     <AdminPage title="Pengaturan" backHref="/dashboard">
-      <V1FullSyncButton canManage={canManage} />
-
-      <Card className="space-y-4 p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <Database className="size-5 text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold">PostgreSQL v2</h3>
-            <p className="text-sm text-muted-foreground">
-              Data operasional tersimpan di Supabase. Template checklist sudah
-              dimigrasi dari v1.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3">
-          <CheckCircle2 className="size-5 text-emerald-600" />
-          <span className="text-sm font-medium text-emerald-800">
-            Terhubung ke database PostgreSQL
-          </span>
-        </div>
-        <div className="flex items-start gap-2 rounded-lg bg-blue-50 p-3 text-sm">
-          <Info className="mt-0.5 size-4 shrink-0 text-blue-600" />
-          <p className="text-blue-800">
-            Untuk fase transisi: gunakan <strong>Sync Semua dari v1</strong> di
-            atas agar data 1:1 dengan production v1. UI sudah mobile-friendly
-            dan baca dari PostgreSQL (reload cepat).
-          </p>
-        </div>
-      </Card>
-
+      <SectionTitle>Operasional</SectionTitle>
       <SettingsLinkCard
-        href="/teguran"
-        icon={FileWarning}
-        title="Teguran Center"
-        description="Surat Teguran (ST) & Surat Peringatan (SP) operasional"
+        href="/settings/recurring-tasks"
+        icon={Repeat}
+        title="Tugas Berulang"
+        description="Jadwal, PIC, dan checklist tugas rutin"
+        meta={`${recurring.length} template · ${recurring.filter((t) => t.active_status).length} aktif`}
       />
       <SettingsLinkCard
         href="/settings/daily-activity"
         icon={ClipboardList}
-        title="Daily Activity SOP"
+        title="Kegiatan Harian (SOP)"
         description="Template kegiatan harian, link report staff, dan audit SOP"
       />
-      <SettingsLinkCard
-        href="/settings/recurring-tasks"
-        icon={Repeat}
-        title="Template Tugas Berulang"
-        description="Kelola jadwal, PIC, dan checklist harian"
-        meta={`${recurring.length} template · ${recurring.filter((t) => t.active_status).length} aktif`}
-      />
+
+      <SectionTitle>Data master</SectionTitle>
       <SettingsLinkCard
         href="/settings/staff"
         icon={Users}
-        title="Master Staff"
-        description="Kelola staf operasional per outlet — tambah, edit, sync v1"
+        title="Staff"
+        description="Staff operasional per outlet"
         meta={
           staffPreview
             ? `${staff.length} aktif · ${staffPreview}${staff.length > 3 ? "…" : ""}`
-            : `${staff.length} staf`
+            : `${staff.length} staff`
         }
       />
       <SettingsLinkCard
         href="/settings/areas"
         icon={Building2}
-        title="Master Area"
+        title="Area"
         description="Area kerja per outlet (Dapur, Bar, …)"
       />
       <SettingsLinkCard
         href="/settings/categories"
         icon={Layers}
-        title="Master Kategori"
-        description="Kategori tugas (Cleaning, Kitchen, …)"
+        title="Kategori Tugas"
+        description="Jenis tugas (Cleaning, Stok, …)"
       />
       <SettingsLinkCard
         href="/settings/users"
         icon={ShieldCheck}
-        title="Manajemen User Login"
+        title="Akun Login"
         description="Akun admin & leader"
       />
-      <SettingsLinkCard
-        href="/settings/sync-logs"
-        icon={History}
-        title="Sync Logs"
-        description="Riwayat migrasi & sync dari v1"
-      />
 
-      <Card className="p-4">
-        <p className="text-center text-xs text-muted-foreground">
-          Nusa Food Task &amp; Report System v2
-          <br />
-          Data disimpan di PostgreSQL (Supabase)
-        </p>
-      </Card>
+      <details className="group rounded-xl border bg-card">
+        <summary className="flex cursor-pointer items-center gap-3 p-4">
+          <Database className="size-5 text-muted-foreground" />
+          <span className="flex-1">
+            <span className="block font-semibold">Lanjutan</span>
+            <span className="block text-sm text-muted-foreground">
+              Sinkronisasi data dari sistem lama (v1) & status database
+            </span>
+          </span>
+          <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="space-y-3 border-t p-4">
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3">
+            <CheckCircle2 className="size-5 text-emerald-600" />
+            <span className="text-sm font-medium text-emerald-800">
+              Database terhubung
+            </span>
+          </div>
+          <V1FullSyncButton canManage={canManage} />
+          <SettingsLinkCard
+            href="/settings/sync-logs"
+            icon={History}
+            title="Riwayat Sinkronisasi"
+            description="Log migrasi & sync dari v1"
+          />
+        </div>
+      </details>
 
       <SettingsLogoutCard />
+      <p className="text-center text-xs text-muted-foreground">
+        Nusa Food Task &amp; Report System v2
+      </p>
     </AdminPage>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {children}
+    </h2>
   );
 }

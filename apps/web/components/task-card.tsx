@@ -4,6 +4,8 @@ import type { Task } from "@nusafood/types";
 import Link from "next/link";
 import { ChevronRight, Clock, Loader2, MapPin, Trash2, User } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
+import { outletShortName } from "@/lib/outlet-codes";
+import { isTaskDeletable } from "@/lib/task-rules";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -83,7 +85,7 @@ export function TaskCard({
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <MapPin className="size-4 shrink-0" />
                 <span className="truncate">
-                  {task.outlet} - {task.area}
+                  {outletShortName(task.outlet)}{task.area ? ` · ${task.area}` : ""}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -100,13 +102,14 @@ export function TaskCard({
                 <span>
                   {formatDateId(deadlineDate)}{" "}
                   {formatTimeId(deadlineDate)} WIB
+                  {isOverdue ? " · Terlambat" : ""}
                 </span>
               </div>
             </div>
           </div>
         </Link>
 
-        {canDelete && onDelete ? (
+        {canDelete && onDelete && isTaskDeletable(task) ? (
           <>
             <div className="w-px bg-border" />
             <div className="flex w-14 shrink-0 items-center justify-center">

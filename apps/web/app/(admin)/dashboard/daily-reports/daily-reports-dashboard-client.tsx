@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardList,
-  ExternalLink,
   Filter,
   Image as ImageIcon,
   Loader2,
@@ -30,6 +29,7 @@ import {
   type StaffReportValidationStatus,
 } from "@/lib/daily-activity-types";
 import { cn } from "@/lib/utils";
+import { OUTLET_FILTER_OPTIONS, outletShortName } from "@/lib/outlet-codes";
 import { useToast } from "@/hooks/use-toast";
 
 function todayLocal(): string {
@@ -82,7 +82,7 @@ function labelMeta(label: DailyReportRowLabel): {
       };
     case "belum_submit":
       return {
-        text: "Belum submit",
+        text: "Belum lapor",
         className: "border-red-200 bg-red-100 text-red-800",
       };
     case "tidak_wajib":
@@ -106,6 +106,7 @@ export function DailyReportsDashboardClient() {
   const [showFilters, setShowFilters] = useState(false);
   const [date, setDate] = useState(todayLocal());
   const [outlet, setOutlet] = useState("");
+  const [rowFilter, setRowFilter] = useState<RowFilter>("all");
 
   const load = useCallback(
     async (refresh = false) => {
@@ -154,22 +155,33 @@ export function DailyReportsDashboardClient() {
 
   const summary = data?.summary;
   const rows = data?.rows ?? [];
-  const missing = data?.missing_required ?? [];
+
+  const counts = {
+    all: rows.length,
+    belum_submit: rows.filter((r) => r.label === "belum_submit").length,
+    kendala: rows.filter((r) => r.label === "selesai_kendala" || r.label === "perlu_perbaikan").length,
+    selesai_lengkap: rows.filter((r) => r.label === "selesai_lengkap").length,
+  };
+  const visibleRows = rows.filter((r) => {
+    if (rowFilter === "all") return true;
+    if (rowFilter === "kendala") return r.label === "selesai_kendala" || r.label === "perlu_perbaikan";
+    return r.label === rowFilter;
+  });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <div>
-          <h2 className="font-semibold">Kinerja per staff x kegiatan</h2>
+        <div className="min-w-0">
+          <h2 className="font-semibold">Kegiatan staff {date === todayLocal() ? "hari ini" : formatDateLabel(date)}</h2>
           <p className="text-sm text-muted-foreground">
-            Dashboard terpisah dari Task. Setiap baris = 1 orang + 1 kegiatan
-            hari itu.
+            Siapa sudah / belum mengisi kegiatan SOP harian.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <Button
             variant="outline"
             size="icon"
+            aria-label="Filter tanggal & outlet"
             onClick={() => setShowFilters((value) => !value)}
           >
             <Filter className="size-4" />
@@ -177,6 +189,7 @@ export function DailyReportsDashboardClient() {
           <Button
             variant="outline"
             size="icon"
+            aria-label="Muat ulang"
             onClick={() => void load(true)}
             disabled={isRefreshing}
           >
@@ -186,45 +199,6 @@ export function DailyReportsDashboardClient() {
           </Button>
         </div>
       </div>
-
-      <Card className="border-blue-200 bg-blue-50">
-        <CardContent className="p-3 text-sm text-blue-900">
-          <strong>Terpisah dari Task.</strong> Ini audit Daily Activity SOP per
-          person - siapa sudah/belum isi kegiatan standar hari ini.
-        </CardContent>
-      </Card>
-
-      <div className="flex flex-wrap gap-2 text-xs">
-        <span className="rounded border bg-emerald-100 px-2 py-1 text-emerald-800">
-          Hijau: selesai lengkap
-        </span>
-        <span className="rounded border bg-amber-100 px-2 py-1 text-amber-900">
-          Kuning: ada kendala
-        </span>
-        <span className="rounded border bg-orange-100 px-2 py-1 text-orange-900">
-          Oranye: perlu perbaikan leader
-        </span>
-        <span className="rounded border bg-red-100 px-2 py-1 text-red-800">
-          Merah: belum submit
-        </span>
-        <span className="rounded border bg-slate-100 px-2 py-1 text-slate-600">
-          Abu: tidak wajib
-        </span>
-      </div>
-
-      <Card className="border-slate-300 bg-slate-50">
-        <CardContent className="flex flex-col justify-between gap-2 p-3 text-sm sm:flex-row sm:items-center">
-          <p className="text-slate-700">
-            Submit staff belum tentu benar. Validasi lapangan juga tersedia di{" "}
-            <strong>Leader Monitoring</strong>.
-          </p>
-          <Link href="/dashboard/leader-monitoring">
-            <Button size="sm" variant="outline">
-              Buka Leader Monitoring
-            </Button>
-          </Link>
-        </CardContent>
-      </Card>
 
       {showFilters ? (
         <Card>
@@ -239,11 +213,18 @@ export function DailyReportsDashboardClient() {
             </div>
             <div className="space-y-1.5">
               <Label>Outlet</Label>
-              <Input
+              <select
                 value={outlet}
                 onChange={(event) => setOutlet(event.target.value)}
-                placeholder="Kosongkan untuk semua outlet"
-              />
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Semua outlet</option>
+                {OUTLET_FILTER_OPTIONS.filter((o) => o.value !== "ALL").map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </CardContent>
         </Card>
@@ -252,10 +233,17 @@ export function DailyReportsDashboardClient() {
       <div className="grid grid-cols-2 gap-3">
         <SummaryCard
           icon={ClipboardList}
-          label="Total submit hari ini"
+          label="Sudah lapor"
           value={summary?.total_today}
           loading={isLoading}
           className="border-slate-200 bg-slate-50"
+        />
+        <SummaryCard
+          icon={UserX}
+          label="Belum lapor (wajib)"
+          value={summary?.not_submitted}
+          loading={isLoading}
+          className="border-red-200 bg-red-50 text-red-800"
         />
         <SummaryCard
           icon={CheckCircle2}
@@ -266,81 +254,45 @@ export function DailyReportsDashboardClient() {
         />
         <SummaryCard
           icon={AlertTriangle}
-          label="Selesai ada kendala"
+          label="Ada kendala"
           value={summary?.complete_with_issue}
           loading={isLoading}
           className="border-amber-200 bg-amber-50 text-amber-800"
         />
-        <SummaryCard
-          icon={UserX}
-          label="Belum submit wajib"
-          value={summary?.not_submitted}
-          loading={isLoading}
-          className="border-red-200 bg-red-50 text-red-800"
-        />
-        <SummaryCard
-          icon={Users}
-          label="Staff lengkap semua wajib"
-          value={summary?.staff_submitted}
-          loading={isLoading}
-        />
-        <SummaryCard
-          icon={UserX}
-          label="Staff belum lengkap"
-          value={summary?.staff_not_submitted}
-          loading={isLoading}
-        />
       </div>
-
-      {!isLoading && missing.length > 0 ? (
-        <Card className="border-red-300 bg-red-50">
-          <CardContent className="space-y-2 p-4">
-            <div className="flex items-center gap-2 font-semibold text-red-900">
-              <AlertTriangle className="size-4" />
-              Belum submit kegiatan wajib ({missing.length})
-            </div>
-            <ul className="space-y-1 text-sm text-red-900">
-              {missing.slice(0, 10).map((item) => (
-                <li key={`${item.staff_id}-${item.report_template_id}`}>
-                  <span className="font-medium">{item.staff_name}</span> -{" "}
-                  {item.report_title} - {item.outlet}
-                </li>
-              ))}
-              {missing.length > 10 ? (
-                <li className="text-red-700">
-                  +{missing.length - 10} lainnya
-                </li>
-              ) : null}
-            </ul>
-          </CardContent>
-        </Card>
+      {!isLoading && summary ? (
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Users className="size-4" />
+          {summary.staff_submitted ?? 0} staff lengkap · {summary.staff_not_submitted ?? 0} staff belum lengkap
+        </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <Link href="/settings/daily-activity">
-          <Button variant="outline" size="sm">
-            Super Admin Hub
-            <ExternalLink className="ml-1 size-3.5" />
-          </Button>
+      <p className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        Laporan staff belum tentu sesuai kondisi lapangan — cek fisik lewat{" "}
+        <Link href="/dashboard/leader-monitoring" className="font-medium text-primary underline">
+          Leader Monitoring
         </Link>
-        <Link href="/settings/report-links">
-          <Button variant="outline" size="sm">
-            Kelola Link Staff
-            <ExternalLink className="ml-1 size-3.5" />
-          </Button>
-        </Link>
-        <Link href="/settings/report-templates">
-          <Button variant="outline" size="sm">
-            Edit Template
-            <ExternalLink className="ml-1 size-3.5" />
-          </Button>
-        </Link>
-      </div>
+        .
+      </p>
 
       <section className="space-y-2">
-        <h3 className="text-sm font-medium text-muted-foreground">
-          {rows.length} baris
-        </h3>
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {ROW_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setRowFilter(f.value)}
+              className={cn(
+                "shrink-0 rounded-full border px-3 py-1 text-sm",
+                rowFilter === f.value
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "bg-background text-muted-foreground",
+              )}
+            >
+              {f.label} ({counts[f.value]})
+            </button>
+          ))}
+        </div>
 
         {isLoading ? (
           <Card>
@@ -349,7 +301,7 @@ export function DailyReportsDashboardClient() {
               Memuat dashboard...
             </CardContent>
           </Card>
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center text-muted-foreground">
               Tidak ada data untuk filter ini
@@ -374,7 +326,7 @@ export function DailyReportsDashboardClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
+                  {visibleRows.map((row) => (
                     <RowDesktop
                       key={`${row.staff_id}-${row.report_template_id}`}
                       row={row}
@@ -386,7 +338,7 @@ export function DailyReportsDashboardClient() {
             </div>
 
             <div className="space-y-3 md:hidden">
-              {rows.map((row) => (
+              {visibleRows.map((row) => (
                 <RowMobile
                   key={`${row.staff_id}-${row.report_template_id}`}
                   row={row}
@@ -397,8 +349,32 @@ export function DailyReportsDashboardClient() {
           </>
         )}
       </section>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 text-sm text-muted-foreground">
+        <span>Pengaturan:</span>
+        <Link href="/settings/report-templates" className="text-primary underline">
+          Template kegiatan
+        </Link>
+        <Link href="/settings/report-links" className="text-primary underline">
+          Link report staff
+        </Link>
+      </div>
     </div>
   );
+}
+
+type RowFilter = "all" | "belum_submit" | "kendala" | "selesai_lengkap";
+const ROW_FILTERS: { value: RowFilter; label: string }[] = [
+  { value: "all", label: "Semua" },
+  { value: "belum_submit", label: "Belum lapor" },
+  { value: "kendala", label: "Ada kendala" },
+  { value: "selesai_lengkap", label: "Selesai" },
+];
+
+function formatDateLabel(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" });
 }
 
 function SummaryCard({
@@ -535,7 +511,7 @@ function RowMobile({
           <div>
             <p className="font-semibold">{row.staff_name}</p>
             <p className="text-sm text-muted-foreground">
-              {row.outlet} · {row.position}
+              {outletShortName(row.outlet)} · {row.position}
             </p>
           </div>
           <span
@@ -551,19 +527,12 @@ function RowMobile({
           <span className="text-muted-foreground">Kegiatan: </span>
           {row.report_title}
         </p>
-        <p className="text-sm">
-          <span className="text-muted-foreground">Checklist: </span>
-          {row.submitted
-            ? `${row.checklist_checked}/${row.checklist_total} (${row.checklist_percent}%)`
-            : "-"}
-        </p>
-        <p className="text-sm">
-          <span className="text-muted-foreground">Jam: </span>
-          {formatTime(row.submitted_at)}
-          {" · "}
-          <span className="text-muted-foreground">Kondisi: </span>
-          {conditionLabel(row.status_condition)}
-        </p>
+        {row.submitted ? (
+          <p className="text-sm text-muted-foreground">
+            Checklist {row.checklist_checked}/{row.checklist_total} ({row.checklist_percent}%) · jam{" "}
+            {formatTime(row.submitted_at)} · {conditionLabel(row.status_condition)}
+          </p>
+        ) : null}
         {row.submission?.leader_validation ? (
           <p className="text-sm">
             <span className="text-muted-foreground">Validasi leader: </span>

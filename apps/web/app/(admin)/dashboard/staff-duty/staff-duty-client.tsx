@@ -2,10 +2,11 @@
 
 import { useMemo, useState, useTransition } from "react";
 import type { Staff } from "@nusafood/types";
-import { BriefcaseBusiness, Loader2, RotateCcw, Save } from "lucide-react";
+import { Loader2, RotateCcw, Save, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   POSITION_GROUP_LABELS,
@@ -14,6 +15,7 @@ import {
   resolveStaffPositionGroup,
 } from "@/lib/position-groups";
 import { cn } from "@/lib/utils";
+import { outletShortName } from "@/lib/outlet-codes";
 
 type JobSetting = {
   staff_id: string;
@@ -48,6 +50,7 @@ export function StaffDutyClient({
 }: Props) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
+  const [query, setQuery] = useState("");
   const settingMap = useMemo(
     () => new Map(settings.map((setting) => [setting.staff_id, setting])),
     [settings],
@@ -176,20 +179,40 @@ export function StaffDutyClient({
     });
   }
 
+  const q = query.trim().toLowerCase();
+  const visibleStaff = q
+    ? staff.filter(
+        (m) =>
+          m.name.toLowerCase().includes(q) ||
+          (m.outlet ?? "").toLowerCase().includes(q) ||
+          (m.position ?? "").toLowerCase().includes(q),
+      )
+    : staff;
+
   return (
     <div className="space-y-4">
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="space-y-1 p-4 text-sm">
-          <p className="font-semibold">Cara pakai</p>
-          <p className="text-muted-foreground">
-            Jabatan utama selalu menjadi default. Jabatan tambahan hanya berarti
-            staff mampu membantu. Tugas tambahan baru masuk ke Daily Activity
-            kalau dipilih di “Bertugas hari ini”.
-          </p>
-        </CardContent>
-      </Card>
+      <p className="text-sm text-muted-foreground">
+        {formatToday(today)} · Staff otomatis bertugas sesuai jabatan utamanya.
+        Ubah hanya kalau hari ini ia pindah / membantu posisi lain.
+      </p>
 
-      {staff.map((member) => {
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Cari nama, outlet, atau jabatan…"
+          className="pl-9 text-base"
+        />
+      </div>
+
+      {visibleStaff.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          Tidak ada staff yang cocok.
+        </p>
+      ) : null}
+
+      {visibleStaff.map((member) => {
         const primary = primaryOf(member);
         const draft = drafts[member.staff_id] ?? {
           secondary: [],
@@ -202,32 +225,29 @@ export function StaffDutyClient({
 
         return (
           <Card key={member.staff_id}>
-            <CardContent className="space-y-5 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-bold">{member.name}</p>
-                    <Badge variant="outline">{member.outlet}</Badge>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {member.area || "Tanpa area"} · {member.staff_id}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-muted px-3 py-2 text-right">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Jabatan utama
-                  </p>
-                  <p className="text-sm font-semibold">
+            <CardContent className="space-y-3 p-4">
+              <div className="min-w-0">
+                <p className="font-bold">{member.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {outletShortName(member.outlet)} · Jabatan utama:{" "}
+                  <span className="font-medium text-foreground">
                     {primary ? getPositionGroupLabel(primary) : "Belum diatur"}
-                  </p>
-                </div>
+                  </span>
+                </p>
               </div>
 
-              <section className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <BriefcaseBusiness className="size-4" />
-                  <h3 className="text-sm font-semibold">Jabatan tambahan / bisa bantu</h3>
-                </div>
+              <details className="group rounded-lg border px-3 py-2">
+                <summary className="cursor-pointer text-sm font-medium">
+                  Bisa bantu posisi lain
+                  <span className="font-normal text-muted-foreground">
+                    {" "}
+                    ({draft.secondary.length ? draft.secondary.map(getPositionGroupLabel).join(", ") : "belum ada"})
+                  </span>
+                </summary>
+              <section className="space-y-2 pt-3">
+                <p className="text-xs text-muted-foreground">
+                  Pilih posisi yang bisa ia bantu. Ini hanya daftar kemampuan — tidak mengubah tugas hari ini.
+                </p>
                 {canEditProfile ? (
                   <div className="flex flex-wrap gap-2">
                     {REPORT_POSITION_GROUPS.filter(
@@ -278,18 +298,24 @@ export function StaffDutyClient({
                     ) : (
                       <Save className="mr-1 size-3.5" />
                     )}
-                    Simpan kompetensi
+                    Simpan
                   </Button>
                 ) : null}
               </section>
+              </details>
 
+              {allowedForToday.length <= 1 ? (
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Bertugas hari ini: </span>
+                  <span className="font-medium">
+                    {primary ? getPositionGroupLabel(primary) : "—"}
+                  </span>
+                </p>
+              ) : (
               <section className="space-y-2 rounded-xl border bg-muted/20 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-bold">Bertugas hari ini</h3>
-                    <p className="text-xs text-muted-foreground">{today}</p>
-                  </div>
-                  {canSetDuty ? (
+                  <h3 className="text-sm font-bold">Bertugas hari ini</h3>
+                  {canSetDuty && !(draft.active.length === 1 && draft.active[0] === primary) ? (
                     <Button
                       type="button"
                       size="sm"
@@ -297,7 +323,7 @@ export function StaffDutyClient({
                       disabled={pending}
                       onClick={() => resetToPrimary(member)}
                     >
-                      <RotateCcw className="mr-1 size-3.5" /> Default
+                      <RotateCcw className="mr-1 size-3.5" /> Kembali ke jabatan utama
                     </Button>
                   ) : null}
                 </div>
@@ -336,14 +362,21 @@ export function StaffDutyClient({
                     ) : (
                       <Save className="mr-2 size-4" />
                     )}
-                    Aktifkan posisi hari ini
+                    Simpan posisi hari ini
                   </Button>
                 ) : null}
               </section>
+              )}
             </CardContent>
           </Card>
         );
       })}
     </div>
   );
+}
+
+function formatToday(dateKey: string): string {
+  const d = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return dateKey;
+  return d.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }

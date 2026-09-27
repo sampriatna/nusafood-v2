@@ -49,7 +49,14 @@ type Props = {
   canManage: boolean;
 };
 
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Admin",
+  LEADER: "Leader",
+  STAFF: "Staff",
+};
+
 export function UsersManager({ users, staff, canManage }: Props) {
+  const staffName = (id: string) => staff.find((s) => s.staff_id === id)?.name ?? id;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -175,9 +182,9 @@ export function UsersManager({ users, staff, canManage }: Props) {
                 </span>
               </p>
               <p className="text-xs text-muted-foreground">
-                {user.userId} · {user.role}
-                {user.staffId ? ` · ${user.staffId}` : ""}
-                {user.loginEnabled ? "" : " · disabled"}
+                {ROLE_LABEL[user.role] ?? user.role}
+                {user.staffId ? ` · ${staffName(user.staffId)}` : ""}
+                {user.loginEnabled ? "" : " · nonaktif"}
               </p>
             </div>
             {canManage ? (
@@ -242,7 +249,7 @@ export function UsersManager({ users, staff, canManage }: Props) {
           onSubmit={handleCreate}
           className="space-y-4 border-t border-border pt-6"
         >
-          <h2 className="text-lg font-medium">Tambah user</h2>
+          <h2 className="text-lg font-medium">Tambah akun</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
@@ -265,7 +272,7 @@ export function UsersManager({ users, staff, canManage }: Props) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
+              <Label htmlFor="role">Peran</Label>
               <select
                 id="role"
                 name="role"
@@ -273,13 +280,13 @@ export function UsersManager({ users, staff, canManage }: Props) {
                 defaultValue="LEADER"
                 disabled={pending}
               >
-                <option value="ADMIN">ADMIN</option>
-                <option value="LEADER">LEADER</option>
-                <option value="STAFF">STAFF</option>
+                <option value="ADMIN">Admin</option>
+                <option value="LEADER">Leader</option>
+                <option value="STAFF">Staff</option>
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="staff_id">Staff</Label>
+              <Label htmlFor="staff_id">Terhubung ke staff</Label>
               <select
                 id="staff_id"
                 name="staff_id"
@@ -301,19 +308,19 @@ export function UsersManager({ users, staff, canManage }: Props) {
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           {message ? <p className="text-sm text-accent">{message}</p> : null}
           <Button type="submit" disabled={pending}>
-            {pending ? "Menyimpan..." : "Buat user"}
+            {pending ? "Menyimpan..." : "Buat akun"}
           </Button>
         </form>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Hanya ADMIN yang bisa mengelola user.
+          Hanya Admin yang bisa mengelola akun.
         </p>
       )}
 
       <Dialog open={Boolean(editUser)} onOpenChange={() => setEditUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>Edit Akun</DialogTitle>
           </DialogHeader>
           {editUser ? (
             <div className="grid gap-4">
@@ -321,15 +328,15 @@ export function UsersManager({ users, staff, canManage }: Props) {
                 @{editUser.username}
               </p>
               <div className="space-y-2">
-                <Label>Role</Label>
+                <Label>Peran</Label>
                 <Select value={editRole} onValueChange={setEditRole}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ADMIN">ADMIN</SelectItem>
-                    <SelectItem value="LEADER">LEADER</SelectItem>
-                    <SelectItem value="STAFF">STAFF</SelectItem>
+                    <SelectItem value="ADMIN">Admin</SelectItem>
+                    <SelectItem value="LEADER">Leader</SelectItem>
+                    <SelectItem value="STAFF">Staff</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

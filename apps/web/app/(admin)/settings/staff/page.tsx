@@ -24,7 +24,7 @@ export default async function StaffSettingsPage() {
     session?.userId === "env-admin";
 
   return (
-    <AdminPage title="Master Staff" backHref="/settings">
+    <AdminPage title="Staff" backHref="/settings">
       <StaffPositionNormalizeButton canManage={canManage} />
       <p className="text-sm text-muted-foreground">
         {staff.length} staf · {staff.filter((s) => s.status === "ACTIVE").length}{" "}

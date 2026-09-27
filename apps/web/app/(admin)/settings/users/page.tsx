@@ -19,9 +19,9 @@ export default async function UsersSettingsPage() {
     session?.userId === "env-admin";
 
   return (
-    <AdminPage title="Manajemen User" backHref="/settings">
+    <AdminPage title="Akun Login" backHref="/settings">
       <p className="text-sm text-muted-foreground">
-        RBAC: ADMIN / LEADER / STAFF · {users.length} akun
+        {users.length} akun · Admin mengelola semua outlet, Leader hanya outletnya sendiri.
       </p>
       <UsersManager users={users} staff={staff} canManage={canManage} />
     </AdminPage>

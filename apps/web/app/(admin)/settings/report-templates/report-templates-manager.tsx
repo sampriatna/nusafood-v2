@@ -471,7 +471,7 @@ export function ReportTemplatesManager({
           <CardContent className="p-8 text-center text-muted-foreground">
             <FileText className="mx-auto mb-2 size-10 opacity-40" />
             {templates.length === 0
-              ? "Belum ada template — buka Daily Activity SOP untuk auto-import"
+              ? "Belum ada template — buka Kegiatan Harian (SOP) untuk auto-import"
               : "Tidak ada template cocok dengan pencarian"}
           </CardContent>
         </Card>
