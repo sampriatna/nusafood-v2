@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  BarChart3,
   ClipboardList,
   FileWarning,
   Filter,
@@ -52,6 +53,12 @@ import {
 } from "@/lib/format-datetime";
 
 const QUICK_LINKS = [
+  {
+    href: "/dashboard/performance",
+    icon: BarChart3,
+    title: "Kinerja",
+    subtitle: "Tepat waktu & telat per orang",
+  },
   {
     href: "/dashboard/daily-reports",
     icon: ClipboardList,
@@ -553,7 +560,11 @@ export function DashboardClient() {
 
         <div className="grid grid-cols-2 gap-2">
           {QUICK_LINKS.map((item) => (
-            <Link key={item.href} href={item.href}>
+            <Link
+              key={item.href}
+              href={item.href}
+              className={item.href === "/dashboard/performance" ? "col-span-2" : undefined}
+            >
               <Card className="h-full cursor-pointer gap-0 py-0 transition-colors hover:border-primary/50">
                 <CardContent className="space-y-2 p-3">
                   <div className="w-fit rounded-lg bg-primary/10 p-1.5">
