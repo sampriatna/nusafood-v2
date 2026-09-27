@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
 import {
+  normalizeWorkShiftCode,
+  type WorkShiftCode,
+} from "@/lib/daily-activity-sop";
+import {
   addDaysToDateKey,
   weekRangeKeysInAppTz,
 } from "@/lib/format-datetime";
@@ -15,11 +19,12 @@ import { ensureStaffJobTables } from "@/lib/services/staff-job-profile.service";
 
 /**
  * Jadwal posisi mingguan: per tanggal, per posisi → siapa yang bertugas.
- * Disimpan ke staff_daily_duties (sama dengan "Posisi Kerja Hari Ini"),
- * jadi dipakai juga oleh PIC tugas berulang & Daily Activity.
+ * Shift Waiter juga ditetapkan leader/admin di jadwal yang sama sehingga
+ * staff tidak menentukan sendiri SOP mana yang menjadi kewajibannya.
  */
 
 export type RosterCells = Record<string, Record<string, string>>; // date → position → staff_id
+export type ShiftCells = Record<string, Record<string, WorkShiftCode>>; // date → staff_id → shift
 
 export type WeeklyRoster = {
   outlet: { id: string; code: string; name: string };
@@ -33,6 +38,7 @@ export type WeeklyRoster = {
     staff: { staff_id: string; name: string }[];
   }[];
   cells: RosterCells;
+  shift_cells: ShiftCells;
 };
 
 export class RosterError extends Error {
@@ -115,9 +121,18 @@ export async function getWeeklyRoster(
   const [duties, templatePositions] = await Promise.all([
     ids.length
       ? prisma.$queryRaw<
-          { staff_id: string; duty_date: string; active_positions: string | null }[]
+          {
+            staff_id: string;
+            duty_date: string;
+            active_positions: string | null;
+            shift_code: string | null;
+          }[]
         >`
-          SELECT "staff_id", "duty_date"::text AS "duty_date", "active_positions"
+          SELECT
+            "staff_id",
+            "duty_date"::text AS "duty_date",
+            "active_positions",
+            "shift_code"
           FROM "staff_daily_duties"
           WHERE "staff_id" = ANY(${ids})
             AND "duty_date" BETWEEN CAST(${dates[0]} AS DATE) AND CAST(${dates[6]} AS DATE)
@@ -145,15 +160,27 @@ export async function getWeeklyRoster(
     .sort((a, b) => Number(b.used_by_templates) - Number(a.used_by_templates));
 
   const cells: RosterCells = Object.fromEntries(dates.map((d) => [d, {}]));
+  const shiftCells: ShiftCells = Object.fromEntries(dates.map((d) => [d, {}]));
   for (const row of duties) {
     const day = cells[row.duty_date];
     if (!day) continue;
     for (const position of parseList(row.active_positions)) {
       day[position] ??= row.staff_id;
     }
+    const shift = normalizeWorkShiftCode(row.shift_code);
+    if (shift && qualified.get(row.staff_id)?.has("Waiters")) {
+      shiftCells[row.duty_date]![row.staff_id] = shift;
+    }
   }
 
-  return { outlet, week_start: dates[0], dates, positions, cells };
+  return {
+    outlet,
+    week_start: dates[0],
+    dates,
+    positions,
+    cells,
+    shift_cells: shiftCells,
+  };
 }
 
 /** Hitung isi staff_daily_duties per tanggal dari grid (pure → mudah dites). */
@@ -182,24 +209,48 @@ export function buildDutyRows(
   return result;
 }
 
+export function buildShiftRows(
+  dates: string[],
+  shiftCells: ShiftCells,
+  qualified: Map<string, Set<string>>,
+): Map<string, Map<string, WorkShiftCode>> {
+  const result = new Map<string, Map<string, WorkShiftCode>>();
+  for (const date of dates) {
+    const perStaff = new Map<string, WorkShiftCode>();
+    for (const [staffId, rawShift] of Object.entries(shiftCells[date] ?? {})) {
+      if (!qualified.get(staffId)?.has("Waiters")) {
+        throw new RosterError("Shift waiter hanya boleh diberikan kepada staff yang bertugas sebagai Waiter");
+      }
+      const shift = normalizeWorkShiftCode(rawShift);
+      if (!shift) throw new RosterError("Shift waiter harus 1K, 2K, atau 3K");
+      perStaff.set(staffId, shift);
+    }
+    result.set(date, perStaff);
+  }
+  return result;
+}
+
 /**
- * Simpan jadwal seminggu. Active position diganti dari grid, tetapi shift_code
- * yang dipilih staff/leader dipertahankan. Ini penting karena shift dan posisi
- * adalah dua dimensi berbeda pada baris staff_daily_duties yang sama.
+ * Simpan posisi + shift seminggu. Leader/admin menjadi source of truth shift,
+ * sehingga staff tidak bisa memilih SOP yang lebih ringan untuk dirinya sendiri.
  */
 export async function saveWeeklyRoster(input: {
   outletCode: string;
   weekStart: string;
   cells: RosterCells;
+  shiftCells?: ShiftCells;
   actor?: string;
 }): Promise<WeeklyRoster> {
   const { staff, qualified } = await loadOutletStaff(input.outletCode);
   const dates = weekDates(input.weekStart);
   const rows = buildDutyRows(dates, input.cells, qualified);
+  const shiftRows = buildShiftRows(dates, input.shiftCells ?? {}, qualified);
   const ids = staff.map((s) => s.staffId);
+  const waiterIds = staff
+    .filter((s) => qualified.get(s.staffId)?.has("Waiters"))
+    .map((s) => s.staffId);
 
   await prisma.$transaction(async (tx) => {
-    // Kosongkan hanya posisi. Jangan DELETE row: shift_code dapat sudah terisi.
     if (ids.length) {
       await tx.$executeRaw`
         UPDATE "staff_daily_duties"
@@ -207,6 +258,18 @@ export async function saveWeeklyRoster(input: {
             "updated_by" = ${input.actor ?? null},
             "updated_at" = NOW()
         WHERE "staff_id" = ANY(${ids})
+          AND "duty_date" BETWEEN CAST(${dates[0]} AS DATE) AND CAST(${dates[6]} AS DATE)
+      `;
+    }
+
+    // Jadwal ini authoritative untuk shift Waiter pada outlet + minggu ini.
+    if (waiterIds.length) {
+      await tx.$executeRaw`
+        UPDATE "staff_daily_duties"
+        SET "shift_code" = NULL,
+            "updated_by" = ${input.actor ?? null},
+            "updated_at" = NOW()
+        WHERE "staff_id" = ANY(${waiterIds})
           AND "duty_date" BETWEEN CAST(${dates[0]} AS DATE) AND CAST(${dates[6]} AS DATE)
       `;
     }
@@ -226,7 +289,21 @@ export async function saveWeeklyRoster(input: {
       }
     }
 
-    // Baris tanpa posisi dan tanpa shift tidak menyimpan informasi apa pun.
+    for (const [date, perStaff] of shiftRows) {
+      for (const [staffId, shift] of perStaff) {
+        await tx.$executeRaw`
+          INSERT INTO "staff_daily_duties"
+            ("staff_id", "duty_date", "active_positions", "shift_code", "updated_by", "created_at", "updated_at")
+          VALUES
+            (${staffId}, CAST(${date} AS DATE), '[]', ${shift}, ${input.actor ?? null}, NOW(), NOW())
+          ON CONFLICT ("staff_id", "duty_date") DO UPDATE SET
+            "shift_code" = EXCLUDED."shift_code",
+            "updated_by" = EXCLUDED."updated_by",
+            "updated_at" = NOW()
+        `;
+      }
+    }
+
     if (ids.length) {
       await tx.$executeRaw`
         DELETE FROM "staff_daily_duties"
