@@ -128,6 +128,8 @@ export function TaskDetailClient({
     );
   const showPhotoSection = showBeforePhoto || showAfterPhoto;
 
+  // Status juga menandai langkah yang sudah lewat — data lama/sync v1 sering tanpa timestamp.
+  const reached = statusStepIndex(task.status);
   const timeline: TimelineEvent[] = [
     {
       label: "Dibuat",
@@ -136,28 +138,28 @@ export function TaskDetailClient({
       completed: true,
     },
     {
-      label: "WA Dikirim",
+      label: "WA dikirim ke PIC",
       time: task.wa_sent_at || null,
       icon: <Send className="size-4" />,
-      completed: !!task.wa_sent_at,
+      completed: !!task.wa_sent_at || reached >= 1,
     },
     {
-      label: "Dibuka",
+      label: "Dibuka staff",
       time: task.opened_at || null,
       icon: <Clock className="size-4" />,
-      completed: !!task.opened_at,
+      completed: !!task.opened_at || reached >= 2,
     },
     {
-      label: "Laporan Dikirim",
+      label: "Laporan dikirim staff",
       time: task.submitted_at || null,
       icon: <ImageIcon className="size-4" />,
-      completed: !!task.submitted_at,
+      completed: !!task.submitted_at || reached >= 3,
     },
     {
       label: "Diverifikasi",
       time: task.verified_at || null,
       icon: <CheckCircle2 className="size-4" />,
-      completed: !!task.verified_at,
+      completed: !!task.verified_at || reached >= 4,
     },
   ];
 
@@ -456,7 +458,7 @@ export function TaskDetailClient({
         ) : null}
 
         <Card className="p-4">
-          <h3 className="mb-4 font-semibold text-foreground">Timeline</h3>
+          <h3 className="mb-4 font-semibold text-foreground">Riwayat tugas</h3>
           <div className="space-y-3">
             {timeline.map((event) => (
               <div key={event.label} className="flex items-start gap-3">
@@ -479,11 +481,13 @@ export function TaskDetailClient({
                   >
                     {event.label}
                   </p>
-                  {event.time ? (
-                    <p className="text-xs text-muted-foreground">
-                      {formatDateTimeId(event.time)} WIB
-                    </p>
-                  ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    {event.time
+                      ? `${formatDateTimeId(event.time)} WIB`
+                      : event.completed
+                        ? "Waktu tidak tercatat"
+                        : "Belum"}
+                  </p>
                 </div>
               </div>
             ))}
@@ -642,3 +646,24 @@ export function TaskDetailClient({
   );
 }
 
+/** Urutan langkah yang sudah pasti dilewati berdasarkan status tugas. */
+function statusStepIndex(status: string): number {
+  switch (status) {
+    case "SENT":
+    case "OPEN":
+      return 1;
+    case "OPENED":
+      return 2;
+    case "SUBMITTED":
+    case "RESUBMITTED":
+    case "WAITING_VERIFICATION":
+    case "REVISI":
+    case "REVISION":
+      return 3;
+    case "DONE":
+    case "VERIFIED":
+      return 4;
+    default:
+      return 0;
+  }
+}
