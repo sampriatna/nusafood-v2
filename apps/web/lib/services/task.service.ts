@@ -63,6 +63,21 @@ export async function listTasks(filters: TaskFilters = {}) {
     });
   }
 
+  if (filters.q?.trim()) {
+    const q = filters.q.trim();
+    and.push({
+      OR: [
+        { taskId: { contains: q, mode: "insensitive" } },
+        { taskTitle: { contains: q, mode: "insensitive" } },
+        { picName: { contains: q, mode: "insensitive" } },
+      ],
+    });
+  }
+
+  if (filters.staff_id?.trim()) {
+    and.push({ staffId: filters.staff_id.trim() });
+  }
+
   if (filters.checklist_mode !== undefined) {
     and.push({ checklistMode: filters.checklist_mode });
   }

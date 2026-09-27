@@ -36,6 +36,8 @@ export async function GET(request: Request) {
       outlet,
       status: searchParams.get("status") ?? undefined,
       pic: searchParams.get("pic") ?? undefined,
+      q: searchParams.get("q") ?? undefined,
+      staff_id: searchParams.get("staff_id") ?? undefined,
       date_from: searchParams.get("date_from") ?? undefined,
       date_to: searchParams.get("date_to") ?? undefined,
       checklist_mode: parseBool(searchParams.get("checklist_mode")),
