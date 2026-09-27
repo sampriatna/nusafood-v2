@@ -9,6 +9,8 @@ import {
   ChevronLeft,
   ClipboardList,
   Clock,
+  Compass,
+  Lightbulb,
   Loader2,
   MapPin,
   Send,
@@ -24,6 +26,15 @@ import {
   type ReportConditionStatus,
   type ReportTemplate,
 } from "@/lib/daily-activity-types";
+import {
+  WORK_SHIFT_CODES,
+  WORK_SHIFT_DEFINITIONS,
+  parseSopDescription,
+  shiftTimeLabel,
+  stripOperationalPrefix,
+  templateAppliesToShift,
+  type WorkShiftCode,
+} from "@/lib/daily-activity-sop";
 import { cn } from "@/lib/utils";
 
 type PageState = "loading" | "error" | "list" | "form" | "submitting";
@@ -44,6 +55,10 @@ type StaffReportTokenData = {
 };
 
 type SubmitResponse = DailyReportSubmission | null;
+type ShiftResponse = {
+  shift_code: WorkShiftCode | null;
+  is_waiter?: boolean;
+};
 
 type Props = {
   token: string;
@@ -92,6 +107,51 @@ function conditionLabel(value?: ReportConditionStatus | null) {
   );
 }
 
+function timeToMinutes(value?: string | null): number | null {
+  if (!value) return null;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function jakartaMinutesNow(): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jakarta",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const minute = Number(
+    parts.find((part) => part.type === "minute")?.value ?? 0,
+  );
+  return hour * 60 + minute;
+}
+
+type TimingState = "now" | "late" | "next" | "anytime" | "done";
+
+function timingState(
+  template: ReportTemplate,
+  done: boolean,
+  nowMinutes: number,
+): TimingState {
+  if (done) return "done";
+  const start = timeToMinutes(template.target_time_start);
+  const end = timeToMinutes(template.target_time_end);
+  if (start === null && end === null) return "anytime";
+  if (start !== null && nowMinutes < start) return "next";
+  if (end !== null && nowMinutes > end) return "late";
+  return "now";
+}
+
+function timingLabel(state: TimingState): string {
+  if (state === "now") return "Kerjakan sekarang";
+  if (state === "late") return "Belum selesai";
+  if (state === "next") return "Berikutnya";
+  if (state === "done") return "Selesai";
+  return "Bisa dikerjakan";
+}
+
 export function DailyActivityClient({
   token,
   initialData,
@@ -123,6 +183,18 @@ export function DailyActivityClient({
   >("");
   const [note, setNote] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
+
+  const [shiftCode, setShiftCode] = useState<WorkShiftCode | null>(null);
+  const [shiftLoading, setShiftLoading] = useState(true);
+  const [shiftSaving, setShiftSaving] = useState(false);
+  const [shiftPickerOpen, setShiftPickerOpen] = useState(false);
+  const [serverSaysWaiter, setServerSaysWaiter] = useState(false);
+  const [nowMinutes, setNowMinutes] = useState(() => jakartaMinutesNow());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMinutes(jakartaMinutesNow()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (initialData || initialError) return;
@@ -182,20 +254,84 @@ export function DailyActivityClient({
     };
   }, [token, initialData, initialError]);
 
+  useEffect(() => {
+    if (!token || initialError) {
+      setShiftLoading(false);
+      return;
+    }
+    let cancelled = false;
+    async function loadShift() {
+      try {
+        const res = await fetch(
+          `/api/staff-reports/shift?token=${encodeURIComponent(token)}`,
+          { credentials: "include", cache: "no-store" },
+        );
+        const json = (await res.json()) as DailyActivityApiResponse<ShiftResponse>;
+        if (cancelled) return;
+        if (json.success && json.data) {
+          setShiftCode(json.data.shift_code ?? null);
+          setServerSaysWaiter(Boolean(json.data.is_waiter));
+        }
+      } finally {
+        if (!cancelled) setShiftLoading(false);
+      }
+    }
+    void loadShift();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, initialError]);
+
+  const isWaiter =
+    serverSaysWaiter || staff?.position_group === "Waiters" || staff?.position === "Waiters";
+
+  const visibleTemplates = useMemo(
+    () =>
+      templates.filter((template) => {
+        const shifts = parseSopDescription(template.description).shift_codes;
+        return templateAppliesToShift(shifts, shiftCode);
+      }),
+    [templates, shiftCode],
+  );
+
   const requiredTemplates = useMemo(
-    () => templates.filter((template) => template.is_required_daily),
-    [templates],
+    () => visibleTemplates.filter((template) => template.is_required_daily),
+    [visibleTemplates],
   );
 
   const otherTemplates = useMemo(
-    () => templates.filter((template) => !template.is_required_daily),
-    [templates],
+    () => visibleTemplates.filter((template) => !template.is_required_daily),
+    [visibleTemplates],
   );
 
   const alreadySubmitted = (templateId: string) =>
     todaySubmissions.find(
       (submission) => submission.report_template_id === templateId,
     );
+
+  async function saveShift(next: WorkShiftCode) {
+    if (shiftSaving) return;
+    setShiftSaving(true);
+    try {
+      const res = await fetch("/api/staff-reports/shift", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token, shift_code: next }),
+      });
+      const json = (await res.json()) as DailyActivityApiResponse<ShiftResponse>;
+      if (!json.success || !json.data) {
+        alert(json.error || "Gagal menyimpan shift.");
+        return;
+      }
+      setShiftCode(json.data.shift_code);
+      setShiftPickerOpen(false);
+    } catch {
+      alert("Gagal menyimpan shift. Periksa koneksi internet.");
+    } finally {
+      setShiftSaving(false);
+    }
+  }
 
   function openForm(template: ReportTemplate) {
     const existing = alreadySubmitted(template.id);
@@ -229,9 +365,11 @@ export function DailyActivityClient({
   }
 
   const selectedItems = selectedTemplate?.checklist_items ?? [];
-  const checkedCount = selectedItems.filter((item) => checkedMap[item.id])
-    .length;
+  const checkedCount = selectedItems.filter((item) => checkedMap[item.id]).length;
   const totalCount = selectedItems.length;
+  const requiredIncomplete = selectedItems.filter(
+    (item) => item.is_required && !checkedMap[item.id],
+  ).length;
   const conditionNeedsNote = Boolean(
     statusCondition &&
       REPORT_CONDITION_OPTIONS.find(
@@ -243,15 +381,21 @@ export function DailyActivityClient({
     if (!staff || !selectedTemplate || pageState === "submitting") return;
 
     if (!statusCondition) {
-      alert("PILIH STATUS KONDISI");
+      alert("Pilih status kondisi kegiatan.");
+      return;
+    }
+    if (statusCondition === "aman" && requiredIncomplete > 0) {
+      alert(
+        "Status Aman hanya boleh dipilih jika semua langkah wajib selesai. Jika ada yang belum bisa dikerjakan, pilih status kendala dan jelaskan kondisinya.",
+      );
       return;
     }
     if (selectedTemplate.requires_photo && !photoUrl) {
-      alert("HARAP UPLOAD FOTO BUKTI");
+      alert("Upload foto bukti sesuai kondisi terbaru.");
       return;
     }
     if (conditionNeedsNote && !note.trim()) {
-      alert("ISI CATATAN KENDALA");
+      alert("Isi catatan kendala agar leader tahu apa yang harus ditindaklanjuti.");
       return;
     }
 
@@ -264,7 +408,7 @@ export function DailyActivityClient({
       checklistAnswers.length > 0 &&
       checklistAnswers.every((answer) => !answer.checked)
     ) {
-      alert("Centang minimal beberapa checklist yang sudah dikerjakan.");
+      alert("Centang langkah yang memang sudah dikerjakan.");
       return;
     }
 
@@ -338,7 +482,7 @@ export function DailyActivityClient({
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
         <div className="space-y-3 text-center">
           <Loader2 className="mx-auto size-9 animate-spin text-primary" />
-          <p className="text-sm font-medium text-muted-foreground">Memuat...</p>
+          <p className="text-sm font-medium text-muted-foreground">Memuat SOP...</p>
         </div>
       </div>
     );
@@ -360,8 +504,10 @@ export function DailyActivityClient({
 
   if ((pageState === "form" || pageState === "submitting") && selectedTemplate) {
     const isSubmitting = pageState === "submitting";
-    const isPA =
-      staff?.position_group === "PA" || selectedTemplate.position_group === "PA";
+    const meta = parseSopDescription(selectedTemplate.description);
+    const goal = stripOperationalPrefix(
+      selectedTemplate.standard_result || meta.fallback || selectedTemplate.title,
+    );
 
     return (
       <div className="min-h-screen bg-muted/30 pb-28">
@@ -378,36 +524,77 @@ export function DailyActivityClient({
           <h1 className="text-xl font-bold leading-tight">
             {selectedTemplate.title}
           </h1>
-          {selectedTemplate.target_time_start ||
-          selectedTemplate.target_time_end ? (
-            <p className="mt-1 flex items-center gap-1 text-sm text-primary-foreground/80">
-              <Clock className="size-3.5" />
-              Target {selectedTemplate.target_time_start || "--"}-
-              {selectedTemplate.target_time_end || "--"}
-            </p>
-          ) : null}
+          <div className="mt-1 flex flex-wrap gap-3 text-sm text-primary-foreground/80">
+            {shiftCode ? <span>{shiftTimeLabel(shiftCode)}</span> : null}
+            {selectedTemplate.target_time_start || selectedTemplate.target_time_end ? (
+              <span className="flex items-center gap-1">
+                <Clock className="size-3.5" />
+                Target {selectedTemplate.target_time_start || "--"}–
+                {selectedTemplate.target_time_end || "--"}
+              </span>
+            ) : null}
+          </div>
         </header>
 
         <main className="mx-auto max-w-lg space-y-4 p-4">
-          <section className="space-y-1.5 rounded-xl border bg-card p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Target className="size-4 text-primary" />
-              Standar hasil
+          <section className="space-y-2 rounded-2xl border border-primary/20 bg-card p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-sm font-bold text-primary">
+              <Target className="size-4" />
+              GOAL
             </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              {selectedTemplate.standard_result || selectedTemplate.description}
-            </p>
+            <p className="text-[15px] font-medium leading-relaxed">{goal}</p>
           </section>
 
-          <section className="space-y-3 rounded-xl border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold">Checklist kerja</h2>
-              <span className="text-sm tabular-nums text-muted-foreground">
+          {meta.why_text ? (
+            <section className="space-y-2 rounded-2xl border bg-card p-4">
+              <div className="flex items-center gap-2 text-sm font-bold">
+                <Lightbulb className="size-4 text-amber-600" />
+                Kenapa ini penting?
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {meta.why_text}
+              </p>
+            </section>
+          ) : null}
+
+          {meta.operational_impact ? (
+            <section className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-amber-950">
+                <AlertTriangle className="size-4" />
+                Dampak operasional jika dilewatkan
+              </div>
+              <p className="text-sm leading-relaxed text-amber-950/80">
+                {meta.operational_impact}
+              </p>
+            </section>
+          ) : null}
+
+          {meta.instruction_note ? (
+            <section className="space-y-2 rounded-2xl border bg-card p-4">
+              <div className="flex items-center gap-2 text-sm font-bold">
+                <Compass className="size-4 text-primary" />
+                Cara kerja
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {meta.instruction_note}
+              </p>
+            </section>
+          ) : null}
+
+          <section className="space-y-3 rounded-2xl border bg-card p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-bold">Langkah kerja</h2>
+                <p className="text-xs text-muted-foreground">
+                  Centang hanya yang benar-benar sudah dikerjakan.
+                </p>
+              </div>
+              <span className="rounded-lg bg-muted px-2.5 py-1 text-sm font-semibold tabular-nums">
                 {checkedCount}/{totalCount}
               </span>
             </div>
             <div className="space-y-2">
-              {selectedItems.map((item) => {
+              {selectedItems.map((item, index) => {
                 const checked = Boolean(checkedMap[item.id]);
                 return (
                   <button
@@ -429,13 +616,13 @@ export function DailyActivityClient({
                   >
                     <span
                       className={cn(
-                        "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors",
+                        "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border-2 text-xs font-bold transition-colors",
                         checked
                           ? "border-emerald-600 bg-emerald-600 text-white"
-                          : "border-muted-foreground/30 bg-background",
+                          : "border-muted-foreground/30 bg-background text-muted-foreground",
                       )}
                     >
-                      {checked ? <CheckCircle2 className="size-4" /> : null}
+                      {checked ? <CheckCircle2 className="size-4" /> : index + 1}
                     </span>
                     <span className="pt-0.5 text-[15px] leading-snug">
                       {item.item_text}
@@ -446,56 +633,43 @@ export function DailyActivityClient({
             </div>
           </section>
 
-          <section className="space-y-3 rounded-xl border bg-card p-4">
-            <p className="flex items-center gap-2 font-semibold">
-              <Camera className="size-4" />
-              {selectedTemplate.requires_photo
-                ? "Bukti foto (wajib)"
-                : "Foto (opsional)"}
-            </p>
-            <PhotoUploader
-              key={selectedTemplate.id}
-              label=""
-              required={selectedTemplate.requires_photo}
-              size="large"
-              value={photoUrl}
-              onChange={setPhotoUrl}
-              upload={
-                staff
-                  ? {
-                      taskId: `daily-${staff.staff_id}`,
-                      token,
-                      context: "daily_report",
-                    }
-                  : undefined
-              }
-            />
-            <div className="space-y-1.5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-              <p className="flex items-center gap-1.5 font-bold">
-                <AlertTriangle className="size-4 shrink-0" />
-                Peringatan foto
-              </p>
-              <p>
-                Foto wajib asli, terbaru, dan sesuai area yang dikerjakan.
-                Dilarang foto lama, blur, area berbeda, atau satu foto untuk
-                banyak kegiatan.
-              </p>
-              {isPA ? (
-                <p className="font-medium">
-                  Jangan asal submit. Kalau toilet kotor tapi laporan bersih,
-                  tanaman belum disiram tapi laporan selesai, atau pakai foto
-                  lama - itu manipulasi laporan.
+          {selectedTemplate.requires_photo ? (
+            <section className="space-y-3 rounded-2xl border bg-card p-4">
+              <div>
+                <p className="flex items-center gap-2 font-bold">
+                  <Camera className="size-4" />
+                  Bukti kondisi akhir
                 </p>
-              ) : null}
-            </div>
-          </section>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Foto asli dan terbaru. Ambil kondisi yang membantu leader melihat hasil kerja, bukan sekadar memenuhi upload.
+                </p>
+              </div>
+              <PhotoUploader
+                key={selectedTemplate.id}
+                label=""
+                required
+                size="large"
+                value={photoUrl}
+                onChange={setPhotoUrl}
+                upload={
+                  staff
+                    ? {
+                        taskId: `daily-${staff.staff_id}`,
+                        token,
+                        context: "daily_report",
+                      }
+                    : undefined
+                }
+              />
+            </section>
+          ) : null}
 
-          <section className="space-y-2">
-            <h2 className="font-semibold">Status kondisi</h2>
-            <p className="text-xs text-muted-foreground">
-              Jika bukan Aman, tulis catatan agar Leader bisa follow up.
+          <section className="space-y-2 rounded-2xl border bg-card p-4">
+            <h2 className="font-bold">Kondisi setelah dikerjakan</h2>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Pilih Aman hanya jika semua langkah wajib selesai. Kalau ada yang belum beres, laporkan apa adanya agar bisa ditindaklanjuti.
             </p>
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-1 gap-2 pt-1">
               {REPORT_CONDITION_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -503,37 +677,30 @@ export function DailyActivityClient({
                   disabled={isSubmitting}
                   onClick={() => setStatusCondition(option.value)}
                   className={cn(
-                    "min-h-[52px] rounded-xl border-2 bg-card px-3 py-3 text-base font-semibold transition-transform active:scale-[0.98]",
+                    "min-h-[50px] rounded-xl border-2 bg-background px-3 py-3 text-left text-[15px] font-semibold transition-transform active:scale-[0.98]",
                     statusCondition === option.value &&
                       (option.value === "aman"
                         ? "border-emerald-600 bg-emerald-50 text-emerald-900"
                         : "border-amber-500 bg-amber-50 text-amber-900"),
                   )}
                 >
-                  {option.label}
+                  {option.value === "aman" ? "Aman — semua langkah selesai" : option.label}
                 </button>
               ))}
             </div>
           </section>
 
-          <section className="space-y-2">
-            <label className="block font-semibold">
-              Catatan laporan{conditionNeedsNote ? " *" : " (opsional)"}
+          <section className="space-y-2 rounded-2xl border bg-card p-4">
+            <label className="block font-bold">
+              Catatan{conditionNeedsNote ? " *" : " (opsional)"}
             </label>
-            {isPA ? (
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Jangan cuma tulis &quot;sudah&quot;. Isi: kondisi awal - yang
-                dikerjakan - kondisi akhir - kendala (jika ada).
-              </p>
-            ) : null}
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Untuk handover/kendala, tulis singkat: apa yang terjadi, status sekarang, dan siapa yang perlu melanjutkan.
+            </p>
             <Textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder={
-                isPA
-                  ? "Contoh: Toilet customer dibersihkan. Kloset disikat, lantai dipel, wastafel dilap, sampah dikosongkan. Kondisi akhir bersih, tidak bau. Kendala tidak ada."
-                  : "Contoh: sabun tinggal sedikit"
-              }
+              placeholder="Contoh: Meja 17 masih menunggu 1 Atomic Black. Sudah follow-up ke bar, diteruskan Rama shift berikutnya."
               className="min-h-24 text-base"
               disabled={isSubmitting}
             />
@@ -555,7 +722,7 @@ export function DailyActivityClient({
               ) : (
                 <span className="flex items-center gap-2">
                   <Send className="size-5" />
-                  Kirim Kegiatan
+                  Simpan Hasil SOP
                 </span>
               )}
             </Button>
@@ -569,11 +736,34 @@ export function DailyActivityClient({
     alreadySubmitted(template.id),
   ).length;
 
+  const sortedRequired = [...requiredTemplates].sort((a, b) =>
+    (a.target_time_start || "99:99").localeCompare(b.target_time_start || "99:99"),
+  );
+  const actionTemplates = sortedRequired.filter((template) => {
+    const state = timingState(template, Boolean(alreadySubmitted(template.id)), nowMinutes);
+    return state === "now" || state === "late" || state === "anytime";
+  });
+  const upcomingTemplates = sortedRequired.filter(
+    (template) =>
+      timingState(template, Boolean(alreadySubmitted(template.id)), nowMinutes) ===
+      "next",
+  );
+  const doneTemplates = sortedRequired.filter(
+    (template) =>
+      timingState(template, Boolean(alreadySubmitted(template.id)), nowMinutes) ===
+      "done",
+  );
+
   function renderCard(template: ReportTemplate) {
     const done = alreadySubmitted(template.id);
     const percent = checklistPercent(done);
     const isKendala =
       template.kind === "issue_quick" || template.category === "Kendala";
+    const meta = parseSopDescription(template.description);
+    const state = timingState(template, Boolean(done), nowMinutes);
+    const goal = stripOperationalPrefix(
+      template.standard_result || meta.fallback || template.title,
+    );
 
     return (
       <button
@@ -583,43 +773,58 @@ export function DailyActivityClient({
         className={cn(
           "w-full rounded-2xl border-2 p-4 text-left shadow-sm transition-transform active:scale-[0.98]",
           isKendala
-            ? "border-amber-300 bg-amber-50 hover:border-amber-500"
-            : "border-emerald-200 bg-card hover:border-emerald-500",
+            ? "border-amber-300 bg-amber-50"
+            : state === "late"
+              ? "border-amber-300 bg-card"
+              : state === "now"
+                ? "border-primary/50 bg-card"
+                : "border-border bg-card",
         )}
       >
         <div className="space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="mb-1 flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-bold">{template.title}</h2>
-                {template.is_required_daily ? (
-                  <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                    Wajib
-                  </span>
-                ) : null}
-                {done ? (
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                {!isKendala ? (
                   <span
                     className={cn(
-                      "rounded px-2 py-0.5 text-xs font-medium",
-                      done.status_condition === "aman"
+                      "rounded-md px-2 py-0.5 text-xs font-bold",
+                      state === "done"
                         ? "bg-emerald-100 text-emerald-800"
-                        : "bg-amber-100 text-amber-800",
+                        : state === "late"
+                          ? "bg-amber-100 text-amber-900"
+                          : state === "now"
+                            ? "bg-primary/10 text-primary"
+                            : "bg-muted text-muted-foreground",
                     )}
                   >
-                    {done.status_condition === "aman"
-                      ? `Selesai ${percent ?? "?"}%`
-                      : conditionLabel(done.status_condition)}
+                    {timingLabel(state)}
+                  </span>
+                ) : null}
+                {template.target_time_start ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="size-3" />
+                    {template.target_time_start}
+                    {template.target_time_end ? `–${template.target_time_end}` : ""}
                   </span>
                 ) : null}
               </div>
-              <p className="line-clamp-2 text-sm text-muted-foreground">
-                {template.standard_result || template.description}
+              <h2 className="text-lg font-bold leading-tight">{template.title}</h2>
+              <p className="mt-1.5 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                {goal}
               </p>
-              <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                <span>{template.checklist_items?.length ?? 0} checklist</span>
+              <div className="mt-2.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                <span>{template.checklist_items?.length ?? 0} langkah</span>
                 {template.requires_photo ? (
                   <span className="inline-flex items-center gap-1">
-                    <Camera className="size-3" /> Foto
+                    <Camera className="size-3" /> Foto kondisi akhir
+                  </span>
+                ) : null}
+                {done ? (
+                  <span className="font-semibold text-emerald-700">
+                    {done.status_condition === "aman"
+                      ? `Selesai ${percent ?? "?"}%`
+                      : conditionLabel(done.status_condition)}
                   </span>
                 ) : null}
               </div>
@@ -627,31 +832,32 @@ export function DailyActivityClient({
           </div>
           <div
             className={cn(
-              "flex h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-bold",
+              "flex h-11 w-full items-center justify-center rounded-xl text-sm font-bold",
               isKendala
                 ? "bg-amber-500 text-white"
                 : done
-                  ? "border border-emerald-300 bg-emerald-100 text-emerald-800"
+                  ? "border border-emerald-300 bg-emerald-50 text-emerald-800"
                   : "bg-primary text-primary-foreground",
             )}
           >
             {isKendala
-              ? "Lapor kendala ->"
+              ? "Lapor kendala"
               : done
-                ? "Update kegiatan ->"
-                : "Isi kegiatan ->"}
+                ? "Lihat / update SOP"
+                : "Mulai SOP"}
           </div>
         </div>
       </button>
     );
   }
 
+  const showShiftPicker =
+    isWaiter && !shiftLoading && (!shiftCode || shiftPickerOpen);
+
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="bg-primary px-4 py-4 text-primary-foreground">
-        <p className="mb-0.5 text-sm text-primary-foreground/80">
-          Kegiatan Harian (SOP)
-        </p>
+        <p className="mb-0.5 text-sm text-primary-foreground/80">SOP Kerja Hari Ini</p>
         <h1 className="text-2xl font-bold">{staff?.name ?? "Staff"}</h1>
         <div className="mt-2 flex flex-wrap gap-2 text-sm">
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2.5 py-1">
@@ -661,8 +867,13 @@ export function DailyActivityClient({
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2.5 py-1">
             <Briefcase className="size-3.5" />
             {staff?.position ?? "-"}
-            {staff?.position_group ? ` · ${staff.position_group}` : ""}
           </span>
+          {shiftCode ? (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2.5 py-1">
+              <Clock className="size-3.5" />
+              {shiftTimeLabel(shiftCode)}
+            </span>
+          ) : null}
         </div>
       </header>
 
@@ -670,44 +881,154 @@ export function DailyActivityClient({
         {flashOk ? (
           <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-100 px-4 py-3 text-sm font-medium text-emerald-900">
             <CheckCircle2 className="size-5 shrink-0" />
-            {flashOk} terkirim
+            {flashOk} tersimpan
           </div>
         ) : null}
 
-        <div className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
-          Centang checklist - foto - pilih kondisi.{" "}
-          <span className="font-semibold text-foreground">
-            Wajib: {doneRequired}/{requiredTemplates.length}
-          </span>
-        </div>
+        {shiftLoading && isWaiter ? (
+          <div className="flex items-center gap-2 rounded-xl border bg-card p-4 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> Memuat shift hari ini...
+          </div>
+        ) : null}
 
-        <section className="space-y-2.5">
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <ClipboardList className="size-4" />
-            Kegiatan wajib hari ini
-          </h2>
-          {requiredTemplates.length === 0 ? (
-            <div className="space-y-2 rounded-xl border bg-card p-5 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">
-                Belum ada kegiatan wajib untuk jabatan &quot;
-                {staff?.position ?? "-"}&quot;.
+        {showShiftPicker ? (
+          <section className="space-y-4 rounded-2xl border-2 border-primary/30 bg-card p-5 shadow-sm">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-primary">
+                Sebelum mulai SOP
               </p>
-              <p>
-                Minta admin buat template dengan posisi sesuai di Pengaturan -
-                Template Kegiatan.
+              <h2 className="mt-1 text-xl font-bold">Kamu shift berapa hari ini?</h2>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                Pilihan ini menentukan SOP yang memang menjadi tanggung jawabmu. Opening hanya masuk 1K; 1K dan 2K melakukan handover; 3K melakukan final closing outlet.
               </p>
             </div>
-          ) : (
-            requiredTemplates.map(renderCard)
-          )}
-        </section>
-
-        {otherTemplates.length > 0 ? (
-          <section className="space-y-2.5">
-            <h2 className="text-sm font-semibold">Lainnya / Lapor kendala</h2>
-            {otherTemplates.map(renderCard)}
+            <div className="space-y-2">
+              {WORK_SHIFT_CODES.map((code) => {
+                const shift = WORK_SHIFT_DEFINITIONS[code];
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    disabled={shiftSaving}
+                    onClick={() => void saveShift(code)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded-xl border-2 p-4 text-left transition-transform active:scale-[0.98]",
+                      shiftCode === code
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-background",
+                    )}
+                  >
+                    <div>
+                      <p className="text-lg font-bold">{code}</p>
+                      <p className="text-sm font-medium">
+                        {shift.start}–{shift.end}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {shift.description}
+                      </p>
+                    </div>
+                    {shiftSaving ? null : shiftCode === code ? (
+                      <CheckCircle2 className="size-5 text-primary" />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            {shiftCode ? (
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => setShiftPickerOpen(false)}
+              >
+                Batal ganti shift
+              </Button>
+            ) : null}
           </section>
-        ) : null}
+        ) : (
+          <>
+            {isWaiter && shiftCode ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Shift hari ini</p>
+                  <p className="font-bold">{shiftTimeLabel(shiftCode)}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShiftPickerOpen(true)}
+                >
+                  Koreksi shift
+                </Button>
+              </div>
+            ) : null}
+
+            <div className="rounded-xl border bg-card px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Progress SOP wajib</p>
+                  <p className="text-xs text-muted-foreground">
+                    Kerjakan sesuai waktu dan kondisi operasional, bukan sekadar mengejar centang.
+                  </p>
+                </div>
+                <span className="shrink-0 text-lg font-bold tabular-nums">
+                  {doneRequired}/{requiredTemplates.length}
+                </span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{
+                    width: `${requiredTemplates.length ? Math.round((doneRequired / requiredTemplates.length) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            {actionTemplates.length > 0 ? (
+              <section className="space-y-2.5">
+                <h2 className="flex items-center gap-2 text-sm font-bold">
+                  <ClipboardList className="size-4 text-primary" />
+                  Perlu perhatian sekarang
+                </h2>
+                {actionTemplates.map(renderCard)}
+              </section>
+            ) : null}
+
+            {upcomingTemplates.length > 0 ? (
+              <section className="space-y-2.5">
+                <h2 className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
+                  <Clock className="size-4" /> Berikutnya
+                </h2>
+                {upcomingTemplates.map(renderCard)}
+              </section>
+            ) : null}
+
+            {doneTemplates.length > 0 ? (
+              <section className="space-y-2.5">
+                <h2 className="flex items-center gap-2 text-sm font-bold text-emerald-700">
+                  <CheckCircle2 className="size-4" /> Selesai hari ini
+                </h2>
+                {doneTemplates.map(renderCard)}
+              </section>
+            ) : null}
+
+            {requiredTemplates.length === 0 ? (
+              <div className="space-y-2 rounded-xl border bg-card p-5 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">
+                  Belum ada SOP wajib yang cocok untuk posisi/shift hari ini.
+                </p>
+                <p>Jika ini tidak sesuai jadwalmu, hubungi leader.</p>
+              </div>
+            ) : null}
+
+            {otherTemplates.length > 0 ? (
+              <section className="space-y-2.5 pt-1">
+                <h2 className="text-sm font-bold">Butuh bantuan / ada masalah?</h2>
+                {otherTemplates.map(renderCard)}
+              </section>
+            ) : null}
+          </>
+        )}
       </main>
     </div>
   );
