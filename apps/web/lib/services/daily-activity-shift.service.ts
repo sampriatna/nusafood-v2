@@ -1,0 +1,173 @@
+import type { ReportConditionStatus } from "@nusafood/types";
+import { prisma } from "@/lib/db";
+import { todayKeyInAppTz } from "@/lib/format-datetime";
+import {
+  normalizeWorkShiftCode,
+  parseSopDescription,
+  templateAppliesToShift,
+  type WorkShiftCode,
+} from "@/lib/daily-activity-sop";
+import { resolveStaffPositionGroup } from "@/lib/position-groups";
+import {
+  getStaffWorkShift,
+  setStaffWorkShift,
+} from "@/lib/services/staff-job-profile.service";
+
+export class DailyActivityShiftError extends Error {
+  constructor(
+    message: string,
+    public code = "SHIFT_VALIDATION",
+    public status = 400,
+  ) {
+    super(message);
+  }
+}
+
+function dateOnly(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+async function getActiveLink(tokenOrCode: string) {
+  const key = tokenOrCode.trim();
+  if (!key) {
+    throw new DailyActivityShiftError("Link tidak valid", "INVALID_TOKEN", 400);
+  }
+  const link = await prisma.staffReportLink.findFirst({
+    where: {
+      OR: [
+        { token: key },
+        { token: { equals: key, mode: "insensitive" } },
+        { shortCode: key.toLowerCase() },
+      ],
+    },
+    include: { staff: true },
+  });
+  if (!link) {
+    throw new DailyActivityShiftError(
+      "Link tidak ditemukan. Hubungi atasan Anda.",
+      "LINK_NOT_FOUND",
+      404,
+    );
+  }
+  if (!link.isActive || link.staff.status !== "ACTIVE") {
+    throw new DailyActivityShiftError(
+      "Link atau staff sudah tidak aktif.",
+      "LINK_INACTIVE",
+      403,
+    );
+  }
+  return link;
+}
+
+export async function getStaffReportShift(tokenOrCode: string): Promise<{
+  shift_code: WorkShiftCode | null;
+  is_waiter: boolean;
+}> {
+  const link = await getActiveLink(tokenOrCode);
+  return {
+    shift_code: await getStaffWorkShift(link.staffId),
+    is_waiter: resolveStaffPositionGroup(link.staff.position ?? "") === "Waiters",
+  };
+}
+
+export async function setStaffReportShift(input: {
+  token: string;
+  shiftCode: unknown;
+}): Promise<WorkShiftCode> {
+  const link = await getActiveLink(input.token);
+  if (resolveStaffPositionGroup(link.staff.position ?? "") !== "Waiters") {
+    throw new DailyActivityShiftError(
+      "Pilihan shift SOP saat ini khusus posisi Waiter.",
+      "SHIFT_NOT_APPLICABLE",
+      422,
+    );
+  }
+  const next = normalizeWorkShiftCode(input.shiftCode);
+  if (!next) {
+    throw new DailyActivityShiftError(
+      "Pilih shift 1K, 2K, atau 3K.",
+      "INVALID_SHIFT",
+      422,
+    );
+  }
+
+  const today = todayKeyInAppTz();
+  const current = await getStaffWorkShift(link.staffId, today);
+  if (current && current !== next) {
+    const started = await prisma.dailyReportSubmission.count({
+      where: { staffId: link.staffId, reportDate: dateOnly(today) },
+    });
+    if (started > 0) {
+      throw new DailyActivityShiftError(
+        `Shift hari ini sudah terkunci di ${current} karena SOP sudah mulai diisi. Hubungi leader bila jadwal salah.`,
+        "SHIFT_LOCKED",
+        409,
+      );
+    }
+  }
+
+  return setStaffWorkShift({
+    staffId: link.staffId,
+    shiftCode: next,
+    date: today,
+    actor: `staff:${link.staffId}`,
+  });
+}
+
+export async function validateStaffReportSubmissionPolicy(input: {
+  token: string;
+  reportTemplateId: string;
+  statusCondition: ReportConditionStatus;
+  checklistAnswers: { checklist_item_id: string; checked: boolean }[];
+}): Promise<void> {
+  const link = await getActiveLink(input.token);
+  const template = await prisma.reportTemplate.findUnique({
+    where: { id: input.reportTemplateId },
+    include: { items: true },
+  });
+  if (!template) {
+    throw new DailyActivityShiftError(
+      "Kegiatan tidak ditemukan.",
+      "TEMPLATE_NOT_FOUND",
+      404,
+    );
+  }
+
+  const meta = parseSopDescription(template.description);
+  if (meta.shift_codes?.length) {
+    const shift = await getStaffWorkShift(link.staffId);
+    if (!shift) {
+      throw new DailyActivityShiftError(
+        "Pilih shift kerja hari ini sebelum mengisi SOP.",
+        "SHIFT_REQUIRED",
+        422,
+      );
+    }
+    if (!templateAppliesToShift(meta.shift_codes, shift)) {
+      throw new DailyActivityShiftError(
+        `Kegiatan ini bukan kewajiban Shift ${shift}. Muat ulang halaman SOP.`,
+        "WRONG_SHIFT_TEMPLATE",
+        403,
+      );
+    }
+  }
+
+  if (input.statusCondition === "aman") {
+    const answerMap = new Map(
+      input.checklistAnswers.map((answer) => [
+        answer.checklist_item_id,
+        answer.checked,
+      ]),
+    );
+    const incomplete = template.items.filter(
+      (item) => item.isRequired && !answerMap.get(item.id),
+    );
+    if (incomplete.length) {
+      throw new DailyActivityShiftError(
+        "Status Aman hanya bisa dipilih jika seluruh langkah wajib selesai. Jika ada yang belum bisa dikerjakan, pilih status kendala dan jelaskan kondisinya.",
+        "REQUIRED_STEPS_INCOMPLETE",
+        422,
+      );
+    }
+  }
+}
