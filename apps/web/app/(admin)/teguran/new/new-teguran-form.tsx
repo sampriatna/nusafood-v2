@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  DISCIPLINARY_SOURCE_OPTIONS,
   type CreateDisciplinaryLetterPayload,
   type DisciplinaryEvidenceInput,
   type DisciplinaryLetterLevel,
@@ -14,7 +13,6 @@ import {
 import { AdminPage } from "@/components/admin-page";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,7 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, Loader2, Sparkles } from "lucide-react";
+import { Eye, Loader2, Sparkles, X } from "lucide-react";
 import type { DisciplinaryLetter } from "@nusafood/types";
 import { checkLetterTimeline } from "@/lib/letter/letter-format";
 import { buildLetterDocumentHtml } from "@/lib/letter/letter-html";
@@ -74,6 +72,7 @@ export default function NewTeguranForm() {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [polishing, setPolishing] = useState(false);
   const submittingRef = useRef(false);
+  const [history, setHistory] = useState<{ count: number; suggested: number } | null>(null);
 
   const taskId = search.get("task_id");
   const editId = search.get("edit");
@@ -162,12 +161,11 @@ export default function NewTeguranForm() {
         correction_instruction: p.correction_instruction,
         evidence: p.evidence,
       });
-      if (p.previous_letter_count > 0 && p.employee_valid) {
-        toast({
-          title: "Riwayat teguran ditemukan",
-          description: `Karyawan ini sudah punya ${p.previous_letter_count} surat sebelumnya. Level disarankan ST/SP ${p.suggested_level}.`,
-        });
-      }
+      setHistory(
+        p.employee_valid
+          ? { count: p.previous_letter_count, suggested: p.suggested_level }
+          : null,
+      );
     } finally {
       setLoadingPrefill(false);
     }
@@ -532,152 +530,49 @@ export default function NewTeguranForm() {
     });
   }
 
+  const isSp = form.type === "PERINGATAN";
+  const docLabel = isSp ? "Surat Peringatan" : "Surat Teguran";
+  const outletText = form.outlet_name || selectedStaff?.outlet || "";
+
+  function setDeadlineInDays(days: number) {
+    const base = form.incident_date || new Date().toISOString().slice(0, 10);
+    const [y, m, d] = base.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + days));
+    update("correction_deadline", dt.toISOString().slice(0, 10));
+  }
+
+  function removeEvidence(index: number) {
+    setForm((prev) => ({
+      ...prev,
+      evidence: (prev.evidence || []).filter((_, i) => i !== index),
+    }));
+  }
+
   return (
-    <AdminPage title="Buat Draft Teguran / SP" backHref="/teguran" maxWidth="2xl">
-      {loadingPrefill ? (
-        <Card>
-          <CardContent className="p-4 text-sm text-muted-foreground">
-            Mengisi data dari task...
-          </CardContent>
-        </Card>
-      ) : null}
+    <AdminPage
+      title={editId ? `Edit Draft ${docLabel}` : "Buat Surat Teguran / SP"}
+      backHref="/teguran"
+      maxWidth="2xl"
+    >
+      <div className="space-y-4 pb-28">
+        {loadingPrefill ? (
+          <p className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> Mengisi data dari tugas…
+          </p>
+        ) : null}
 
-      {taskId ? (
-        <Card className="border-sky-200 bg-sky-50">
-          <CardContent className="p-4 text-sm text-sky-950">
-            Dari task terlambat: form ini hanya membuat <strong>draft</strong>.
-            Surat tidak langsung dikirim.
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {employeeWarning ? (
-        <Card className="border-amber-300 bg-amber-50">
-          <CardContent className="p-4 text-sm text-amber-950">
-            {employeeWarning}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {!employeeValid && !employeeWarning && form.employee_id ? (
-        <Card className="border-amber-300 bg-amber-50">
-          <CardContent className="p-4 text-sm text-amber-950">
-            Karyawan belum valid. Pilih karyawan dari daftar sebelum surat
-            dikirim.
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {integrityWarning || form.source_type === "FAKE_REPORT" ? (
-        <Card className="border-red-300 bg-red-50">
-          <CardContent className="p-4 text-sm text-red-900">
+        {integrityWarning || form.source_type === "FAKE_REPORT" ? (
+          <Notice tone="red">
             <strong>Peringatan integritas.</strong> {FAKE_REPORT_WARNING}
-          </CardContent>
-        </Card>
-      ) : null}
+          </Notice>
+        ) : null}
 
-      <Card>
-        <CardContent className="grid gap-3 p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>Jenis surat</Label>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={form.type}
-                onChange={(e) =>
-                  update("type", e.target.value as DisciplinaryLetterType)
-                }
-              >
-                <option value="TEGURAN">Surat Teguran (ST)</option>
-                <option value="PERINGATAN">Surat Peringatan (SP)</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Level</Label>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={form.level}
-                onChange={(e) =>
-                  update("level", Number(e.target.value) as DisciplinaryLetterLevel)
-                }
-              >
-                <option value={1}>1</option>
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Karyawan</Label>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={form.employee_id}
-              onChange={(e) => {
-                const s = staff.find((x) => x.staff_id === e.target.value);
-                setEmployeeWarning(null);
-                setForm((prev) => ({
-                  ...prev,
-                  employee_id: e.target.value,
-                  employee_name: s?.name,
-                  employee_position: s?.position,
-                  outlet_name: s?.outlet || prev.outlet_name,
-                }));
-              }}
-            >
-              <option value="">Pilih karyawan</option>
-              {staff.map((s) => (
-                <option key={s.staff_id} value={s.staff_id}>
-                  {s.name} ({s.staff_id})
-                </option>
-              ))}
-            </select>
-            {!staff.length ? (
-              <Input
-                placeholder="Staff ID manual"
-                value={form.employee_id}
-                onChange={(e) => update("employee_id", e.target.value)}
-              />
-            ) : null}
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>Outlet</Label>
-              <Input
-                value={form.outlet_name || ""}
-                onChange={(e) => update("outlet_name", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Tanggal kejadian</Label>
-              <Input
-                type="date"
-                value={form.incident_date}
-                onChange={(e) => update("incident_date", e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Sumber kasus</Label>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={form.source_type}
-              onChange={(e) =>
-                update("source_type", e.target.value as DisciplinarySourceType)
-              }
-            >
-              {DISCIPLINARY_SOURCE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="min-w-0 space-y-1.5">
-            <Label>Tugas terkait</Label>
+        <FormSection
+          step={1}
+          title="Kasus"
+          description="Pilih tugas yang bermasalah — karyawan, kronologi, dan bukti terisi otomatis."
+        >
+          <Field label="Tugas terkait" hint="Opsional. Kosongkan jika kasus tidak berasal dari tugas.">
             <TaskPicker
               value={form.related_task_id || ""}
               title={taskInfo?.title}
@@ -692,13 +587,113 @@ export default function NewTeguranForm() {
                 update("related_task_id", "");
               }}
             />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Jenis kasus">
+              <select
+                className={SELECT_CLASS}
+                value={form.source_type}
+                onChange={(e) => update("source_type", e.target.value as DisciplinarySourceType)}
+              >
+                {SOURCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Tanggal surat">
+              <Input
+                type="date"
+                value={form.incident_date}
+                onChange={(e) => update("incident_date", e.target.value)}
+              />
+            </Field>
           </div>
+        </FormSection>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
-            <p className="text-xs text-muted-foreground">
-              Tulis apa adanya, lalu rapikan jadi bahasa surat formal. Fakta &amp;
-              tanggal tidak diubah.
+        <FormSection step={2} title="Karyawan">
+          <Field label="Nama karyawan">
+            {staff.length ? (
+              <select
+                className={SELECT_CLASS}
+                value={form.employee_id}
+                onChange={(e) => {
+                  const s = staff.find((x) => x.staff_id === e.target.value);
+                  setEmployeeWarning(null);
+                  setForm((prev) => ({
+                    ...prev,
+                    employee_id: e.target.value,
+                    employee_name: s?.name,
+                    employee_position: s?.position,
+                    outlet_name: s?.outlet || prev.outlet_name,
+                  }));
+                }}
+              >
+                <option value="">Pilih karyawan…</option>
+                {staff.map((s) => (
+                  <option key={s.staff_id} value={s.staff_id}>
+                    {s.name}
+                    {s.position ? ` — ${s.position}` : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Input
+                placeholder="ID staff"
+                value={form.employee_id}
+                onChange={(e) => update("employee_id", e.target.value)}
+              />
+            )}
+          </Field>
+          {form.employee_id ? (
+            <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Jabatan:</span>{" "}
+              {form.employee_position || selectedStaff?.position || "—"}
+              <span className="mx-2 text-muted-foreground">·</span>
+              <span className="text-muted-foreground">Outlet:</span> {outletText || "—"}
             </p>
+          ) : null}
+          {employeeWarning || (!employeeValid && form.employee_id) ? (
+            <Notice tone="amber">
+              {employeeWarning || "Karyawan belum valid. Pilih dari daftar sebelum surat dikirim."}
+            </Notice>
+          ) : null}
+          {history && history.count > 0 ? (
+            <Notice tone="sky">
+              Karyawan ini sudah punya {history.count} surat sebelumnya — disarankan level{" "}
+              {["", "I", "II", "III"][history.suggested]}.
+            </Notice>
+          ) : null}
+        </FormSection>
+
+        <FormSection step={3} title="Jenis surat">
+          <Segmented
+            value={form.type}
+            onChange={(v) => update("type", v as DisciplinaryLetterType)}
+            options={[
+              { value: "TEGURAN", label: "Surat Teguran", hint: "Pembinaan, langsung bisa dikirim" },
+              { value: "PERINGATAN", label: "Surat Peringatan", hint: "Formal, perlu approval Admin/Owner" },
+            ]}
+          />
+          <Field label="Tingkat">
+            <Segmented
+              value={String(form.level)}
+              onChange={(v) => update("level", Number(v) as DisciplinaryLetterLevel)}
+              options={[
+                { value: "1", label: "I", hint: "Pertama" },
+                { value: "2", label: "II", hint: "Kedua" },
+                { value: "3", label: "III", hint: "Terakhir" },
+              ]}
+            />
+          </Field>
+        </FormSection>
+
+        <FormSection
+          step={4}
+          title="Isi surat"
+          description="Tulis apa adanya. Tombol AI merapikan jadi bahasa surat formal tanpa mengubah fakta & tanggal."
+          action={
             <Button
               type="button"
               size="sm"
@@ -711,91 +706,158 @@ export default function NewTeguranForm() {
               ) : (
                 <Sparkles className="mr-1.5 size-4" />
               )}
-              Rapikan bahasa (AI)
+              Rapikan (AI)
             </Button>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Kronologi singkat</Label>
+          }
+        >
+          <Field label="Kronologi" required>
             <Textarea
               rows={3}
               value={form.chronology}
               onChange={(e) => update("chronology", e.target.value)}
+              placeholder="Apa yang terjadi, kapan, dan di mana."
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Bentuk pelanggaran</Label>
+          </Field>
+          <Field label="Bentuk pelanggaran" required>
             <Textarea
-              rows={3}
+              rows={2}
               value={form.violation_detail}
               onChange={(e) => update("violation_detail", e.target.value)}
+              placeholder="Standar / aturan apa yang tidak dipenuhi."
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Dampak operasional</Label>
+          </Field>
+          <Field label="Dampak operasional" hint="Opsional">
             <Textarea
               rows={2}
               value={form.operational_impact || ""}
               onChange={(e) => update("operational_impact", e.target.value)}
+              placeholder="Mis. pelanggan komplain, area kotor saat jam buka."
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Instruksi perbaikan</Label>
+          </Field>
+          <Field label="Instruksi perbaikan" required>
             <Textarea
               rows={3}
               value={form.correction_instruction}
               onChange={(e) => update("correction_instruction", e.target.value)}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Deadline perbaikan</Label>
-            <Input
-              type="date"
-              value={form.correction_deadline || ""}
-              onChange={(e) => update("correction_deadline", e.target.value)}
-            />
-          </div>
-
-          {form.type === "PERINGATAN" ? (
+          </Field>
+          <Field label="Batas waktu perbaikan">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="date"
+                className="w-auto"
+                value={form.correction_deadline || ""}
+                onChange={(e) => update("correction_deadline", e.target.value)}
+              />
+              {[3, 7, 14].map((days) => (
+                <Button
+                  key={days}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDeadlineInDays(days)}
+                >
+                  +{days} hari
+                </Button>
+              ))}
+            </div>
+          </Field>
+          {isSp ? (
             <>
-              <div className="space-y-1.5">
-                <Label>Pasal / SOP yang dilanggar</Label>
+              <Field label="Pasal / SOP yang dilanggar">
                 <Textarea
                   rows={2}
                   value={form.sop_reference || ""}
                   onChange={(e) => update("sop_reference", e.target.value)}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Konsekuensi jika mengulang</Label>
+              </Field>
+              <Field label="Konsekuensi jika mengulang">
                 <Textarea
                   rows={2}
                   value={form.consequence || ""}
                   onChange={(e) => update("consequence", e.target.value)}
                 />
-              </div>
+              </Field>
             </>
           ) : null}
+          {timelineIssues.length ? (
+            <Notice tone={timelineBlocked ? "red" : "amber"}>
+              <p className="font-semibold">
+                {timelineBlocked ? "Tanggal belum logis — perbaiki dulu" : "Cek urutan tanggal"}
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                {timelineIssues.map((issue) => (
+                  <li key={issue.message}>{issue.message}</li>
+                ))}
+              </ul>
+            </Notice>
+          ) : null}
+        </FormSection>
 
-          <div className="space-y-1.5">
-            <Label>Catatan internal</Label>
-            <Textarea
-              rows={2}
-              value={form.internal_note || ""}
-              onChange={(e) => update("internal_note", e.target.value)}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="space-y-3 p-4">
-          <h3 className="font-semibold">Bukti foto (kamera / galeri)</h3>
-          <p className="text-sm text-muted-foreground">
-            Ambil foto langsung atau pilih dari galeri. Tidak perlu isi link.
-          </p>
+        <FormSection
+          step={5}
+          title="Bukti pendukung"
+          description={
+            isSp
+              ? "Wajib ada minimal satu bukti sebelum diajukan approval."
+              : "Wajib ada minimal satu bukti sebelum surat dikirim."
+          }
+        >
+          {(form.evidence || []).length ? (
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {(form.evidence || []).map((e, idx) => (
+                <li
+                  key={`${e.evidence_type}-${idx}`}
+                  className="flex items-start gap-3 rounded-lg border p-2"
+                >
+                  {e.file_url && e.evidence_type === "PHOTO" ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={e.file_url}
+                      alt="Bukti"
+                      className="size-14 shrink-0 rounded object-cover"
+                    />
+                  ) : (
+                    <span className="flex size-14 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+                      {EVIDENCE_LABEL[e.evidence_type] ?? "Bukti"}
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1 text-sm">
+                    <p className="font-medium">{EVIDENCE_LABEL[e.evidence_type] ?? "Bukti"}</p>
+                    {e.text_note ? (
+                      <p className="line-clamp-2 text-muted-foreground">{e.text_note}</p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded p-1 text-muted-foreground hover:bg-muted"
+                    aria-label="Hapus bukti"
+                    onClick={() => removeEvidence(idx)}
+                  >
+                    <X className="size-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+              Belum ada bukti. Draft tetap bisa disimpan.
+            </p>
+          )}
+          <Field label="Keterangan bukti" hint="Dipakai untuk foto berikutnya, atau simpan sebagai catatan.">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Mis. area toilet kotor jam 10.00"
+                value={evidenceNote}
+                onChange={(e) => setEvidenceNote(e.target.value)}
+              />
+              <Button type="button" variant="outline" onClick={addEvidenceNoteOnly}>
+                Tambah catatan
+              </Button>
+            </div>
+          </Field>
           <PhotoUploader
-            label="Ambil / pilih foto bukti"
-            size="large"
+            label="Tambah foto bukti"
             upload={{
               taskId: form.related_task_id || `teguran-${Date.now()}`,
               context: "disciplinary",
@@ -804,102 +866,53 @@ export default function NewTeguranForm() {
               if (url) addEvidenceFromUpload(url);
             }}
           />
-          <div className="space-y-1.5">
-            <Label>Catatan bukti (opsional)</Label>
-            <Input
-              placeholder="Misal: area kotor / foto tidak sesuai"
-              value={evidenceNote}
-              onChange={(e) => setEvidenceNote(e.target.value)}
-            />
-          </div>
-          {evidenceIncomplete ? (
-            <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Bukti belum lengkap. Draft tetap bisa disimpan; kirim / approval
-              formal wajib ada bukti.
-            </p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {(form.evidence || []).map((e, idx) => (
-                <li
-                  key={`${e.evidence_type}-${idx}`}
-                  className="rounded border p-2"
-                >
-                  <span className="font-medium">{e.evidence_type}</span>
-                  {e.text_note ? ` — ${e.text_note}` : ""}
-                  {e.file_url ? (
-                    <div className="mt-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={e.file_url}
-                        alt="Bukti"
-                        className="max-h-40 rounded object-cover"
-                      />
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-          <Button type="button" variant="outline" onClick={addEvidenceNoteOnly}>
-            Tambah catatan saja (tanpa foto)
-          </Button>
-        </CardContent>
-      </Card>
+        </FormSection>
 
-      {timelineIssues.length ? (
-        <Card
-          className={
-            timelineBlocked ? "border-red-300 bg-red-50" : "border-amber-300 bg-amber-50"
-          }
-        >
-          <CardContent className="space-y-1 p-4 text-sm">
-            <p className="font-semibold">
-              {timelineBlocked ? "Tanggal belum logis — perbaiki dulu" : "Cek urutan tanggal"}
-            </p>
-            <ul className="list-disc space-y-0.5 pl-5">
-              {timelineIssues.map((issue) => (
-                <li key={issue.message}>{issue.message}</li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Button type="button" variant="outline" onClick={openPreview}>
-        <Eye className="mr-2 size-4" />
-        Preview Surat
-      </Button>
-
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button
-          className="flex-1"
-          variant="secondary"
-          disabled={pending || timelineBlocked}
-          onClick={() => save(false)}
-        >
-          Simpan Draft Teguran
-        </Button>
-        {form.type === "PERINGATAN" ? (
-          <Button
-            className="flex-1"
-            disabled={pending || !employeeValid || evidenceIncomplete || timelineBlocked}
-            onClick={() => save(true)}
-          >
-            Ajukan Approval SP
-          </Button>
-        ) : null}
+        <FormSection step={6} title="Catatan internal" description="Tidak tercetak di surat — hanya terlihat oleh manajemen.">
+          <Textarea
+            rows={2}
+            value={form.internal_note || ""}
+            onChange={(e) => update("internal_note", e.target.value)}
+          />
+        </FormSection>
       </div>
-      {form.type === "PERINGATAN" ? (
-        <p className="text-xs text-muted-foreground">
-          SP formal hanya lanjut setelah approval Admin/Owner. Tombol ini tidak
-          mengirim surat ke karyawan.
-        </p>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Setelah draft tersimpan, kirim surat dilakukan di halaman detail
-          (menandai status di sistem saja, bukan WA/email).
-        </p>
-      )}
+
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto flex max-w-2xl flex-col gap-2">
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={openPreview}>
+              <Eye className="mr-2 size-4" />
+              Preview
+            </Button>
+            <Button
+              type="button"
+              className="flex-1"
+              variant={isSp ? "outline" : "default"}
+              disabled={pending || timelineBlocked}
+              onClick={() => save(false)}
+            >
+              {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Simpan Draft
+            </Button>
+            {isSp ? (
+              <Button
+                type="button"
+                className="flex-1"
+                disabled={pending || !employeeValid || evidenceIncomplete || timelineBlocked}
+                onClick={() => save(true)}
+              >
+                Ajukan Approval
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-center text-xs text-muted-foreground">
+            {isSp
+              ? "SP berlaku setelah disetujui Admin/Owner."
+              : "Setelah disimpan, surat dikirim dari halaman detail."}
+          </p>
+        </div>
+      </div>
+
       <Dialog open={previewHtml !== null} onOpenChange={(open) => !open && setPreviewHtml(null)}>
         <DialogContent className="flex h-[90vh] max-w-[min(900px,96vw)] flex-col gap-2 p-3 sm:max-w-[min(900px,96vw)]">
           <DialogHeader>
@@ -920,4 +933,120 @@ export default function NewTeguranForm() {
       </Dialog>
     </AdminPage>
   );
+}
+
+const SELECT_CLASS = "h-10 w-full rounded-md border bg-background px-3 text-base sm:text-sm";
+
+const SOURCE_OPTIONS: { value: DisciplinarySourceType; label: string }[] = [
+  { value: "TASK_LATE", label: "Tugas terlambat" },
+  { value: "TASK_INCOMPLETE", label: "Tugas tidak selesai / tidak sesuai standar" },
+  { value: "FAKE_REPORT", label: "Laporan palsu / foto tidak valid" },
+  { value: "SOP_VIOLATION", label: "Pelanggaran SOP" },
+  { value: "ATTENDANCE", label: "Kehadiran / absensi" },
+  { value: "ATTITUDE", label: "Sikap kerja" },
+  { value: "OTHER", label: "Lainnya" },
+];
+
+const EVIDENCE_LABEL: Partial<Record<DisciplinaryEvidenceInput["evidence_type"], string>> = {
+  PHOTO: "Foto",
+  SCREENSHOT: "Screenshot",
+  TASK_REPORT: "Laporan tugas",
+  NOTE: "Catatan",
+  FILE: "File",
+  LINK: "Laporan tugas",
+};
+
+function FormSection({
+  step,
+  title,
+  description,
+  action,
+  children,
+}: {
+  step: number;
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3 rounded-xl border bg-card p-4">
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+              {step}
+            </span>
+            <h2 className="font-semibold">{title}</h2>
+          </div>
+          {action}
+        </div>
+        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  required,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <Label>
+        {label}
+        {required ? <span className="text-destructive"> *</span> : null}
+      </Label>
+      {children}
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+    </div>
+  );
+}
+
+function Segmented({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string; hint?: string }[];
+}) {
+  return (
+    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+              active ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/50"
+            }`}
+          >
+            <span className="block text-sm font-semibold">{o.label}</span>
+            {o.hint ? <span className="block text-xs text-muted-foreground">{o.hint}</span> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Notice({ tone, children }: { tone: "amber" | "red" | "sky"; children: React.ReactNode }) {
+  const cls = {
+    amber: "border-amber-300 bg-amber-50 text-amber-950",
+    red: "border-red-300 bg-red-50 text-red-900",
+    sky: "border-sky-200 bg-sky-50 text-sky-950",
+  }[tone];
+  return <div className={`rounded-lg border px-3 py-2 text-sm ${cls}`}>{children}</div>;
 }
