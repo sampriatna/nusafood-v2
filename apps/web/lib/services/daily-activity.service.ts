@@ -64,7 +64,7 @@ export function slugifyStaffName(name: string): string {
   return raw || "staff";
 }
 
-function matchesPositionGroup(
+export function matchesPositionGroup(
   templateGroup: string | null,
   staffPosition: string,
 ): boolean {

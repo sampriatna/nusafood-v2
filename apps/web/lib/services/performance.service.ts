@@ -6,14 +6,19 @@ import {
   monthKeyInAppTz,
 } from "@/lib/format-datetime";
 import { outletShortName } from "@/lib/outlet-codes";
-import { buildOutletWhere } from "@/lib/outlet-scope";
+import { buildOutletWhere, buildStaffOutletWhere } from "@/lib/outlet-scope";
 import {
   aggregatePerformance,
+  computeSopCompliance,
+  sopScore,
+  worstScore,
   type GroupBy,
   type PerfBucket,
   type PerfTaskInput,
 } from "@/lib/performance";
 import { getPositionGroupLabel, resolveStaffPositionGroup } from "@/lib/position-groups";
+import { matchesPositionGroup } from "@/lib/services/daily-activity.service";
+import { loadStaffJobDataForRange } from "@/lib/services/staff-job-profile.service";
 
 export type PerformancePeriod = "7d" | "30d" | "month" | "last_month";
 
@@ -40,13 +45,32 @@ export function periodRange(period: PerformancePeriod, now = new Date()): { star
   return { start: `${lastPrev.slice(0, 7)}-01`, end: lastPrev };
 }
 
+export type SopFields = {
+  sop_required: number;
+  sop_done: number;
+  sop_score: number | null;
+  /** Skor penentu label & urutan: terendah dari skor tugas dan SOP. */
+  final_score: number | null;
+  sop_missed: { date: string; title: string }[];
+};
+
+export type PerformanceBucket = PerfBucket & SopFields & { letters?: number };
+
 export type PerformanceData = {
   period: PerformancePeriod;
   range: { start: string; end: string };
+  /** Hari terakhir yang dihitung untuk SOP (hari ini belum selesai, jadi s.d. kemarin). */
+  sop_until: string | null;
   group_by: GroupBy;
-  overall: PerfBucket;
-  buckets: (PerfBucket & { letters?: number })[];
+  overall: PerformanceBucket;
+  buckets: PerformanceBucket[];
 };
+
+function datesBetween(start: string, end: string): string[] {
+  const out: string[] = [];
+  for (let d = start; d <= end; d = addDaysToDateKey(d, 1)) out.push(d);
+  return out;
+}
 
 export async function getPerformance(options: {
   period: PerformancePeriod;
@@ -107,7 +131,7 @@ export async function getPerformance(options: {
     outletLabel: outletShortName,
   });
 
-  let withLetters: PerformanceData["buckets"] = buckets;
+  const letterCounts = new Map<string, number>();
   if (options.groupBy === "person") {
     const staffIds = buckets.map((b) => b.key).filter((k) => !k.startsWith("name:"));
     if (staffIds.length) {
@@ -120,10 +144,134 @@ export async function getPerformance(options: {
         },
         _count: { _all: true },
       });
-      const counts = new Map(letters.map((l) => [l.employeeId, l._count._all]));
-      withLetters = buckets.map((b) => ({ ...b, letters: counts.get(b.key) ?? 0 }));
+      for (const l of letters) letterCounts.set(l.employeeId, l._count._all);
     }
   }
 
-  return { period: options.period, range, group_by: options.groupBy, overall, buckets: withLetters };
+  // ── SOP harian: s.d. kemarin (hari ini belum selesai) ──
+  const yesterday = addDaysToDateKey(dateKeyInAppTz(now), -1);
+  const sopUntil = range.end < yesterday ? range.end : yesterday;
+  const sopDates = sopUntil >= range.start ? datesBetween(range.start, sopUntil) : [];
+
+  const merged = new Map<string, PerformanceBucket>();
+  const blankSop = (): SopFields => ({ sop_required: 0, sop_done: 0, sop_score: null, final_score: null, sop_missed: [] });
+  for (const b of buckets) {
+    merged.set(b.key, { ...b, ...blankSop(), letters: letterCounts.get(b.key) });
+  }
+  const overallMerged: PerformanceBucket = { ...overall, ...blankSop() };
+
+  if (sopDates.length) {
+    const [staffRows, templates, submissions, jobData] = await Promise.all([
+      prisma.staff.findMany({
+        where: { status: "ACTIVE", ...(options.outlet ? buildStaffOutletWhere(options.outlet) : {}) },
+        select: { staffId: true, name: true, position: true, outletId: true, outlet: { select: { code: true } } },
+      }),
+      prisma.reportTemplate.findMany({
+        where: { active: true, isRequiredDaily: true },
+        select: { id: true, title: true, outletId: true, positionGroup: true },
+      }),
+      prisma.dailyReportSubmission.findMany({
+        where: {
+          reportDate: { gte: new Date(`${range.start}T00:00:00Z`), lte: new Date(`${sopUntil}T00:00:00Z`) },
+          // NULL = belum divalidasi → tetap dihitung (NOT IN akan membuang NULL).
+          OR: [{ leaderValidation: null }, { leaderValidation: { notIn: ["tidak_valid", "manipulasi"] } }],
+        },
+        select: { staffId: true, reportTemplateId: true, reportDate: true },
+      }),
+      loadStaffJobDataForRange(range.start, sopUntil),
+    ]);
+
+    const staffInput = staffRows.map((st) => {
+      const pos = st.position ?? "";
+      return {
+        staff_id: st.staffId,
+        name: st.name,
+        outlet: st.outlet?.code ?? "",
+        outlet_id: st.outletId,
+        primary: resolveStaffPositionGroup(pos) || pos.trim(),
+        secondary: jobData.secondary.get(st.staffId) ?? [],
+      };
+    });
+    const sop = computeSopCompliance({
+      staff: staffInput,
+      templates: templates.map((t) => ({ id: t.id, outlet_id: t.outletId, position_group: t.positionGroup })),
+      dates: sopDates,
+      duties: jobData.duties,
+      submissions: new Set(
+        submissions.map((x) => `${x.staffId}|${x.reportTemplateId}|${x.reportDate.toISOString().slice(0, 10)}`),
+      ),
+      matchesPosition: matchesPositionGroup,
+    });
+    const titles = new Map(templates.map((t) => [t.id, t.title]));
+
+    for (const st of staffInput) {
+      const r = sop.get(st.staff_id);
+      if (!r || !r.required) continue;
+      const division = resolveStaffPositionGroup(st.primary) || null;
+      let key: string;
+      let label: string;
+      let sublabel: string | undefined;
+      if (options.groupBy === "person") {
+        key = st.staff_id;
+        label = st.name;
+        sublabel = [division ? getPositionGroupLabel(division) : null, outletShortName(st.outlet)].filter(Boolean).join(" · ");
+      } else if (options.groupBy === "division") {
+        key = division || "lainnya";
+        label = division ? getPositionGroupLabel(division) : "Tanpa divisi";
+      } else {
+        key = st.outlet || "lainnya";
+        label = st.outlet ? outletShortName(st.outlet) : "Tanpa outlet";
+      }
+      const bucket =
+        merged.get(key) ??
+        ({
+          key,
+          label,
+          sublabel,
+          total: 0,
+          on_time: 0,
+          late_done: 0,
+          overdue: 0,
+          in_progress: 0,
+          revision: 0,
+          verified: 0,
+          score: null,
+          late_tasks: [],
+          ...blankSop(),
+          letters: letterCounts.get(key),
+        } satisfies PerformanceBucket);
+      merged.set(key, bucket);
+      bucket.sop_required += r.required;
+      bucket.sop_done += r.done;
+      overallMerged.sop_required += r.required;
+      overallMerged.sop_done += r.done;
+      if (options.groupBy === "person") {
+        bucket.sop_missed = r.missed
+          .slice(-10)
+          .reverse()
+          .map((m) => ({ date: m.date, title: titles.get(m.template_id) ?? "Laporan SOP" }));
+      }
+    }
+  }
+
+  const finalBuckets = [...merged.values()];
+  for (const b of [...finalBuckets, overallMerged]) {
+    b.sop_score = sopScore(b.sop_required, b.sop_done);
+    b.final_score = worstScore(b.score, b.sop_score);
+  }
+  finalBuckets.sort((a, c) => {
+    if (a.final_score === null && c.final_score === null) return c.total - a.total;
+    if (a.final_score === null) return 1;
+    if (c.final_score === null) return -1;
+    return a.final_score - c.final_score || c.total - a.total;
+  });
+
+  return {
+    period: options.period,
+    range,
+    sop_until: sopDates.length ? sopUntil : null,
+    group_by: options.groupBy,
+    overall: overallMerged,
+    buckets: finalBuckets,
+  };
 }

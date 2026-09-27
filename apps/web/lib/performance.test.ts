@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { aggregatePerformance, classifyTask, gradeOf, type PerfTaskInput } from "./performance";
+import {
+  aggregatePerformance,
+  classifyTask,
+  computeSopCompliance,
+  gradeOf,
+  worstScore,
+  type PerfTaskInput,
+} from "./performance";
 
 const now = new Date("2026-09-27T12:00:00Z");
 
@@ -68,5 +75,51 @@ describe("gradeOf", () => {
     expect(gradeOf(80)).toBe("warning");
     expect(gradeOf(50)).toBe("critical");
     expect(gradeOf(null)).toBe("none");
+  });
+});
+
+describe("computeSopCompliance", () => {
+  const match = (g: string | null, p: string) => !g || g === p;
+  const staff = [
+    { staff_id: "S1", name: "Budi", outlet: "KBU", outlet_id: "o1", primary: "kasir", secondary: ["bar"] },
+  ];
+  const templates = [
+    { id: "T-kasir", outlet_id: null, position_group: "kasir" },
+    { id: "T-bar", outlet_id: null, position_group: "bar" },
+    { id: "T-other-outlet", outlet_id: "o2", position_group: "kasir" },
+  ];
+
+  it("counts required by primary position and matching outlet", () => {
+    const r = computeSopCompliance({
+      staff,
+      templates,
+      dates: ["2026-09-25", "2026-09-26"],
+      duties: new Map(),
+      submissions: new Set(["S1|T-kasir|2026-09-25"]),
+      matchesPosition: match,
+    }).get("S1")!;
+    expect(r.required).toBe(2);
+    expect(r.done).toBe(1);
+    expect(r.missed).toEqual([{ date: "2026-09-26", template_id: "T-kasir" }]);
+  });
+
+  it("follows the position schedule when set", () => {
+    const r = computeSopCompliance({
+      staff,
+      templates,
+      dates: ["2026-09-26"],
+      duties: new Map([["S1|2026-09-26", ["bar"]]]),
+      submissions: new Set(["S1|T-bar|2026-09-26"]),
+      matchesPosition: match,
+    }).get("S1")!;
+    expect(r).toMatchObject({ required: 1, done: 1 });
+  });
+});
+
+describe("worstScore", () => {
+  it("returns the lowest available score", () => {
+    expect(worstScore(80, 60)).toBe(60);
+    expect(worstScore(null, 70)).toBe(70);
+    expect(worstScore(null, undefined)).toBeNull();
   });
 });

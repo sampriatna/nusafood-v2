@@ -347,3 +347,27 @@ export async function getEffectiveStaffPositionGroups(
 
   return active.length ? active : [primary];
 }
+
+/** Batch: posisi tambahan + jadwal posisi dalam rentang tanggal (untuk laporan kinerja). */
+export async function loadStaffJobDataForRange(
+  start: string,
+  end: string,
+): Promise<{ secondary: Map<string, string[]>; duties: Map<string, string[]> }> {
+  await ensureStaffJobTables();
+  const [profiles, duties] = await Promise.all([
+    prisma.$queryRaw<ProfileRow[]>`
+      SELECT "staff_id", "secondary_positions" FROM "staff_job_profiles"
+    `,
+    prisma.$queryRaw<DutyRow[]>`
+      SELECT "staff_id", "duty_date"::text AS "duty_date", "active_positions"
+      FROM "staff_daily_duties"
+      WHERE "duty_date" BETWEEN CAST(${start} AS DATE) AND CAST(${end} AS DATE)
+    `,
+  ]);
+  return {
+    secondary: new Map(profiles.map((row) => [row.staff_id, parsePositionList(row.secondary_positions)])),
+    duties: new Map(
+      duties.map((row) => [`${row.staff_id}|${row.duty_date}`, parsePositionList(row.active_positions)]),
+    ),
+  };
+}
