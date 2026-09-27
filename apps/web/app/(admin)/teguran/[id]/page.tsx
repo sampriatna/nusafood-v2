@@ -10,10 +10,29 @@ import type {
 } from "@nusafood/types";
 import { AdminPage } from "@/components/admin-page";
 import { PhotoUploader } from "@/components/photo-uploader";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { Check, ExternalLink, FileText, Loader2, Pencil } from "lucide-react";
+import {
+  formatTanggal,
+  formatTanggalJam,
+  outletLabel,
+  presentChronology,
+  presentViolation,
+  romanLevel,
+  tidySentence,
+} from "@/lib/letter/letter-format";
 import { getLetterPreview } from "@/lib/services/disciplinary-preview";
 
 type ApiResponse<T> =
@@ -186,153 +205,260 @@ export default function TeguranDetailPage() {
 
   if (loading) {
     return (
-      <AdminPage title="Detail Teguran" backHref="/teguran">
-        <Card>
-          <CardContent className="p-6 text-sm text-muted-foreground">
-            Memuat...
-          </CardContent>
-        </Card>
+      <AdminPage title="Detail Surat" backHref="/teguran" maxWidth="2xl">
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Memuat…
+        </p>
       </AdminPage>
     );
   }
 
   if (!letter) {
     return (
-      <AdminPage title="Detail Teguran" backHref="/teguran">
-        <Card>
-          <CardContent className="p-6">Surat tidak ditemukan.</CardContent>
-        </Card>
+      <AdminPage title="Detail Surat" backHref="/teguran" maxWidth="2xl">
+        <p className="rounded-xl border p-6 text-sm text-muted-foreground">
+          Surat tidak ditemukan.
+        </p>
       </AdminPage>
     );
   }
 
-  const preview = getLetterPreview(letter);
   const isSp = letter.type === "PERINGATAN";
+  const docLabel = `${isSp ? "Surat Peringatan" : "Surat Teguran"} ${romanLevel(letter.level)}`;
   const canEditEvidence =
     letter.status === "DRAFT" || letter.status === "WAITING_APPROVAL";
   const hasEvidence = (letter.evidence || []).length > 0;
   const employeeValid = isFormalEmployeeId(letter.employee_id);
-  const spApproved =
-    letter.status === "APPROVED" ||
-    letter.status === "SENT" ||
-    letter.status === "ACKNOWLEDGED" ||
-    letter.status === "RESOLVED";
-  const canGeneratePdf = !isSp || spApproved;
   const canSend =
     employeeValid &&
     hasEvidence &&
     (!isSp || (letter.status === "APPROVED" && Boolean(letter.pdf_url)));
-  const canApproveSp =
-    isAdmin && isSp && letter.status === "WAITING_APPROVAL";
+  const canApproveSp = isAdmin && isSp && letter.status === "WAITING_APPROVAL";
+  const statusInfo = STATUS_LABEL[letter.status] ?? { label: letter.status, tone: "slate" };
+  const steps = isSp
+    ? ["DRAFT", "WAITING_APPROVAL", "APPROVED", "SENT", "ACKNOWLEDGED", "RESOLVED"]
+    : ["DRAFT", "SENT", "ACKNOWLEDGED", "RESOLVED"];
+  const currentStep = steps.indexOf(letter.status);
+
+  // Syarat sebelum surat bisa dikirim — ditampilkan sebagai checklist, bukan deretan pesan.
+  const sendChecks = [
+    { ok: employeeValid, label: "Karyawan dipilih dari daftar" },
+    { ok: hasEvidence, label: "Minimal satu bukti" },
+    ...(isSp ? [{ ok: letter.status === "APPROVED" || letter.status === "SENT", label: "Disetujui Admin/Owner" }] : []),
+  ];
+
+  let primary: React.ReactNode = null;
+  let primaryHint: string | null = null;
+  if (letter.status === "DRAFT" && isSp) {
+    primary = (
+      <Button className="w-full" disabled={pending || !employeeValid || !hasEvidence} onClick={() => act("submit_approval", "Diajukan untuk approval")}>
+        Ajukan Approval
+      </Button>
+    );
+    primaryHint = "SP perlu disetujui Admin/Owner sebelum dikirim.";
+  } else if (letter.status === "WAITING_APPROVAL") {
+    primary = canApproveSp ? (
+      <Button className="w-full" disabled={pending} onClick={() => act("approve", "SP disetujui")}>
+        Setujui SP
+      </Button>
+    ) : null;
+    primaryHint = canApproveSp ? null : "Menunggu persetujuan Admin/Owner.";
+  } else if (letter.status === "APPROVED" && !letter.pdf_url) {
+    primary = (
+      <Button className="w-full" disabled={pending} onClick={() => act("generate_pdf", "Dokumen SP diterbitkan")}>
+        Terbitkan Dokumen
+      </Button>
+    );
+    primaryHint = "Menyiapkan dokumen resmi sebelum dikirim ke karyawan.";
+  } else if (letter.status === "DRAFT" || letter.status === "APPROVED") {
+    primary = (
+      <Button className="w-full" disabled={pending || !canSend} onClick={() => act("send", "Surat terkirim")}>
+        Kirim ke Karyawan (WhatsApp)
+      </Button>
+    );
+  } else if (letter.status === "SENT") {
+    primary = (
+      <Button className="w-full" disabled={pending} onClick={() => act("acknowledge", "Ditandai sudah dibaca")}>
+        Tandai Sudah Dibaca
+      </Button>
+    );
+    primaryHint = "Tandai setelah karyawan membaca / menandatangani surat.";
+  } else if (letter.status === "ACKNOWLEDGED") {
+    primary = (
+      <Button className="w-full" disabled={pending} onClick={() => act("resolve", "Kasus diselesaikan")}>
+        Selesaikan Kasus
+      </Button>
+    );
+    primaryHint = "Setelah perbaikan dilakukan sesuai instruksi.";
+  }
+  const showSendChecks =
+    (letter.status === "DRAFT" || letter.status === "APPROVED") && sendChecks.some((c) => !c.ok);
 
   return (
-    <AdminPage title="Detail Teguran / SP" backHref="/teguran" maxWidth="2xl">
-      <Card>
-        <CardContent className="space-y-2 p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="font-mono text-xs text-muted-foreground">
-                {letter.letter_number}
+    <AdminPage title="Detail Surat" backHref="/teguran" maxWidth="2xl">
+      <div className="space-y-4">
+        <section className="space-y-3 rounded-xl border bg-card p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {docLabel}
               </p>
-              <h2 className="text-lg font-semibold">{letter.title}</h2>
+              <h1 className="truncate text-lg font-semibold">{letter.employee_name_snapshot}</h1>
+              <p className="text-sm text-muted-foreground">
+                {letter.employee_position_snapshot || "—"} · {outletLabel(letter.outlet_name_snapshot)}
+              </p>
             </div>
-            <Badge variant="secondary">{letter.status}</Badge>
+            <StatusPill tone={statusInfo.tone}>{statusInfo.label}</StatusPill>
           </div>
-          <p className="text-sm">
-            {isSp ? "SP" : "ST"} {letter.level} · {letter.employee_name_snapshot}{" "}
-            · {letter.outlet_name_snapshot}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Jabatan: {letter.employee_position_snapshot || "-"} · Kejadian:{" "}
-            {letter.incident_date}
-          </p>
-          {letter.related_task_id ? (
-            <p className="text-sm">
-              Task:{" "}
-              <Link
-                className="text-primary underline"
-                href={`/tasks/${letter.related_task_id}`}
-              >
-                {letter.related_task_id}
-              </Link>
-            </p>
+          <dl className="grid grid-cols-[8.5rem_1fr] gap-y-1 text-sm">
+            <dt className="text-muted-foreground">Nomor</dt>
+            <dd className="font-medium">{letter.letter_number}</dd>
+            <dt className="text-muted-foreground">Tanggal surat</dt>
+            <dd>{formatTanggal(letter.incident_date)}</dd>
+            {letter.correction_deadline ? (
+              <>
+                <dt className="text-muted-foreground">Batas perbaikan</dt>
+                <dd>{formatTanggal(letter.correction_deadline)}</dd>
+              </>
+            ) : null}
+            {letter.related_task_id ? (
+              <>
+                <dt className="text-muted-foreground">Tugas terkait</dt>
+                <dd>
+                  <Link className="text-primary underline" href={`/tasks/${letter.related_task_id}`}>
+                    {letter.related_task_id}
+                  </Link>
+                </dd>
+              </>
+            ) : null}
+          </dl>
+          {letter.status !== "CANCELLED" && currentStep >= 0 ? (
+            <ol className="flex items-center gap-1 pt-1">
+              {steps.map((st, idx) => (
+                <li key={st} className="flex flex-1 flex-col items-center gap-1 text-center">
+                  <span
+                    className={`h-1.5 w-full rounded-full ${idx <= currentStep ? "bg-primary" : "bg-muted"}`}
+                  />
+                  <span className={`text-[10px] leading-tight ${idx === currentStep ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+                    {STEP_LABEL[st]}
+                  </span>
+                </li>
+              ))}
+            </ol>
           ) : null}
-        </CardContent>
-      </Card>
+        </section>
 
-      {!employeeValid ? (
-        <Card className="border-amber-300 bg-amber-50">
-          <CardContent className="p-4 text-sm text-amber-950">
-            Karyawan belum valid. Edit draft dan pilih karyawan dari daftar
-            sebelum kirim / approval formal.
-          </CardContent>
-        </Card>
-      ) : null}
+        {letter.source_type === "FAKE_REPORT" ? (
+          <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+            Kasus laporan/foto tidak valid termasuk pelanggaran integritas. Pastikan bukti lengkap sebelum diproses sebagai SP.
+          </p>
+        ) : null}
 
-      {letter.source_type === "FAKE_REPORT" ? (
-        <Card className="border-red-300 bg-red-50">
-          <CardContent className="p-4 text-sm text-red-900">
-            Kasus laporan/foto tidak valid termasuk pelanggaran integritas.
-            Pastikan bukti lengkap sebelum diproses sebagai SP.
-          </CardContent>
-        </Card>
-      ) : null}
+        {letter.status !== "CANCELLED" && letter.status !== "RESOLVED" ? (
+          <section className="space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
+            <h2 className="font-semibold">Langkah berikutnya</h2>
+            {showSendChecks ? (
+              <ul className="space-y-1 text-sm">
+                {sendChecks.map((c) => (
+                  <li key={c.label} className={`flex items-center gap-2 ${c.ok ? "text-muted-foreground" : "text-amber-800"}`}>
+                    <Check className={`size-4 ${c.ok ? "text-emerald-600" : "opacity-30"}`} />
+                    {c.label}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {primary}
+            {primaryHint ? <p className="text-xs text-muted-foreground">{primaryHint}</p> : null}
+            {waNotify?.wa_link ? (
+              <a href={waNotify.wa_link} target="_blank" rel="noreferrer" className="inline-flex text-sm font-medium text-primary underline">
+                Buka WhatsApp ke {waNotify.employee_wa}
+              </a>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <a href={`/api/disciplinary/${letter.id}/document`} target="_blank" rel="noreferrer">
+                <Button variant="outline" size="sm">
+                  <FileText className="mr-1.5 size-4" />
+                  Lihat / Cetak Surat
+                </Button>
+              </a>
+              {letter.status === "DRAFT" || letter.status === "WAITING_APPROVAL" ? (
+                <Link href={`/teguran/new?edit=${letter.id}`}>
+                  <Button variant="outline" size="sm">
+                    <Pencil className="mr-1.5 size-4" />
+                    Edit
+                  </Button>
+                </Link>
+              ) : null}
+              {letter.status === "SENT" ? (
+                <Button variant="outline" size="sm" disabled={pending} onClick={() => act("resend_wa", "WhatsApp dikirim ulang")}>
+                  Kirim Ulang WA
+                </Button>
+              ) : null}
+              {letter.status === "SENT" ? (
+                <Button variant="outline" size="sm" disabled={pending} onClick={() => act("resolve", "Kasus diselesaikan")}>
+                  Selesaikan
+                </Button>
+              ) : null}
+            </div>
+          </section>
+        ) : (
+          <a href={`/api/disciplinary/${letter.id}/document`} target="_blank" rel="noreferrer">
+            <Button variant="outline" className="w-full">
+              <FileText className="mr-1.5 size-4" />
+              Lihat / Cetak Surat
+            </Button>
+          </a>
+        )}
 
-      <Card>
-        <CardContent className="space-y-3 p-4 text-sm">
-          <div>
-            <p className="font-medium">Kronologi</p>
-            <p className="whitespace-pre-wrap text-muted-foreground">
-              {letter.chronology}
-            </p>
-          </div>
-          <div>
-            <p className="font-medium">Detail kesalahan</p>
-            <p className="whitespace-pre-wrap text-muted-foreground">
-              {letter.violation_detail}
-            </p>
-          </div>
-          <div>
-            <p className="font-medium">Instruksi perbaikan</p>
-            <p className="whitespace-pre-wrap text-muted-foreground">
-              {letter.correction_instruction}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+        <section className="space-y-3 rounded-xl border bg-card p-4 text-sm">
+          <h2 className="font-semibold">Isi surat</h2>
+          <InfoBlock label="Kronologi" text={presentChronology(letter.chronology)} />
+          <InfoBlock label="Bentuk pelanggaran" text={presentViolation(letter.violation_detail)} />
+          {letter.operational_impact ? (
+            <InfoBlock label="Dampak operasional" text={tidySentence(letter.operational_impact)} />
+          ) : null}
+          <InfoBlock label="Instruksi perbaikan" text={tidySentence(letter.correction_instruction)} />
+          {letter.internal_note ? (
+            <InfoBlock label="Catatan internal (tidak dicetak)" text={letter.internal_note} />
+          ) : null}
+        </section>
 
-      <Card>
-        <CardContent className="space-y-3 p-4">
-          <h3 className="font-semibold">Bukti</h3>
-          {!hasEvidence ? (
-            <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Bukti belum lengkap. Draft boleh disimpan; kirim surat wajib ada
-              bukti.
-            </p>
-          ) : (
-            <ul className="space-y-2 text-sm">
+        <section className="space-y-3 rounded-xl border bg-card p-4">
+          <h2 className="font-semibold">Bukti pendukung</h2>
+          {hasEvidence ? (
+            <ul className="grid gap-2 sm:grid-cols-2">
               {(letter.evidence || []).map((e) => (
-                <li key={e.id} className="rounded border p-2">
-                  <span className="font-medium">{e.evidence_type}</span>
-                  {e.text_note ? ` — ${e.text_note}` : ""}
-                  {e.file_url ? (
-                    <div className="mt-2">
+                <li key={e.id} className="flex items-start gap-3 rounded-lg border p-2 text-sm">
+                  {e.file_url && e.evidence_type === "PHOTO" ? (
+                    <a href={e.file_url} target="_blank" rel="noreferrer" className="shrink-0">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={e.file_url}
-                        alt="Bukti"
-                        className="max-h-40 rounded object-cover"
-                      />
-                    </div>
-                  ) : null}
+                      <img src={e.file_url} alt="Bukti" className="size-16 rounded object-cover" />
+                    </a>
+                  ) : (
+                    <span className="flex size-16 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+                      {EVIDENCE_LABEL[e.evidence_type] ?? "Bukti"}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-medium">{EVIDENCE_LABEL[e.evidence_type] ?? "Bukti"}</p>
+                    {e.text_note ? <p className="text-muted-foreground">{e.text_note}</p> : null}
+                    {e.file_url && e.evidence_type !== "PHOTO" ? (
+                      <a href={e.file_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline">
+                        Buka <ExternalLink className="size-3" />
+                      </a>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>
+          ) : (
+            <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+              Belum ada bukti — wajib ada sebelum surat dikirim.
+            </p>
           )}
           {canEditEvidence ? (
             <PhotoUploader
-              label="Tambah foto bukti (kamera / galeri)"
-              size="large"
+              label="Tambah foto bukti"
               upload={{
                 taskId: letter.related_task_id || `teguran-${letter.id}`,
                 context: "disciplinary",
@@ -342,195 +468,117 @@ export default function TeguranDetailPage() {
               }}
             />
           ) : null}
-        </CardContent>
-      </Card>
+        </section>
 
-      <Card>
-        <CardContent className="space-y-2 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-semibold">Surat</h3>
-            <a
-              href={`/api/disciplinary/${letter.id}/document`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Button size="sm">Lihat / Cetak Surat (A4)</Button>
-            </a>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {letter.status === "DRAFT" || letter.status === "WAITING_APPROVAL"
-              ? "Masih draft — dokumen diberi tanda DRAFT sampai diterbitkan."
-              : "Buka dokumen lalu pilih Print / Save PDF."}
-          </p>
-          <p className="pt-1 text-xs font-medium text-muted-foreground">Ringkasan isi (untuk WhatsApp)</p>
-          <pre className="whitespace-pre-wrap rounded bg-muted/50 p-3 text-xs leading-relaxed">
-            {preview}
+        <details className="rounded-xl border bg-card p-4 text-sm">
+          <summary className="cursor-pointer font-semibold">Pesan WhatsApp ke karyawan</summary>
+          <pre className="mt-3 whitespace-pre-wrap rounded bg-muted/50 p-3 text-xs leading-relaxed">
+            {getLetterPreview(letter)}
           </pre>
-          {letter.pdf_url ? (
-            <a
-              href={letter.pdf_url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm text-primary underline"
-            >
-              Buka preview surat (sementara — cetak / Save as PDF)
-            </a>
-          ) : null}
-          <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-            PDF/preview ini masih sementara. Belum disimpan ke storage permanen
-            (cloud). Jangan anggap sebagai arsip resmi final.
-          </p>
-        </CardContent>
-      </Card>
+        </details>
 
-      <Card>
-        <CardContent className="space-y-2 p-4">
-          <h3 className="font-semibold">Audit log</h3>
-          <ul className="space-y-2 text-sm">
+        <details className="rounded-xl border bg-card p-4 text-sm">
+          <summary className="cursor-pointer font-semibold">
+            Riwayat ({(letter.events || []).length})
+          </summary>
+          <ol className="mt-3 space-y-2">
             {(letter.events || []).map((ev) => (
-              <li key={ev.id} className="rounded border p-2">
-                <p className="font-medium">
-                  {ev.action}
-                  {ev.previous_status || ev.new_status
-                    ? ` (${ev.previous_status || "-"} → ${ev.new_status || "-"})`
-                    : ""}
-                </p>
+              <li key={ev.id} className="border-l-2 border-muted pl-3">
+                <p className="font-medium">{EVENT_LABEL[ev.action] ?? ev.action}</p>
                 <p className="text-xs text-muted-foreground">
-                  {ev.actor_name_snapshot} ·{" "}
-                  {new Date(ev.created_at).toLocaleString("id-ID")}
+                  {ev.actor_name_snapshot} · {formatTanggalJam(ev.created_at)}
                 </p>
                 {ev.note ? <p className="text-xs">{ev.note}</p> : null}
               </li>
             ))}
-          </ul>
-        </CardContent>
-      </Card>
+          </ol>
+        </details>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {(letter.status === "DRAFT" || letter.status === "WAITING_APPROVAL") && (
-          <Link href={`/teguran/new?edit=${letter.id}`}>
-            <Button variant="outline" className="w-full">
-              Edit Draft
-            </Button>
-          </Link>
-        )}
-        {letter.status === "DRAFT" && isSp && (
-          <Button
-            disabled={pending || !employeeValid || !hasEvidence}
-            onClick={() => act("submit_approval", "Diajukan approval")}
-          >
-            Ajukan Approval SP
-          </Button>
-        )}
-        {canApproveSp ? (
-          <Button
-            disabled={pending}
-            onClick={() => act("approve", "SP disetujui")}
-          >
-            Approve SP
-          </Button>
+        {letter.status !== "CANCELLED" && letter.status !== "RESOLVED" ? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button type="button" className="w-full py-2 text-sm text-destructive hover:underline" disabled={pending}>
+                Batalkan surat ini
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Batalkan surat?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {docLabel} untuk {letter.employee_name_snapshot} akan ditandai dibatalkan. Riwayat tetap tersimpan.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Kembali</AlertDialogCancel>
+                <AlertDialogAction onClick={() => act("cancel", "Surat dibatalkan")}>
+                  Ya, batalkan
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         ) : null}
-        {isSp && letter.status === "WAITING_APPROVAL" && !isAdmin ? (
-          <p className="col-span-full text-xs text-muted-foreground">
-            Menunggu approval Admin/Owner. Leader tidak bisa approve SP.
-          </p>
-        ) : null}
-        <div className="space-y-1">
-          <Button
-            variant="secondary"
-            className="w-full"
-            disabled={pending || !canGeneratePdf}
-            onClick={() =>
-              act("generate_pdf", "Preview surat sementara dibuat")
-            }
-          >
-            Generate Preview Surat
-          </Button>
-          {!canGeneratePdf ? (
-            <p className="text-xs text-amber-800">
-              SP belum di-approve. Preview formal belum boleh dibuat.
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Preview sementara — belum arsip permanen.
-            </p>
-          )}
-        </div>
-        <div className="space-y-1">
-          <Button
-            className="w-full"
-            disabled={pending || !canSend}
-            onClick={() => act("send", "Surat terkirim")}
-          >
-            Kirim Surat (WhatsApp)
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            Mengirim isi surat ke WhatsApp karyawan. Jika GAS belum mendukung
-            action khusus, WhatsApp akan dibuka otomatis untuk kirim manual.
-          </p>
-          {waNotify?.wa_link ? (
-            <a
-              href={waNotify.wa_link}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex text-sm font-medium text-primary underline"
-            >
-              Buka WhatsApp ke {waNotify.employee_wa}
-            </a>
-          ) : null}
-          {!hasEvidence ? (
-            <p className="text-xs text-amber-800">
-              Tambahkan bukti dulu sebelum menandai terkirim.
-            </p>
-          ) : null}
-          {!employeeValid ? (
-            <p className="text-xs text-amber-800">
-              Pilih karyawan valid dulu sebelum menandai terkirim.
-            </p>
-          ) : null}
-          {isSp && letter.status !== "APPROVED" ? (
-            <p className="text-xs text-amber-800">
-              SP harus di-approve Admin/Owner dulu.
-            </p>
-          ) : null}
-        </div>
-        {letter.status === "SENT" && (
-          <>
-            <Button
-              variant="outline"
-              disabled={pending}
-              onClick={() => act("resend_wa", "WA dikirim ulang")}
-            >
-              Kirim Ulang WA
-            </Button>
-            <Button
-              variant="outline"
-              disabled={pending}
-              onClick={() => act("acknowledge", "Ditandai dibaca")}
-            >
-              Tandai Dibaca
-            </Button>
-          </>
-        )}
-        {(letter.status === "SENT" || letter.status === "ACKNOWLEDGED") && (
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={() => act("resolve", "Diselesaikan")}
-          >
-            Selesaikan
-          </Button>
-        )}
-        {letter.status !== "CANCELLED" && letter.status !== "RESOLVED" && (
-          <Button
-            variant="destructive"
-            disabled={pending}
-            onClick={() => act("cancel", "Dibatalkan")}
-          >
-            Batalkan
-          </Button>
-        )}
       </div>
     </AdminPage>
+  );
+}
+
+const STATUS_LABEL: Record<string, { label: string; tone: "slate" | "amber" | "sky" | "emerald" | "red" }> = {
+  DRAFT: { label: "Draft", tone: "slate" },
+  WAITING_APPROVAL: { label: "Menunggu approval", tone: "amber" },
+  APPROVED: { label: "Disetujui", tone: "sky" },
+  SENT: { label: "Terkirim", tone: "sky" },
+  ACKNOWLEDGED: { label: "Sudah dibaca", tone: "emerald" },
+  RESOLVED: { label: "Selesai", tone: "emerald" },
+  CANCELLED: { label: "Dibatalkan", tone: "red" },
+};
+
+const STEP_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  WAITING_APPROVAL: "Approval",
+  APPROVED: "Disetujui",
+  SENT: "Terkirim",
+  ACKNOWLEDGED: "Dibaca",
+  RESOLVED: "Selesai",
+};
+
+const EVENT_LABEL: Record<string, string> = {
+  CREATED: "Draft dibuat",
+  UPDATED: "Draft diubah",
+  SUBMIT_APPROVAL: "Diajukan untuk approval",
+  APPROVED: "Disetujui",
+  PDF_GENERATED: "Dokumen diterbitkan",
+  SENT: "Dikirim ke karyawan",
+  WA_RESEND: "WhatsApp dikirim ulang",
+  ACKNOWLEDGED: "Ditandai sudah dibaca",
+  RESOLVED: "Kasus diselesaikan",
+  CANCELLED: "Dibatalkan",
+};
+
+const EVIDENCE_LABEL: Record<string, string> = {
+  PHOTO: "Foto",
+  SCREENSHOT: "Screenshot",
+  TASK_REPORT: "Laporan tugas",
+  NOTE: "Catatan",
+  FILE: "File",
+  LINK: "Laporan tugas",
+};
+
+function StatusPill({ tone, children }: { tone: "slate" | "amber" | "sky" | "emerald" | "red"; children: React.ReactNode }) {
+  const cls = {
+    slate: "bg-slate-100 text-slate-700",
+    amber: "bg-amber-100 text-amber-800",
+    sky: "bg-sky-100 text-sky-800",
+    emerald: "bg-emerald-100 text-emerald-800",
+    red: "bg-red-100 text-red-700",
+  }[tone];
+  return <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>{children}</span>;
+}
+
+function InfoBlock({ label, text }: { label: string; text: string }) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="whitespace-pre-wrap">{text}</p>
+    </div>
   );
 }
