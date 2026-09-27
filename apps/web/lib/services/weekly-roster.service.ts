@@ -233,6 +233,7 @@ export function buildShiftRows(
 /**
  * Simpan posisi + shift seminggu. Leader/admin menjadi source of truth shift,
  * sehingga staff tidak bisa memilih SOP yang lebih ringan untuk dirinya sendiri.
+ * Client lama yang belum mengirim shift_cells tidak boleh menghapus shift existing.
  */
 export async function saveWeeklyRoster(input: {
   outletCode: string;
@@ -244,7 +245,10 @@ export async function saveWeeklyRoster(input: {
   const { staff, qualified } = await loadOutletStaff(input.outletCode);
   const dates = weekDates(input.weekStart);
   const rows = buildDutyRows(dates, input.cells, qualified);
-  const shiftRows = buildShiftRows(dates, input.shiftCells ?? {}, qualified);
+  const shouldUpdateShifts = input.shiftCells !== undefined;
+  const shiftRows: Map<string, Map<string, WorkShiftCode>> = shouldUpdateShifts
+    ? buildShiftRows(dates, input.shiftCells ?? {}, qualified)
+    : new Map();
   const ids = staff.map((s) => s.staffId);
   const waiterIds = staff
     .filter((s) => qualified.get(s.staffId)?.has("Waiters"))
@@ -262,8 +266,7 @@ export async function saveWeeklyRoster(input: {
       `;
     }
 
-    // Jadwal ini authoritative untuk shift Waiter pada outlet + minggu ini.
-    if (waiterIds.length) {
+    if (waiterIds.length && shouldUpdateShifts) {
       await tx.$executeRaw`
         UPDATE "staff_daily_duties"
         SET "shift_code" = NULL,
