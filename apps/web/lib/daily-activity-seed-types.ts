@@ -1,5 +1,6 @@
 /** Shared type for daily activity seed definitions. */
 import type { ReportTemplateCategory, ReportTemplateKind } from "@nusafood/types";
+import type { WorkShiftCode } from "./daily-activity-sop";
 
 export type DailyActivitySeedDef = {
   code: string;
@@ -15,4 +16,10 @@ export type DailyActivitySeedDef = {
   target_time_end?: string;
   sort_order: number;
   checklist: string[];
+  /** Copy instruction-first untuk SOP Digital staff. */
+  why_text?: string;
+  operational_impact?: string;
+  instruction_note?: string;
+  /** Jika diisi, template hanya menjadi kewajiban staff pada shift ini. */
+  shift_codes?: WorkShiftCode[];
 };
