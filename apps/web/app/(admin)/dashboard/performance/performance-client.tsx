@@ -19,12 +19,20 @@ import { gradeOf, type GroupBy, type PerfBucket, type ScoreGrade } from "@/lib/p
 import { cn } from "@/lib/utils";
 
 type PerformancePeriod = "7d" | "30d" | "month" | "last_month";
-type Bucket = PerfBucket & { letters?: number };
+type Bucket = PerfBucket & {
+  letters?: number;
+  sop_required: number;
+  sop_done: number;
+  sop_score: number | null;
+  final_score: number | null;
+  sop_missed: { date: string; title: string }[];
+};
 type PerformanceData = {
   period: PerformancePeriod;
   range: { start: string; end: string };
+  sop_until: string | null;
   group_by: GroupBy;
-  overall: PerfBucket;
+  overall: Bucket;
   buckets: Bucket[];
 };
 
@@ -45,7 +53,7 @@ const GROUPS: { value: GroupBy; label: string }[] = [
 const SEGMENTS = [
   { key: "on_time", label: "Tepat waktu", color: "#0ca30c" },
   { key: "late_done", label: "Terlambat", color: "#ec835a" },
-  { key: "overdue", label: "Belum lapor (lewat deadline)", color: "#d03b3b" },
+  { key: "overdue", label: "Belum lapor / SOP tidak diisi", color: "#d03b3b" },
   { key: "in_progress", label: "Masih berjalan", color: "#cbd5e1" },
 ] as const;
 
@@ -146,17 +154,27 @@ export function PerformanceClient({ canPickOutlet }: { canPickOutlet: boolean })
 
       <div className="grid grid-cols-2 gap-3">
         <Card className="col-span-2">
-          <CardContent className="flex items-end justify-between gap-3 p-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Skor tepat waktu</p>
-              <p className="text-4xl font-bold leading-tight">
-                {loading ? "–" : overall?.score === null || overall?.score === undefined ? "–" : `${overall.score}%`}
-              </p>
+          <CardContent className="space-y-3 p-4">
+            <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 {data ? `Deadline ${formatRange(data.range)}` : " "}
               </p>
+              {overall ? <GradeBadge score={overall.final_score} /> : null}
             </div>
-            {overall ? <GradeBadge score={overall.score} /> : null}
+            <div className="grid grid-cols-2 gap-3">
+              <HeroScore label="Tugas tepat waktu" score={loading ? undefined : overall?.score} />
+              <HeroScore
+                label="SOP harian terisi"
+                score={loading ? undefined : overall?.sop_score}
+                hint={
+                  overall && overall.sop_required
+                    ? `${overall.sop_done}/${overall.sop_required} laporan`
+                    : data && !data.sop_until
+                      ? "Dihitung mulai besok"
+                      : undefined
+                }
+              />
+            </div>
           </CardContent>
         </Card>
         <Stat label="Total tugas" value={overall?.total} loading={loading} />
@@ -197,6 +215,8 @@ export function PerformanceClient({ canPickOutlet }: { canPickOutlet: boolean })
           <li><b>Belum lapor</b>: deadline sudah lewat tapi belum ada laporan — dihitung terlambat.</li>
           <li>Tugas yang deadline-nya belum lewat tidak ikut dinilai.</li>
           <li>Skor = tepat waktu ÷ semua tugas yang sudah dinilai. Baik ≥ 90%, Cukup 75–89%, Perlu perhatian &lt; 75%.</li>
+          <li><b>SOP harian</b>: laporan kegiatan wajib yang diisi staff lewat link personalnya, sesuai jabatan / jadwal posisi hari itu. Dihitung s.d. kemarin; laporan yang ditandai leader &quot;tidak valid&quot; / &quot;manipulasi&quot; tidak dihitung.</li>
+          <li>Label Baik / Cukup / Perlu perhatian dan urutan memakai skor <b>terendah</b> dari Tugas dan SOP.</li>
           <li>Divisi diambil dari jabatan utama staff di Master Staff.</li>
         </ul>
       </details>
@@ -216,6 +236,18 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
     >
       {children}
     </button>
+  );
+}
+
+function HeroScore({ label, score, hint }: { label: string; score?: number | null; hint?: string }) {
+  return (
+    <div>
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-3xl font-bold leading-tight tabular-nums">
+        {score === undefined || score === null ? "–" : `${score}%`}
+      </p>
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+    </div>
   );
 }
 
@@ -254,6 +286,33 @@ function Legend() {
   );
 }
 
+function MetricLine({ label, score, children }: { label: string; score: number | null; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-10 shrink-0 text-xs text-muted-foreground">{label}</span>
+      <div className="min-w-0 flex-1">{children}</div>
+      <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums">
+        {score === null ? "–" : `${score}%`}
+      </span>
+    </div>
+  );
+}
+
+function SopBar({ required, done }: { required: number; done: number }) {
+  if (!required) return <div className="h-2.5 rounded bg-muted" />;
+  const missed = required - done;
+  return (
+    <div className="flex h-2.5 gap-0.5" role="img" aria-label={`SOP terisi ${done}, tidak diisi ${missed}`}>
+      {done ? (
+        <div title={`Terisi: ${done}`} className={cn("rounded-l", !missed && "rounded-r")} style={{ flexGrow: done, flexBasis: 0, backgroundColor: "#0ca30c", minWidth: 4 }} />
+      ) : null}
+      {missed ? (
+        <div title={`Tidak diisi: ${missed}`} className={cn("rounded-r", !done && "rounded-l")} style={{ flexGrow: missed, flexBasis: 0, backgroundColor: "#d03b3b", minWidth: 4 }} />
+      ) : null}
+    </div>
+  );
+}
+
 function StackedBar({ bucket }: { bucket: PerfBucket }) {
   const parts = SEGMENTS.map((s) => ({ ...s, value: bucket[s.key] })).filter((p) => p.value > 0);
   if (!bucket.total) return <div className="h-2.5 rounded bg-muted" />;
@@ -274,6 +333,7 @@ function StackedBar({ bucket }: { bucket: PerfBucket }) {
 function BucketRow({ bucket, showLetters }: { bucket: Bucket; showLetters: boolean }) {
   const [open, setOpen] = useState(false);
   const late = bucket.late_done + bucket.overdue;
+  const hasDetails = bucket.late_tasks.length > 0 || bucket.sop_missed.length > 0;
   const facts = [
     `${bucket.total} tugas`,
     `${bucket.on_time} tepat`,
@@ -291,34 +351,43 @@ function BucketRow({ bucket, showLetters }: { bucket: Bucket; showLetters: boole
           className="flex w-full items-start justify-between gap-3 text-left"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          disabled={!bucket.late_tasks.length}
+          disabled={!hasDetails}
         >
           <div className="min-w-0">
             <p className="truncate font-semibold">{bucket.label}</p>
             {bucket.sublabel ? <p className="truncate text-xs text-muted-foreground">{bucket.sublabel}</p> : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <span className="text-lg font-bold tabular-nums">
-              {bucket.score === null ? "–" : `${bucket.score}%`}
-            </span>
-            <GradeBadge score={bucket.score} />
+            <GradeBadge score={bucket.final_score} />
           </div>
         </button>
-        <StackedBar bucket={bucket} />
+        <MetricLine label="Tugas" score={bucket.score}>
+          <StackedBar bucket={bucket} />
+        </MetricLine>
+        <p className="text-xs text-muted-foreground">{bucket.total ? facts.join(" · ") : "Tidak ada tugas di periode ini"}</p>
+        <MetricLine label="SOP" score={bucket.sop_score}>
+          <SopBar required={bucket.sop_required} done={bucket.sop_done} />
+        </MetricLine>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">{facts.join(" · ")}</p>
-          {bucket.late_tasks.length ? (
+          <p className="text-xs text-muted-foreground">
+            {bucket.sop_required
+              ? `${bucket.sop_done}/${bucket.sop_required} laporan SOP terisi`
+              : "Tidak ada SOP wajib"}
+          </p>
+          {hasDetails ? (
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
               className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-primary"
             >
-              Lihat yang telat
+              Lihat rincian
               <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
             </button>
           ) : null}
         </div>
         {open ? (
+          <div className="space-y-2">
+          {bucket.late_tasks.length ? (
           <ul className="divide-y rounded-md border text-sm">
             {bucket.late_tasks.map((t) => (
               <li key={t.task_id}>
@@ -342,6 +411,23 @@ function BucketRow({ bucket, showLetters }: { bucket: Bucket; showLetters: boole
               </li>
             ))}
           </ul>
+          ) : null}
+          {bucket.sop_missed.length ? (
+            <ul className="divide-y rounded-md border text-sm">
+              {bucket.sop_missed.map((m, i) => (
+                <li key={`${m.date}-${i}`} className="flex items-start justify-between gap-2 px-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block truncate">{m.title}</span>
+                    <span className="text-xs text-muted-foreground">{formatDateId(`${m.date}T12:00:00+07:00`)}</span>
+                  </span>
+                  <span className="shrink-0 rounded bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-800">
+                    SOP tidak diisi
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          </div>
         ) : null}
       </CardContent>
     </Card>

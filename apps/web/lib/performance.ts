@@ -174,3 +174,69 @@ export function gradeOf(score: number | null): ScoreGrade {
   if (score >= 75) return "warning";
   return "critical";
 }
+
+// ── Kepatuhan SOP harian (laporan dari link personal staff) ────────────────
+
+export type SopStaffInput = {
+  staff_id: string;
+  name: string;
+  outlet: string;
+  outlet_id: string;
+  /** Posisi standar jabatan utama (mis. "kasir"). */
+  primary: string;
+  /** Posisi tambahan yang boleh dibantu. */
+  secondary: string[];
+};
+
+export type SopTemplateInput = {
+  id: string;
+  outlet_id: string | null;
+  position_group: string | null;
+};
+
+export type SopResult = { required: number; done: number; missed: { date: string; template_id: string }[] };
+
+/**
+ * Hitung wajib vs terisi per staff per hari (YYYY-MM-DD), mengikuti aturan Laporan Harian:
+ * template wajib yang cocok outlet + posisi efektif hari itu (jadwal posisi → kalau kosong, jabatan utama).
+ * Laporan yang divalidasi leader "tidak valid"/"manipulasi" tidak dihitung terisi.
+ */
+export function computeSopCompliance(input: {
+  staff: SopStaffInput[];
+  templates: SopTemplateInput[];
+  dates: string[];
+  /** key `${staff_id}|${date}` → posisi aktif dari jadwal. */
+  duties: Map<string, string[]>;
+  /** key `${staff_id}|${template_id}|${date}` untuk laporan yang sah. */
+  submissions: Set<string>;
+  matchesPosition: (templateGroup: string | null, position: string) => boolean;
+}): Map<string, SopResult> {
+  const result = new Map<string, SopResult>();
+  for (const s of input.staff) {
+    const r: SopResult = { required: 0, done: 0, missed: [] };
+    const allowed = new Set([s.primary, ...s.secondary]);
+    for (const date of input.dates) {
+      const scheduled = (input.duties.get(`${s.staff_id}|${date}`) ?? []).filter((p) => allowed.has(p));
+      const positions = scheduled.length ? scheduled : [s.primary];
+      for (const t of input.templates) {
+        if (t.outlet_id && t.outlet_id !== s.outlet_id) continue;
+        if (!positions.some((p) => input.matchesPosition(t.position_group, p))) continue;
+        r.required += 1;
+        if (input.submissions.has(`${s.staff_id}|${t.id}|${date}`)) r.done += 1;
+        else r.missed.push({ date, template_id: t.id });
+      }
+    }
+    result.set(s.staff_id, r);
+  }
+  return result;
+}
+
+export function sopScore(required: number, done: number): number | null {
+  return required ? Math.round((done / required) * 100) : null;
+}
+
+/** Skor penentu urutan & label: yang terendah dari skor yang tersedia. */
+export function worstScore(...scores: (number | null | undefined)[]): number | null {
+  const valid = scores.filter((s): s is number => typeof s === "number");
+  return valid.length ? Math.min(...valid) : null;
+}
