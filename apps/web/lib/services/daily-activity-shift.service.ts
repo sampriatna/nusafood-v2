@@ -23,10 +23,6 @@ export class DailyActivityShiftError extends Error {
   }
 }
 
-function dateOnly(value: string): Date {
-  return new Date(`${value}T00:00:00.000Z`);
-}
-
 async function getActiveLink(tokenOrCode: string) {
   const key = tokenOrCode.trim();
   if (!key) {
@@ -70,6 +66,10 @@ export async function getStaffReportShift(tokenOrCode: string): Promise<{
   };
 }
 
+/**
+ * Fallback jika leader belum mengisi jadwal. Sekali shift tersimpan, staff tidak
+ * boleh menggantinya sendiri; koreksi dilakukan leader/admin dari Jadwal Mingguan.
+ */
 export async function setStaffReportShift(input: {
   token: string;
   shiftCode: unknown;
@@ -93,24 +93,22 @@ export async function setStaffReportShift(input: {
 
   const today = todayKeyInAppTz();
   const current = await getStaffWorkShift(link.staffId, today);
-  if (current && current !== next) {
-    const started = await prisma.dailyReportSubmission.count({
-      where: { staffId: link.staffId, reportDate: dateOnly(today) },
-    });
-    if (started > 0) {
+  if (current) {
+    if (current !== next) {
       throw new DailyActivityShiftError(
-        `Shift hari ini sudah terkunci di ${current} karena SOP sudah mulai diisi. Hubungi leader bila jadwal salah.`,
+        `Shift hari ini sudah ditetapkan ${current}. Koreksi shift hanya bisa dilakukan leader/admin dari Jadwal Mingguan.`,
         "SHIFT_LOCKED",
         409,
       );
     }
+    return current;
   }
 
   return setStaffWorkShift({
     staffId: link.staffId,
     shiftCode: next,
     date: today,
-    actor: `staff:${link.staffId}`,
+    actor: `staff-fallback:${link.staffId}`,
   });
 }
 

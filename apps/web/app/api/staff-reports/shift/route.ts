@@ -20,6 +20,10 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * Fallback operasional: hanya boleh mengisi shift bila hari ini belum ditetapkan.
+ * Shift yang sudah ada (dari leader atau konfirmasi pertama staff) tidak bisa diganti staff.
+ */
 export async function POST(request: Request) {
   try {
     const body = await request.json();

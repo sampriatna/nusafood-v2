@@ -13,6 +13,7 @@ import {
   getWeeklyRoster,
   saveWeeklyRoster,
   type RosterCells,
+  type ShiftCells,
 } from "@/lib/services/weekly-roster.service";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,7 @@ export async function PUT(request: Request) {
       outlet?: string;
       week_start?: string;
       cells?: RosterCells;
+      shift_cells?: ShiftCells;
     };
     if (!body.week_start || !body.cells) {
       return fail("Data jadwal tidak lengkap", { code: "VALIDATION" });
@@ -62,6 +64,7 @@ export async function PUT(request: Request) {
       outletCode: outlet,
       weekStart: body.week_start,
       cells: body.cells,
+      shiftCells: body.shift_cells,
       actor: auth.session?.userName || auth.session?.userId || undefined,
     });
     return ok(data);

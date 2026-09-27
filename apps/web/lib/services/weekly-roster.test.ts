@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildDutyRows, weekDates } from "./weekly-roster.service";
+import {
+  buildDutyRows,
+  buildShiftRows,
+  weekDates,
+} from "./weekly-roster.service";
 
 const qualified = new Map([
   ["S1", new Set(["Kasir", "Waiters"])],
@@ -38,5 +42,30 @@ describe("buildDutyRows", () => {
     expect(() =>
       buildDutyRows(["2026-09-28"], { "2026-09-28": { Waiters: "S2" } }, qualified),
     ).toThrow(/tidak punya jabatan/);
+  });
+});
+
+describe("buildShiftRows", () => {
+  it("maps waiter shift per staff and date", () => {
+    const rows = buildShiftRows(
+      ["2026-09-28", "2026-09-29"],
+      {
+        "2026-09-28": { S1: "1K" },
+        "2026-09-29": { S1: "3K" },
+      },
+      qualified,
+    );
+    expect(rows.get("2026-09-28")?.get("S1")).toBe("1K");
+    expect(rows.get("2026-09-29")?.get("S1")).toBe("3K");
+  });
+
+  it("rejects shift for non-waiter staff", () => {
+    expect(() =>
+      buildShiftRows(
+        ["2026-09-28"],
+        { "2026-09-28": { S2: "1K" } },
+        qualified,
+      ),
+    ).toThrow(/hanya boleh diberikan/);
   });
 });
