@@ -192,13 +192,18 @@ export type SopTemplateInput = {
   id: string;
   outlet_id: string | null;
   position_group: string | null;
+  /** Shift kosong = berlaku semua shift. */
+  shift_codes?: string[];
+  /** Hindari template baru menghukum tanggal sebelum template dibuat. */
+  created_date?: string | null;
 };
 
 export type SopResult = { required: number; done: number; missed: { date: string; template_id: string }[] };
 
 /**
  * Hitung wajib vs terisi per staff per hari (YYYY-MM-DD), mengikuti aturan Laporan Harian:
- * template wajib yang cocok outlet + posisi efektif hari itu (jadwal posisi → kalau kosong, jabatan utama).
+ * template wajib yang cocok outlet + posisi efektif + shift efektif hari itu.
+ * Template shift-specific tanpa data shift tidak dihitung sebagai kewajiban (lebih aman daripada false penalty).
  * Laporan yang divalidasi leader "tidak valid"/"manipulasi" tidak dihitung terisi.
  */
 export function computeSopCompliance(input: {
@@ -207,6 +212,8 @@ export function computeSopCompliance(input: {
   dates: string[];
   /** key `${staff_id}|${date}` → posisi aktif dari jadwal. */
   duties: Map<string, string[]>;
+  /** key `${staff_id}|${date}` → 1K/2K/3K. */
+  shifts?: Map<string, string>;
   /** key `${staff_id}|${template_id}|${date}` untuk laporan yang sah. */
   submissions: Set<string>;
   matchesPosition: (templateGroup: string | null, position: string) => boolean;
@@ -218,9 +225,14 @@ export function computeSopCompliance(input: {
     for (const date of input.dates) {
       const scheduled = (input.duties.get(`${s.staff_id}|${date}`) ?? []).filter((p) => allowed.has(p));
       const positions = scheduled.length ? scheduled : [s.primary];
+      const shift = input.shifts?.get(`${s.staff_id}|${date}`);
       for (const t of input.templates) {
+        if (t.created_date && date < t.created_date) continue;
         if (t.outlet_id && t.outlet_id !== s.outlet_id) continue;
         if (!positions.some((p) => input.matchesPosition(t.position_group, p))) continue;
+        if (t.shift_codes?.length) {
+          if (!shift || !t.shift_codes.includes(shift)) continue;
+        }
         r.required += 1;
         if (input.submissions.has(`${s.staff_id}|${t.id}|${date}`)) r.done += 1;
         else r.missed.push({ date, template_id: t.id });
