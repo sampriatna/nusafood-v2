@@ -32,7 +32,7 @@ const statusConfig: Record<
     className: "bg-indigo-100 text-indigo-800 border-indigo-200",
   },
   SUBMITTED: {
-    label: "Terkirim",
+    label: "Dilaporkan",
     className: "bg-amber-100 text-amber-800 border-amber-200",
   },
   RESUBMITTED: {

@@ -17,7 +17,7 @@ export default async function CategoriesSettingsPage() {
     session?.userId === "env-admin";
 
   return (
-    <AdminPage title="Master Kategori" backHref="/settings">
+    <AdminPage title="Kategori Tugas" backHref="/settings">
       <p className="text-sm text-muted-foreground">
         {categories.length} kategori terdaftar
       </p>

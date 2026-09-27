@@ -17,7 +17,7 @@ export default async function DailyActivitySettingsPage() {
   const stats = await getDailyActivitySetupStats();
 
   return (
-    <AdminPage title="Daily Activity SOP" backHref="/settings" maxWidth="3xl">
+    <AdminPage title="Kegiatan Harian (SOP)" backHref="/settings" maxWidth="3xl">
       <DailyActivityAdminPanel canManage={canManage} stats={stats} />
 
       <Card className="border-blue-200/80 bg-blue-50/70">

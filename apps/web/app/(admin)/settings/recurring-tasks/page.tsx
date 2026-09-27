@@ -17,7 +17,7 @@ export default async function RecurringTasksSettingsPage() {
 
   return (
     <AdminPage
-      title="Template Tugas Berulang"
+      title="Tugas Berulang"
       backHref="/settings"
       maxWidth="3xl"
     >

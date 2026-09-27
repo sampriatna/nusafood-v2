@@ -1,5 +1,6 @@
 "use client";
 
+import { outletShortName } from "@/lib/outlet-codes";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Staff } from "@nusafood/types";
 import { Ban, Check, Copy, Link2, Loader2, RefreshCw } from "lucide-react";
@@ -275,7 +276,7 @@ export function ReportLinksManager() {
                         {link.staff_name || staff?.name || link.staff_id}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {link.outlet || staff?.outlet || "-"} ·{" "}
+                        {outletShortName(link.outlet || staff?.outlet) || "-"} ·{" "}
                         {link.position || staff?.position || "-"}
                       </p>
                     </div>
@@ -307,8 +308,8 @@ export function ReportLinksManager() {
                       Salin link
                     </Button>
                     <Button
-                      variant="destructive"
-                      className="h-11 flex-1"
+                      variant="ghost"
+                      className="h-11 text-muted-foreground hover:text-destructive"
                       onClick={() => setRevokeTarget(link)}
                     >
                       <Ban className="mr-1 size-4" />

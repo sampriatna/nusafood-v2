@@ -80,8 +80,8 @@ const QUICK_LINKS = [
 
 const statusOptions: { value: TaskStatus | "ALL"; label: string }[] = [
   { value: "ALL", label: "Semua Status" },
-  { value: "OPEN", label: "Belum Dikerjakan" },
-  { value: "SUBMITTED", label: "Terkirim" },
+  { value: "OPEN", label: "Belum Selesai" },
+  { value: "SUBMITTED", label: "Dilaporkan" },
   { value: "DONE", label: "Selesai" },
   { value: "LATE", label: "Terlambat" },
   { value: "REVISI", label: "Perlu Revisi" },
@@ -626,8 +626,8 @@ export function DashboardClient() {
                   className={`size-4 ${isRefreshing ? "animate-spin" : ""}`}
                 />
               </Button>
-              <Button size="icon" className="shrink-0" asChild>
-                <Link href="/tasks/new">
+              <Button size="icon" className="hidden shrink-0 lg:inline-flex" asChild>
+                <Link href="/tasks/new" aria-label="Buat tugas baru">
                   <Plus className="size-4" />
                 </Link>
               </Button>
@@ -811,6 +811,7 @@ export function DashboardClient() {
 
       <Link
         href="/tasks/new"
+        aria-label="Buat tugas baru"
         className="fixed bottom-6 right-6 lg:hidden"
       >
         <Button size="lg" className="size-14 rounded-full shadow-lg">

@@ -18,7 +18,7 @@ export default async function AreasSettingsPage() {
     session?.userId === "env-admin";
 
   return (
-    <AdminPage title="Master Area" backHref="/settings">
+    <AdminPage title="Area" backHref="/settings">
       <p className="text-sm text-muted-foreground">
         {areas.length} area terdaftar
       </p>

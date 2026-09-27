@@ -22,7 +22,7 @@ export default async function SyncLogsPage() {
   );
 
   return (
-    <AdminPage title="Sync Logs" backHref="/settings" maxWidth="3xl">
+    <AdminPage title="Riwayat Sinkronisasi" backHref="/settings" maxWidth="3xl">
       <p className="text-sm text-muted-foreground">
         {failed.length} gagal dari {logs.length} entri terbaru
       </p>

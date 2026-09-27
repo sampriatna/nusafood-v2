@@ -200,7 +200,7 @@ export function WeeklyRosterClient({ outlets, lockedOutlet }: Props) {
                       value={cells[date]?.[p.position] ?? ""}
                       onChange={(e) => setCell(date, p.position, e.target.value)}
                     >
-                      <option value="">— default —</option>
+                      <option value="">Sesuai jabatan utama</option>
                       {p.staff.map((s) => (
                         <option key={s.staff_id} value={s.staff_id}>
                           {s.name}

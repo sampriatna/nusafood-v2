@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  ChevronRight,
   Bell,
   FileWarning,
   Filter,
@@ -25,6 +26,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { OUTLET_FILTER_OPTIONS } from "@/lib/outlet-codes";
+import { formatTanggal, outletLabel, presentViolation, romanLevel } from "@/lib/letter/letter-format";
 
 type ApiResponse<T> =
   | { success: true; data: T; error: null }
@@ -33,10 +36,10 @@ type ApiResponse<T> =
 function statusLabel(status: DisciplinaryLetterStatus): string {
   const map: Record<DisciplinaryLetterStatus, string> = {
     DRAFT: "Draft",
-    WAITING_APPROVAL: "Menunggu Approval",
+    WAITING_APPROVAL: "Menunggu approval",
     APPROVED: "Disetujui",
     SENT: "Terkirim",
-    ACKNOWLEDGED: "Diakui",
+    ACKNOWLEDGED: "Sudah dibaca",
     RESOLVED: "Selesai",
     CANCELLED: "Dibatalkan",
   };
@@ -71,7 +74,7 @@ export default function TeguranCenterPage() {
       const json = (await res.json()) as ApiResponse<DisciplinaryDashboardData>;
       if (!json.success || !json.data) {
         toast({
-          title: "Gagal memuat Teguran Center",
+          title: "Gagal memuat Teguran",
           description: json.error || "Coba lagi",
           variant: "destructive",
         });
@@ -80,7 +83,7 @@ export default function TeguranCenterPage() {
       setData(json.data);
     } catch {
       toast({
-        title: "Gagal memuat Teguran Center",
+        title: "Gagal memuat Teguran",
         description: "Periksa koneksi lalu coba lagi.",
         variant: "destructive",
       });
@@ -128,7 +131,7 @@ export default function TeguranCenterPage() {
   );
 
   return (
-    <AdminPage title="Teguran Center" maxWidth="3xl">
+    <AdminPage title="Teguran" maxWidth="3xl">
       <div className="flex items-center justify-between gap-2">
         <div>
           <h2 className="font-semibold">Disiplin operasional</h2>
@@ -156,17 +159,16 @@ export default function TeguranCenterPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {cards.map((c) => (
-          <Card key={c.label}>
-            <CardContent className="p-3">
-              <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                <c.icon className="size-3.5" />
-                {c.label}
-              </div>
-              <p className="text-2xl font-bold">{loading ? "-" : c.value ?? 0}</p>
-            </CardContent>
-          </Card>
+          <div
+            key={c.label}
+            className="flex shrink-0 items-center gap-2 rounded-lg border bg-card px-3 py-2"
+          >
+            <c.icon className="size-4 text-muted-foreground" />
+            <span className="text-lg font-bold leading-none">{loading ? "-" : c.value ?? 0}</span>
+            <span className="text-xs text-muted-foreground">{c.label}</span>
+          </div>
         ))}
       </div>
 
@@ -175,14 +177,21 @@ export default function TeguranCenterPage() {
           <CardContent className="grid gap-3 p-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Outlet</Label>
-              <Input
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                 value={outlet}
                 onChange={(e) => setOutlet(e.target.value)}
-                placeholder="Kode outlet"
-              />
+              >
+                <option value="">Semua outlet</option>
+                {OUTLET_FILTER_OPTIONS.filter((o) => o.value !== "ALL").map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-1.5">
-              <Label>Karyawan (staff id)</Label>
+              <Label>ID karyawan</Label>
               <Input
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
@@ -216,7 +225,7 @@ export default function TeguranCenterPage() {
                 <option value="WAITING_APPROVAL">Menunggu Approval</option>
                 <option value="APPROVED">Disetujui</option>
                 <option value="SENT">Terkirim</option>
-                <option value="ACKNOWLEDGED">Diakui</option>
+                <option value="ACKNOWLEDGED">Sudah dibaca</option>
                 <option value="RESOLVED">Selesai</option>
                 <option value="CANCELLED">Dibatalkan</option>
               </select>
@@ -255,7 +264,7 @@ export default function TeguranCenterPage() {
         ) : letters.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center text-muted-foreground">
-              Belum ada surat. Buat dari task terlambat atau form manual.
+              Belum ada surat. Tekan “Buat” untuk membuat surat dari tugas yang terlambat.
             </CardContent>
           </Card>
         ) : (
@@ -271,46 +280,32 @@ export default function TeguranCenterPage() {
 }
 
 function LetterCard({ letter }: { letter: DisciplinaryLetter }) {
+  const docLabel = `${letter.type === "TEGURAN" ? "Surat Teguran" : "Surat Peringatan"} ${romanLevel(letter.level)}`;
   return (
-    <Card>
-      <CardContent className="space-y-2 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="font-mono text-xs text-muted-foreground">
-              {letter.letter_number}
-            </p>
-            <p className="font-semibold">{letter.employee_name_snapshot}</p>
-            <p className="text-sm text-muted-foreground">
-              {letter.outlet_name_snapshot} · {letter.incident_date}
-            </p>
+    <Link href={`/teguran/${letter.id}`} className="block">
+      <Card className="transition-colors hover:bg-muted/40">
+        <CardContent className="space-y-1.5 p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {docLabel}
+              </p>
+              <p className="truncate font-semibold">{letter.employee_name_snapshot}</p>
+            </div>
+            <Badge variant="secondary" className="shrink-0">
+              {statusLabel(letter.status)}
+            </Badge>
           </div>
-          <Badge variant="secondary">{statusLabel(letter.status)}</Badge>
-        </div>
-        <p className="text-sm">
-          <span className="text-muted-foreground">
-            {letter.type === "TEGURAN" ? "ST" : "SP"} {letter.level}
-          </span>
-          {" · "}
-          {letter.title}
-        </p>
-        <p className="line-clamp-2 text-sm text-muted-foreground">
-          {letter.violation_detail}
-        </p>
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Link href={`/teguran/${letter.id}`}>
-            <Button size="sm" variant="outline">
-              Detail
-            </Button>
-          </Link>
-          {letter.status === "DRAFT" || letter.status === "WAITING_APPROVAL" ? (
-            <Link href={`/teguran/new?edit=${letter.id}`}>
-              <Button size="sm" variant="secondary">
-                Edit Draft
-              </Button>
-            </Link>
-          ) : null}
-        </div>
-      </CardContent>
-    </Card>
+          <p className="text-sm text-muted-foreground">
+            {outletLabel(letter.outlet_name_snapshot)} · {formatTanggal(letter.incident_date)}
+          </p>
+          <p className="line-clamp-2 text-sm">{presentViolation(letter.violation_detail)}</p>
+          <p className="flex items-center justify-between pt-1 font-mono text-xs text-muted-foreground">
+            {letter.letter_number}
+            <ChevronRight className="size-4" />
+          </p>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }

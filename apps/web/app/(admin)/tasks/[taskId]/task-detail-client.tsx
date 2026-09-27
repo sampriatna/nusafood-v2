@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Task } from "@nusafood/types";
+import { isTaskDeletable } from "@/lib/task-rules";
+import { outletShortName } from "@/lib/outlet-codes";
 import {
   AlertCircle,
   Bell,
@@ -331,7 +333,7 @@ export function TaskDetailClient({
             <div className="flex items-center gap-2 text-muted-foreground">
               <MapPin className="size-4 shrink-0" />
               <span>
-                {task.outlet} - {task.area} - {task.category}
+                {[outletShortName(task.outlet), task.area, task.category].filter(Boolean).join(" · ")}
               </span>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -561,7 +563,7 @@ export function TaskDetailClient({
           </Card>
         )}
 
-        {canDelete ? (
+        {canDelete && isTaskDeletable(task) ? (
           <Card className="border-destructive/20 p-4">
             <h3 className="mb-2 font-semibold text-destructive">Zona bahaya</h3>
             <p className="mb-3 text-sm text-muted-foreground">
@@ -598,12 +600,14 @@ export function TaskDetailClient({
         ) : null}
 
         {task.report_link ? (
-          <p className="break-all px-1 font-mono text-xs text-muted-foreground">
-            Link laporan:{" "}
-            <a href={task.report_link} className="hover:underline">
-              {task.report_link}
-            </a>
-          </p>
+          <a
+            href={task.report_link}
+            target="_blank"
+            rel="noreferrer"
+            className="block px-1 text-center text-xs text-muted-foreground underline"
+          >
+            Buka halaman laporan staff
+          </a>
         ) : null}
       </div>
 
@@ -637,3 +641,4 @@ export function TaskDetailClient({
     </div>
   );
 }
+

@@ -1,5 +1,6 @@
 "use client";
 
+import { outletShortName } from "@/lib/outlet-codes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Task } from "@nusafood/types";
@@ -149,7 +150,7 @@ export function PendingSendPanel({ onGenerated }: Props) {
                   {task.task_title}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {task.pic_name} · {String(task.outlet)} · deadline{" "}
+                  {task.pic_name} · {outletShortName(String(task.outlet))} · deadline{" "}
                   {formatDateTimeId(task.deadline)}
                 </p>
               </Link>
