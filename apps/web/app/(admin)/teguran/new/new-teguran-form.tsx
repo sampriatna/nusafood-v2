@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DISCIPLINARY_SOURCE_OPTIONS,
@@ -29,6 +29,7 @@ import { Eye, Loader2, Sparkles } from "lucide-react";
 import type { DisciplinaryLetter } from "@nusafood/types";
 import { checkLetterTimeline } from "@/lib/letter/letter-format";
 import { buildLetterDocumentHtml } from "@/lib/letter/letter-html";
+import { TaskPicker } from "./task-picker";
 
 type ApiResponse<T> =
   | { success: true; data: T; error: null }
@@ -117,63 +118,64 @@ export default function NewTeguranForm() {
     })();
   }, []);
 
-  useEffect(() => {
-    if (!taskId) return;
+  const loadTaskPrefill = useCallback(async (prefillTaskId: string) => {
     setLoadingPrefill(true);
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/disciplinary/from-task/${encodeURIComponent(taskId)}`,
-          { credentials: "include" },
-        );
-        const json = (await res.json()) as ApiResponse<DisciplinaryTaskPrefill>;
-        if (!json.success || !json.data) {
-          toast({
-            title: "Gagal prefill dari task",
-            description:
-              json.error ||
-              "Gagal membuat teguran dari task. Cek relasi task dan karyawan.",
-            variant: "destructive",
-          });
-          return;
-        }
-        const p = json.data;
-        setTaskInfo({ title: p.task_title, deadline: p.task_deadline });
-        setIntegrityWarning(p.integrity_warning || p.source_type === "FAKE_REPORT");
-        setEmployeeWarning(
-          p.employee_valid
-            ? null
-            : p.employee_warning ||
-                "Task belum punya relasi karyawan valid. Pilih karyawan dulu sebelum surat dikirim.",
-        );
-        setForm({
-          type: p.suggested_type,
-          level: p.suggested_level,
-          employee_id: p.employee_id || "",
-          employee_name: p.employee_name,
-          employee_position: p.employee_position,
-          outlet_id: p.outlet_id,
-          outlet_name: p.outlet_name,
-          related_task_id: p.related_task_id,
-          source_type: p.source_type,
-          incident_date: p.incident_date,
-          title: p.title,
-          chronology: p.chronology,
-          violation_detail: p.violation_detail,
-          correction_instruction: p.correction_instruction,
-          evidence: p.evidence,
+    try {
+      const res = await fetch(
+        `/api/disciplinary/from-task/${encodeURIComponent(prefillTaskId)}`,
+        { credentials: "include" },
+      );
+      const json = (await res.json()) as ApiResponse<DisciplinaryTaskPrefill>;
+      if (!json.success || !json.data) {
+        toast({
+          title: "Gagal prefill dari task",
+          description:
+            json.error ||
+            "Gagal membuat teguran dari task. Cek relasi task dan karyawan.",
+          variant: "destructive",
         });
-        if (p.previous_letter_count > 0 && p.employee_valid) {
-          toast({
-            title: "Riwayat teguran ditemukan",
-            description: `Karyawan ini sudah punya ${p.previous_letter_count} surat sebelumnya. Level disarankan ST/SP ${p.suggested_level}.`,
-          });
-        }
-      } finally {
-        setLoadingPrefill(false);
+        return;
       }
-    })();
-  }, [taskId, toast]);
+      const p = json.data;
+      setTaskInfo({ title: p.task_title, deadline: p.task_deadline });
+      setIntegrityWarning(p.integrity_warning || p.source_type === "FAKE_REPORT");
+      setEmployeeWarning(
+        p.employee_valid
+          ? null
+          : p.employee_warning ||
+              "Task belum punya relasi karyawan valid. Pilih karyawan dulu sebelum surat dikirim.",
+      );
+      setForm({
+        type: p.suggested_type,
+        level: p.suggested_level,
+        employee_id: p.employee_id || "",
+        employee_name: p.employee_name,
+        employee_position: p.employee_position,
+        outlet_id: p.outlet_id,
+        outlet_name: p.outlet_name,
+        related_task_id: p.related_task_id,
+        source_type: p.source_type,
+        incident_date: p.incident_date,
+        title: p.title,
+        chronology: p.chronology,
+        violation_detail: p.violation_detail,
+        correction_instruction: p.correction_instruction,
+        evidence: p.evidence,
+      });
+      if (p.previous_letter_count > 0 && p.employee_valid) {
+        toast({
+          title: "Riwayat teguran ditemukan",
+          description: `Karyawan ini sudah punya ${p.previous_letter_count} surat sebelumnya. Level disarankan ST/SP ${p.suggested_level}.`,
+        });
+      }
+    } finally {
+      setLoadingPrefill(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (taskId) void loadTaskPrefill(taskId);
+  }, [taskId, loadTaskPrefill]);
 
   useEffect(() => {
     if (!editId) return;
@@ -674,12 +676,21 @@ export default function NewTeguranForm() {
             </select>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Task terkait</Label>
-            <Input
+          <div className="min-w-0 space-y-1.5">
+            <Label>Tugas terkait</Label>
+            <TaskPicker
               value={form.related_task_id || ""}
-              onChange={(e) => update("related_task_id", e.target.value)}
-              placeholder="TASK-..."
+              title={taskInfo?.title}
+              employeeId={employeeValid ? form.employee_id : ""}
+              employeeName={form.employee_name || selectedStaff?.name}
+              onPick={(id) => {
+                setTaskInfo(null);
+                void loadTaskPrefill(id);
+              }}
+              onClear={() => {
+                setTaskInfo(null);
+                update("related_task_id", "");
+              }}
             />
           </div>
 

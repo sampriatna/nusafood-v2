@@ -164,6 +164,9 @@ export interface SubmitReportPayload {
 }
 
 export interface TaskFilters {
+  /** Cari di ID tugas, judul, atau nama PIC */
+  q?: string;
+  staff_id?: string;
   outlet?: string;
   status?: TaskStatus | string;
   pic?: string;
