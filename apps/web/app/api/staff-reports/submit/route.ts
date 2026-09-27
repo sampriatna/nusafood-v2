@@ -5,6 +5,10 @@ import {
   DailyActivityError,
   submitDailyReport,
 } from "@/lib/services/daily-activity.service";
+import {
+  DailyActivityShiftError,
+  validateStaffReportSubmissionPolicy,
+} from "@/lib/services/daily-activity-shift.service";
 import { notifyLeadersOnKendala } from "@/lib/wa-notify-daily-report";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +49,13 @@ export async function POST(request: Request) {
       });
     }
 
+    await validateStaffReportSubmissionPolicy({
+      token,
+      reportTemplateId,
+      statusCondition,
+      checklistAnswers,
+    });
+
     const submission = await submitDailyReport({
       token,
       report_template_id: reportTemplateId,
@@ -80,7 +91,7 @@ export async function POST(request: Request) {
       notify,
     });
   } catch (error) {
-    if (error instanceof DailyActivityError) {
+    if (error instanceof DailyActivityError || error instanceof DailyActivityShiftError) {
       return fail(error.message, { code: error.code, status: error.status });
     }
     console.error("[POST /api/staff-reports/submit]", error);
