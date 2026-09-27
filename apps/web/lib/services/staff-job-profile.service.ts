@@ -5,6 +5,10 @@ import {
   isPositionGroup,
   resolveStaffPositionGroup,
 } from "@/lib/position-groups";
+import {
+  normalizeWorkShiftCode,
+  type WorkShiftCode,
+} from "@/lib/daily-activity-sop";
 
 export class StaffJobError extends Error {
   code: string;
@@ -22,6 +26,7 @@ export type StaffJobSetting = {
   secondary_positions: string[];
   active_positions: string[];
   active_date: string | null;
+  shift_code: WorkShiftCode | null;
 };
 
 type ProfileRow = {
@@ -33,6 +38,7 @@ type DutyRow = {
   staff_id: string;
   duty_date: string;
   active_positions: string | null;
+  shift_code: string | null;
 };
 
 let tablesReady = false;
@@ -60,11 +66,18 @@ export async function ensureStaffJobTables(): Promise<void> {
       "staff_id" VARCHAR(50) NOT NULL REFERENCES "staff"("staff_id") ON DELETE CASCADE,
       "duty_date" DATE NOT NULL,
       "active_positions" TEXT NOT NULL DEFAULT '[]',
+      "shift_code" VARCHAR(10),
       "updated_by" VARCHAR(200),
       "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT "staff_daily_duties_staff_date_key" UNIQUE ("staff_id", "duty_date")
     )
+  `);
+
+  // Existing production table predates shift-aware SOP.
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "staff_daily_duties"
+    ADD COLUMN IF NOT EXISTS "shift_code" VARCHAR(10)
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -159,7 +172,8 @@ async function getDutyRow(
     SELECT
       "staff_id",
       "duty_date"::text AS "duty_date",
-      "active_positions"
+      "active_positions",
+      "shift_code"
     FROM "staff_daily_duties"
     WHERE "staff_id" = ${staffId}
       AND "duty_date" = CAST(${date} AS DATE)
@@ -184,7 +198,8 @@ export async function listStaffJobSettings(
       SELECT
         "staff_id",
         "duty_date"::text AS "duty_date",
-        "active_positions"
+        "active_positions",
+        "shift_code"
       FROM "staff_daily_duties"
       WHERE "duty_date" = CAST(${date} AS DATE)
     `,
@@ -209,6 +224,7 @@ export async function listStaffJobSettings(
       secondary_positions: profileMap.get(staffId) ?? [],
       active_positions: duty ? parsePositionList(duty.active_positions) : [],
       active_date: duty?.duty_date ?? null,
+      shift_code: normalizeWorkShiftCode(duty?.shift_code),
     };
   });
 }
@@ -319,6 +335,45 @@ export async function setStaffActivePositions(input: {
   )[0]!;
 }
 
+export async function getStaffWorkShift(
+  staffId: string,
+  date = todayKeyInAppTz(),
+): Promise<WorkShiftCode | null> {
+  const duty = await getDutyRow(staffId, date);
+  return normalizeWorkShiftCode(duty?.shift_code);
+}
+
+export async function setStaffWorkShift(input: {
+  staffId: string;
+  shiftCode: unknown;
+  date?: string;
+  actor?: string;
+}): Promise<WorkShiftCode> {
+  await ensureStaffJobTables();
+  const staff = await getStaffRow(input.staffId);
+  if (staff.status !== "ACTIVE") {
+    throw new StaffJobError("Staff sedang nonaktif", "STAFF_INACTIVE", 422);
+  }
+  const shift = normalizeWorkShiftCode(input.shiftCode);
+  if (!shift) {
+    throw new StaffJobError("Shift harus 1K, 2K, atau 3K", "INVALID_SHIFT", 422);
+  }
+
+  const date = input.date || todayKeyInAppTz();
+  await prisma.$executeRaw`
+    INSERT INTO "staff_daily_duties" (
+      "staff_id", "duty_date", "active_positions", "shift_code", "updated_by", "created_at", "updated_at"
+    ) VALUES (
+      ${input.staffId}, CAST(${date} AS DATE), '[]', ${shift}, ${input.actor ?? null}, NOW(), NOW()
+    )
+    ON CONFLICT ("staff_id", "duty_date") DO UPDATE SET
+      "shift_code" = EXCLUDED."shift_code",
+      "updated_by" = EXCLUDED."updated_by",
+      "updated_at" = NOW()
+  `;
+  return shift;
+}
+
 /**
  * Posisi efektif untuk tanggal tertentu.
  * Tanpa assignment tanggal itu -> hanya jabatan utama, sehingga kompetensi tambahan tidak otomatis menambah beban.
@@ -348,26 +403,47 @@ export async function getEffectiveStaffPositionGroups(
   return active.length ? active : [primary];
 }
 
-/** Batch: posisi tambahan + jadwal posisi dalam rentang tanggal (untuk laporan kinerja). */
+/** Batch: posisi tambahan + jadwal posisi/shift dalam rentang tanggal. */
 export async function loadStaffJobDataForRange(
   start: string,
   end: string,
-): Promise<{ secondary: Map<string, string[]>; duties: Map<string, string[]> }> {
+): Promise<{
+  secondary: Map<string, string[]>;
+  duties: Map<string, string[]>;
+  shifts: Map<string, WorkShiftCode>;
+}> {
   await ensureStaffJobTables();
   const [profiles, duties] = await Promise.all([
     prisma.$queryRaw<ProfileRow[]>`
       SELECT "staff_id", "secondary_positions" FROM "staff_job_profiles"
     `,
     prisma.$queryRaw<DutyRow[]>`
-      SELECT "staff_id", "duty_date"::text AS "duty_date", "active_positions"
+      SELECT "staff_id", "duty_date"::text AS "duty_date", "active_positions", "shift_code"
       FROM "staff_daily_duties"
       WHERE "duty_date" BETWEEN CAST(${start} AS DATE) AND CAST(${end} AS DATE)
     `,
   ]);
   return {
-    secondary: new Map(profiles.map((row) => [row.staff_id, parsePositionList(row.secondary_positions)])),
+    secondary: new Map(
+      profiles.map((row) => [row.staff_id, parsePositionList(row.secondary_positions)]),
+    ),
     duties: new Map(
-      duties.map((row) => [`${row.staff_id}|${row.duty_date}`, parsePositionList(row.active_positions)]),
+      duties.map((row) => [
+        `${row.staff_id}|${row.duty_date}`,
+        parsePositionList(row.active_positions),
+      ]),
+    ),
+    shifts: new Map(
+      duties
+        .map((row) => {
+          const shift = normalizeWorkShiftCode(row.shift_code);
+          return shift
+            ? ([`${row.staff_id}|${row.duty_date}`, shift] as const)
+            : null;
+        })
+        .filter(
+          (entry): entry is readonly [string, WorkShiftCode] => Boolean(entry),
+        ),
     ),
   };
 }
