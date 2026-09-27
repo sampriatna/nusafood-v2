@@ -74,7 +74,6 @@ export async function ensureStaffJobTables(): Promise<void> {
     )
   `);
 
-  // Existing production table predates shift-aware SOP.
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "staff_daily_duties"
     ADD COLUMN IF NOT EXISTS "shift_code" VARCHAR(10)
@@ -258,7 +257,6 @@ export async function updateStaffSecondaryPositions(input: {
       "updated_at" = NOW()
   `;
 
-  // Bila kompetensi hari ini dicabut, jangan biarkan duty menunjuk posisi yang sudah tidak valid.
   const today = todayKeyInAppTz();
   const currentDuty = await getDutyRow(input.staffId, today);
   if (currentDuty) {
@@ -274,10 +272,7 @@ export async function updateStaffSecondaryPositions(input: {
     }
   }
 
-  const setting = (
-    await listStaffJobSettings([input.staffId], today)
-  )[0]!;
-  return setting;
+  return (await listStaffJobSettings([input.staffId], today))[0]!;
 }
 
 export async function setStaffActivePositions(input: {
@@ -330,9 +325,7 @@ export async function setStaffActivePositions(input: {
       "updated_at" = NOW()
   `;
 
-  return (
-    await listStaffJobSettings([input.staffId], date)
-  )[0]!;
+  return (await listStaffJobSettings([input.staffId], date))[0]!;
 }
 
 export async function getStaffWorkShift(
@@ -374,10 +367,6 @@ export async function setStaffWorkShift(input: {
   return shift;
 }
 
-/**
- * Posisi efektif untuk tanggal tertentu.
- * Tanpa assignment tanggal itu -> hanya jabatan utama, sehingga kompetensi tambahan tidak otomatis menambah beban.
- */
 export async function getEffectiveStaffPositionGroups(
   staffId: string,
   staffPosition: string,
@@ -403,7 +392,6 @@ export async function getEffectiveStaffPositionGroups(
   return active.length ? active : [primary];
 }
 
-/** Batch: posisi tambahan + jadwal posisi/shift dalam rentang tanggal. */
 export async function loadStaffJobDataForRange(
   start: string,
   end: string,
@@ -423,6 +411,13 @@ export async function loadStaffJobDataForRange(
       WHERE "duty_date" BETWEEN CAST(${start} AS DATE) AND CAST(${end} AS DATE)
     `,
   ]);
+
+  const shifts = new Map<string, WorkShiftCode>();
+  for (const row of duties) {
+    const shift = normalizeWorkShiftCode(row.shift_code);
+    if (shift) shifts.set(`${row.staff_id}|${row.duty_date}`, shift);
+  }
+
   return {
     secondary: new Map(
       profiles.map((row) => [row.staff_id, parsePositionList(row.secondary_positions)]),
@@ -433,17 +428,6 @@ export async function loadStaffJobDataForRange(
         parsePositionList(row.active_positions),
       ]),
     ),
-    shifts: new Map(
-      duties
-        .map((row) => {
-          const shift = normalizeWorkShiftCode(row.shift_code);
-          return shift
-            ? ([`${row.staff_id}|${row.duty_date}`, shift] as const)
-            : null;
-        })
-        .filter(
-          (entry): entry is readonly [string, WorkShiftCode] => Boolean(entry),
-        ),
-    ),
+    shifts,
   };
 }
