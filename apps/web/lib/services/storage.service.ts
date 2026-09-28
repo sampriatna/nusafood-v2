@@ -3,6 +3,7 @@
  * fallback lokal ke public/uploads (dev / tanpa credentials).
  */
 
+import { getAppOrigin } from "@/lib/id";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
@@ -105,7 +106,7 @@ async function uploadLocal(
   await mkdir(path.dirname(fullPath), { recursive: true });
   await writeFile(fullPath, bytes);
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
+  const origin = getAppOrigin();
   const urlPath = `/uploads/${objectPath.split(path.sep).join("/")}`;
 
   return {

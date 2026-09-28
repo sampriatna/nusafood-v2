@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReportLink, generateTaskId, generateToken } from "./id";
+import { buildReportLink, generateTaskId, generateToken, getAppOrigin } from "./id";
 
 describe("id helpers", () => {
   it("generates TASK-YYYYMMDD-XXX", () => {
@@ -14,5 +14,28 @@ describe("id helpers", () => {
     expect(buildReportLink("TASK-1", "abc")).toContain(
       "/report/TASK-1?token=abc",
     );
+  });
+
+  it("prefers NEXT_PUBLIC_APP_URL", () => {
+    expect(getAppOrigin({ NEXT_PUBLIC_APP_URL: "https://tugas.nf3.company/" })).toBe("https://tugas.nf3.company");
+    expect(getAppOrigin({ NEXT_PUBLIC_APP_URL: "tugas.nf3.company" })).toBe("https://tugas.nf3.company");
+  });
+
+  it("ignores localhost on Vercel and falls back to the production domain", () => {
+    expect(
+      getAppOrigin({
+        VERCEL: "1",
+        NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+        VERCEL_PROJECT_PRODUCTION_URL: "tugas.nf3.company",
+      }),
+    ).toBe("https://tugas.nf3.company");
+    expect(getAppOrigin({ VERCEL: "1", VERCEL_PROJECT_PRODUCTION_URL: "tugas.nf3.company" })).toBe(
+      "https://tugas.nf3.company",
+    );
+  });
+
+  it("keeps localhost for local development", () => {
+    expect(getAppOrigin({ NEXT_PUBLIC_APP_URL: "http://localhost:3000" })).toBe("http://localhost:3000");
+    expect(getAppOrigin({})).toBe("");
   });
 });

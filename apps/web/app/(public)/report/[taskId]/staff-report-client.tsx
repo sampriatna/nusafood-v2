@@ -28,6 +28,7 @@ export function StaffReportClient({ taskId, token }: Props) {
   const [pageState, setPageState] = useState<PageState>("loading");
   const [task, setTask] = useState<Task | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [errorTitle, setErrorTitle] = useState("Tugas Tidak Ditemukan");
   const [afterPhotoUrl, setAfterPhotoUrl] = useState<string | undefined>();
   const [staffNote, setStaffNote] = useState("");
   const [showDetails, setShowDetails] = useState(true);
@@ -39,24 +40,31 @@ export function StaffReportClient({ taskId, token }: Props) {
 
   async function loadTask() {
     if (!taskId || !token) {
-      setErrorMessage("Link tidak valid.\nHubungi atasan Anda.");
+      setErrorTitle("Link Tidak Valid");
+      setErrorMessage("Link tugas tidak lengkap.\nMinta link baru ke atasan Anda.");
       setPageState("error");
       return;
     }
 
     setPageState("loading");
     try {
-      const res = await fetch(
+      const res = await fetchWithRetry(
         `/api/tasks/${encodeURIComponent(taskId)}/public?token=${encodeURIComponent(token)}`,
       );
-      const json = (await res.json()) as {
+      const json = (await res.json().catch(() => null)) as {
         success: boolean;
         data?: Task;
         error?: string;
-      };
+      } | null;
 
-      if (!json.success || !json.data) {
-        setErrorMessage(json.error || "Link tidak valid.\nHubungi atasan Anda.");
+      if (!json?.success || !json.data) {
+        if (res.status === 404 || res.status === 403) {
+          setErrorTitle("Link Tidak Valid");
+          setErrorMessage("Link tugas salah atau sudah tidak berlaku.\nMinta link baru ke atasan Anda.");
+        } else {
+          setErrorTitle("Sedang Ada Gangguan");
+          setErrorMessage("Server belum bisa dihubungi.\nTunggu sebentar lalu tekan Coba Lagi.");
+        }
         setPageState("error");
         return;
       }
@@ -69,13 +77,15 @@ export function StaffReportClient({ taskId, token }: Props) {
       }
 
       setPageState("form");
-      await fetch(`/api/tasks/${encodeURIComponent(taskId)}/open`, {
+      // Tandai "dibuka" di belakang layar — kalau gagal, form tetap bisa diisi.
+      void fetch(`/api/tasks/${encodeURIComponent(taskId)}/open`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),
-      });
+      }).catch(() => undefined);
     } catch {
-      setErrorMessage("Gagal memuat tugas.\nPeriksa koneksi internet Anda.");
+      setErrorTitle("Koneksi Terputus");
+      setErrorMessage("Gagal memuat tugas.\nPeriksa koneksi internet lalu tekan Coba Lagi.");
       setPageState("error");
     }
   }
@@ -129,7 +139,7 @@ export function StaffReportClient({ taskId, token }: Props) {
           <AlertTriangle className="h-12 w-12 text-destructive" />
         </div>
         <h1 className="mt-6 text-center text-2xl font-bold">
-          Tugas Tidak Ditemukan
+          {errorTitle}
         </h1>
         <p className="mt-3 whitespace-pre-line text-center text-lg text-muted-foreground">
           {errorMessage}
@@ -331,4 +341,16 @@ export function StaffReportClient({ taskId, token }: Props) {
       </div>
     </div>
   );
+}
+
+/** Ulang sekali untuk gangguan sesaat (jaringan HP / cold start server). */
+async function fetchWithRetry(url: string): Promise<Response> {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (res.status < 500) return res;
+  } catch {
+    // coba sekali lagi di bawah
+  }
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  return fetch(url, { cache: "no-store" });
 }
