@@ -3,6 +3,7 @@ import {
   DailyActivityError,
   getStaffReportByToken,
 } from "@/lib/services/daily-activity.service";
+import { loadSopContextForStaff } from "@/lib/services/sop-context.service";
 
 export const dynamic = "force-dynamic";
 
@@ -13,11 +14,17 @@ export async function GET(
   try {
     const { token } = await context.params;
     const data = await getStaffReportByToken(token);
+
+    // Koordinasi & rekam jejak cek leader bersifat tambahan: kalau gagal, SOP tetap bisa diisi.
+    const sop = await loadSopContextForStaff(data.staff.staff_id);
+
     return ok({
       staff: data.staff,
       templates: data.templates,
       today_submissions: data.today_submissions,
       link_active: data.link.is_active,
+      coordination: sop?.coordination ?? [],
+      track_record: sop?.track_record ?? null,
     });
   } catch (error) {
     if (error instanceof DailyActivityError) {
