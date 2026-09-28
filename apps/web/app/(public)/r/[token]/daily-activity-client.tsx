@@ -13,7 +13,10 @@ import {
   Lightbulb,
   Loader2,
   MapPin,
+  MessageCircle,
+  PhoneCall,
   Send,
+  ShieldCheck,
   Target,
 } from "lucide-react";
 import { PhotoUploader } from "@/components/photo-uploader";
@@ -37,6 +40,9 @@ import {
   type WorkShiftCode,
 } from "@/lib/daily-activity-sop";
 import { cn } from "@/lib/utils";
+import { defaultInstruction, type ResolvedRule } from "@/lib/sop-coordination";
+import type { SopTrackRecord } from "@/lib/services/sop-context.service";
+import { POSITION_GROUP_LABELS } from "@/lib/position-groups";
 
 type PageState = "loading" | "error" | "list" | "form" | "submitting";
 
@@ -53,6 +59,8 @@ type StaffReportTokenData = {
   templates: ReportTemplate[];
   today_submissions: DailyReportSubmission[];
   link_active: boolean;
+  coordination?: ResolvedRule[];
+  track_record?: SopTrackRecord | null;
 };
 
 type SubmitResponse = DailyReportSubmission | null;
@@ -185,6 +193,13 @@ export function DailyActivityClient({
   >("");
   const [note, setNote] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
+  const [coordination, setCoordination] = useState<ResolvedRule[]>(
+    initialData?.coordination ?? [],
+  );
+  const [trackRecord, setTrackRecord] = useState<SopTrackRecord | null>(
+    initialData?.track_record ?? null,
+  );
+  const [pledged, setPledged] = useState(false);
 
   const [shiftCode, setShiftCode] = useState<WorkShiftCode | null>(null);
   const [shiftLoading, setShiftLoading] = useState(true);
@@ -243,6 +258,8 @@ export function DailyActivityClient({
         setStaff(json.data.staff);
         setTemplates(json.data.templates ?? []);
         setTodaySubmissions(json.data.today_submissions ?? []);
+        setCoordination(json.data.coordination ?? []);
+        setTrackRecord(json.data.track_record ?? null);
         setPageState("list");
       } catch {
         if (!cancelled) {
@@ -357,6 +374,7 @@ export function DailyActivityClient({
       setStatusCondition(existing?.status_condition ?? "");
       setNote(existing?.note ?? "");
       setPhotoUrl(existing?.photo_url ?? undefined);
+      setPledged(false);
       setPageState("form");
     });
 
@@ -404,6 +422,10 @@ export function DailyActivityClient({
     }
     if (conditionNeedsNote && !note.trim()) {
       alert("Isi catatan kendala agar leader tahu apa yang harus ditindaklanjuti.");
+      return;
+    }
+    if (!pledged) {
+      alert("Centang pernyataan bahwa laporan ini sesuai kondisi asli.");
       return;
     }
 
@@ -512,7 +534,18 @@ export function DailyActivityClient({
 
   if ((pageState === "form" || pageState === "submitting") && selectedTemplate) {
     const isSubmitting = pageState === "submitting";
-    const meta = parseSopDescription(selectedTemplate.description);
+    const parsedMeta = parseSopDescription(selectedTemplate.description);
+    const fallbackCopy = defaultInstruction(selectedTemplate.category);
+    // Template lama belum punya copy "kenapa / dampak / cara kerja" → pakai bawaan per kategori.
+    const meta = {
+      ...parsedMeta,
+      why_text: parsedMeta.why_text || fallbackCopy.why,
+      operational_impact: parsedMeta.operational_impact || fallbackCopy.impact,
+      instruction_note:
+        parsedMeta.why_text || parsedMeta.operational_impact
+          ? parsedMeta.instruction_note
+          : fallbackCopy.how,
+    };
     const goal = stripOperationalPrefix(
       selectedTemplate.standard_result || meta.fallback || selectedTemplate.title,
     );
@@ -587,6 +620,13 @@ export function DailyActivityClient({
                 {meta.instruction_note}
               </p>
             </section>
+          ) : null}
+
+          {coordination.length ? (
+            <CoordinationSection
+              rules={coordination}
+              context={`[SOP ${selectedTemplate.title}] ${staff?.name ?? ""} (${staff?.outlet ?? ""})`}
+            />
           ) : null}
 
           <section className="space-y-3 rounded-2xl border bg-card p-4">
@@ -708,11 +748,31 @@ export function DailyActivityClient({
             <Textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="Contoh: Meja 17 masih menunggu 1 Atomic Black. Sudah follow-up ke bar, diteruskan Rama shift berikutnya."
+              placeholder="Contoh: Stok susu tinggal 2 liter jam 15.00, sudah info ke Leader (Budi) dan Purchasing."
               className="min-h-24 text-base"
               disabled={isSubmitting}
             />
           </section>
+
+          <label
+            className={cn(
+              "flex items-start gap-3 rounded-2xl border-2 p-4",
+              pledged ? "border-emerald-500 bg-emerald-50" : "border-dashed border-primary/40 bg-card",
+            )}
+          >
+            <input
+              type="checkbox"
+              className="mt-1 size-5 shrink-0 accent-emerald-600"
+              checked={pledged}
+              onChange={(event) => setPledged(event.target.checked)}
+              disabled={isSubmitting}
+            />
+            <span className="text-sm leading-relaxed">
+              <span className="font-bold">Saya menyatakan laporan ini sesuai kondisi asli.</span>{" "}
+              Yang saya centang benar-benar sudah dikerjakan dan foto diambil hari ini. Leader
+              melakukan cek fisik secara acak dan membandingkan dengan laporan ini.
+            </span>
+          </label>
         </main>
 
         <div className="fixed inset-x-0 bottom-0 border-t bg-background/95 p-3 shadow-lg backdrop-blur">
@@ -970,6 +1030,8 @@ export function DailyActivityClient({
               </div>
             ) : null}
 
+            {trackRecord ? <TrackRecordCard record={trackRecord} /> : null}
+
             <div className="rounded-xl border bg-card px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -1039,5 +1101,110 @@ export function DailyActivityClient({
         )}
       </main>
     </div>
+  );
+}
+
+function positionLabel(position: string): string {
+  return (POSITION_GROUP_LABELS as Record<string, string>)[position] ?? position;
+}
+
+/** "Kalau ada masalah, hubungi siapa" — nama yang bertugas hari ini + tombol WA. */
+function CoordinationSection({ rules, context }: { rules: ResolvedRule[]; context: string }) {
+  return (
+    <section className="space-y-3 rounded-2xl border border-sky-200 bg-sky-50/60 p-4">
+      <div>
+        <div className="flex items-center gap-2 text-sm font-bold text-sky-950">
+          <PhoneCall className="size-4" />
+          Koordinasi — kalau ada masalah, hubungi
+        </div>
+        <p className="mt-1 text-xs text-sky-950/70">
+          Jangan disimpan sendiri. Nama di bawah adalah yang bertugas hari ini.
+        </p>
+      </div>
+      <ul className="space-y-2.5">
+        {rules.map((rule) => (
+          <li key={rule.when} className="rounded-xl border bg-background p-3">
+            <p className="text-sm font-semibold leading-snug">
+              {rule.urgent ? (
+                <span className="mr-1.5 rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-800">
+                  SEGERA
+                </span>
+              ) : null}
+              {rule.when}
+            </p>
+            <div className="mt-2 space-y-1.5">
+              {rule.targets.map((target) => (
+                <div key={target.position} className="flex flex-wrap items-center gap-1.5 text-sm">
+                  <span className="text-muted-foreground">{positionLabel(target.position)}:</span>
+                  {target.contacts.length ? (
+                    target.contacts.slice(0, 3).map((c) =>
+                      c.wa_link ? (
+                        <a
+                          key={c.staff_id}
+                          href={`${c.wa_link}?text=${encodeURIComponent(`${context}\n${rule.when}: `)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white active:opacity-80"
+                        >
+                          <MessageCircle className="size-3.5" />
+                          {c.name}
+                          {c.shift ? ` · ${c.shift}` : ""}
+                        </a>
+                      ) : (
+                        <span key={c.staff_id} className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold">
+                          {c.name}
+                        </span>
+                      ),
+                    )
+                  ) : (
+                    <span className="text-xs italic text-muted-foreground">
+                      belum ada di jadwal hari ini — lapor ke leader
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Rekam jejak cek leader 7 hari — staff tahu laporannya benar-benar dilihat. */
+function TrackRecordCard({ record }: { record: SopTrackRecord }) {
+  const VALIDATION_LABEL: Record<string, string> = {
+    revisi: "Revisi",
+    tidak_valid: "Tidak valid",
+    manipulasi: "Manipulasi",
+  };
+  const checked = record.valid + record.revisi + record.tidak_valid;
+  return (
+    <section className="space-y-2 rounded-xl border border-primary/20 bg-card px-4 py-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <ShieldCheck className="size-4 text-primary" />
+        Laporanmu dicek leader
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Leader cek fisik secara acak dan mencocokkan foto. {record.days} hari terakhir:{" "}
+        <b className="text-foreground">{record.total}</b> laporan,{" "}
+        <b className="text-foreground">{checked}</b> sudah dicek —{" "}
+        <span className="text-emerald-700">{record.valid} valid</span>
+        {record.revisi ? <>, <span className="text-amber-700">{record.revisi} revisi</span></> : null}
+        {record.tidak_valid ? <>, <span className="text-red-700">{record.tidak_valid} tidak valid</span></> : null}.
+      </p>
+      {record.latest_findings.length ? (
+        <ul className="space-y-1.5">
+          {record.latest_findings.map((f, i) => (
+            <li key={`${f.date}-${i}`} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              <b>{VALIDATION_LABEL[f.validation] ?? f.validation}</b> · {f.title} ·{" "}
+              {new Date(`${f.date}T12:00:00+07:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+              {f.note ? <> — “{f.note}”</> : null}
+              {f.by ? <span className="text-amber-950/70"> ({f.by})</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
