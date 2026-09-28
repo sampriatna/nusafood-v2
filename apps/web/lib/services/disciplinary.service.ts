@@ -236,7 +236,23 @@ function isFormalEmployeeId(value: string | null | undefined): boolean {
   return true;
 }
 
+const SOURCE_TYPES = [
+  "TASK_LATE",
+  "TASK_INCOMPLETE",
+  "FAKE_REPORT",
+  "SOP_VIOLATION",
+  "ATTENDANCE",
+  "ATTITUDE",
+  "OTHER",
+];
+
 function validateDraftBasics(payload: CreateDisciplinaryLetterPayload) {
+  if (payload.type !== "TEGURAN" && payload.type !== "PERINGATAN") {
+    throw new DisciplinaryError("Jenis surat harus Teguran atau Peringatan.", "INVALID_TYPE", 400);
+  }
+  if (!SOURCE_TYPES.includes(String(payload.source_type))) {
+    throw new DisciplinaryError("Jenis kasus tidak dikenal.", "INVALID_SOURCE_TYPE", 400);
+  }
   if (![1, 2, 3].includes(payload.level)) {
     throw new DisciplinaryError("Level harus 1, 2, atau 3.", "INVALID_LEVEL", 400);
   }
