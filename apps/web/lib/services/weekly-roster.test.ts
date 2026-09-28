@@ -59,6 +59,18 @@ describe("buildShiftRows", () => {
     expect(rows.get("2026-09-29")?.get("S1")).toBe("3K");
   });
 
+  it("only accepts the outlet's own shift codes", () => {
+    const kisamen = ["1R", "2R"] as const;
+    expect(
+      buildShiftRows(["2026-09-28"], { "2026-09-28": { S1: "2R" } }, qualified, kisamen)
+        .get("2026-09-28")
+        ?.get("S1"),
+    ).toBe("2R");
+    expect(() =>
+      buildShiftRows(["2026-09-28"], { "2026-09-28": { S1: "1K" } }, qualified, kisamen),
+    ).toThrow(/1R \/ 2R/);
+  });
+
   it("rejects shift for non-waiter staff", () => {
     expect(() =>
       buildShiftRows(
