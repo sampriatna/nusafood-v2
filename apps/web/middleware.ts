@@ -37,7 +37,9 @@ function isPublicTaskApi(pathname: string) {
     Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/public/)) ||
     Boolean(pathname.match(/^\/api\/checklist-reports\/[^/]+\/submit/)) ||
     Boolean(pathname.match(/^\/api\/staff-reports\/by-token\//)) ||
-    pathname === "/api/staff-reports/submit"
+    pathname === "/api/staff-reports/submit" ||
+    // Shift waiter dari link personal staff; token divalidasi di route.
+    pathname === "/api/staff-reports/shift"
   )
 }
 
