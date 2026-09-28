@@ -40,7 +40,7 @@ export type WeeklyRoster = {
   }[];
   cells: RosterCells;
   shift_cells: ShiftCells;
-  /** Kode shift outlet ini (KBU 1K/2K/3K, Kisamen 1R/2R, Samtaro 1S). */
+  /** Kode shift outlet ini (KBU 1K/2K/3K/1LK, Kisamen 1R/2R/1LR, Samtaro 1S). */
   shift_options: WorkShiftCode[];
 };
 

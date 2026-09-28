@@ -216,7 +216,7 @@ export function computeSopCompliance(input: {
   dates: string[];
   /** key `${staff_id}|${date}` → posisi aktif dari jadwal. */
   duties: Map<string, string[]>;
-  /** key `${staff_id}|${date}` → kode shift (1K/2K/3K/1R/2R/1S). */
+  /** key `${staff_id}|${date}` → kode shift (1K/2K/3K/1LK, 1R/2R/1LR, 1S). */
   shifts?: Map<string, string>;
   /** key `${staff_id}|${template_id}|${date}` untuk laporan yang sah. */
   submissions: Set<string>;

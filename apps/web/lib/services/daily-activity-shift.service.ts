@@ -59,7 +59,7 @@ async function getActiveLink(tokenOrCode: string) {
 export async function getStaffReportShift(tokenOrCode: string): Promise<{
   shift_code: WorkShiftCode | null;
   is_waiter: boolean;
-  /** Pilihan shift untuk outlet staff (KBU 1K/2K/3K, Kisamen 1R/2R, Samtaro 1S). */
+  /** Pilihan shift untuk outlet staff (KBU 1K/2K/3K/1LK, Kisamen 1R/2R/1LR, Samtaro 1S). */
   shift_options: WorkShiftCode[];
 }> {
   const link = await getActiveLink(tokenOrCode);

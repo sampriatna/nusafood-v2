@@ -1,4 +1,4 @@
-export const WORK_SHIFT_CODES = ["1K", "2K", "3K", "1R", "2R", "1S"] as const;
+export const WORK_SHIFT_CODES = ["1K", "2K", "3K", "1LK", "1R", "2R", "1LR", "1S"] as const;
 
 export type WorkShiftCode = (typeof WORK_SHIFT_CODES)[number];
 
@@ -41,6 +41,14 @@ export const WORK_SHIFT_DEFINITIONS: Record<WorkShiftCode, ShiftDefinition> = {
     description: "Operasional + final closing outlet",
     sop_as: "3K",
   },
+  "1LK": {
+    label: "Longshift 1LK",
+    outlet: "KBU",
+    start: "09:45",
+    end: "22:00",
+    description: "Longshift: operasional sampai final closing outlet",
+    sop_as: "3K",
+  },
   "1R": {
     label: "Shift 1R",
     outlet: "KISAMEN",
@@ -56,6 +64,15 @@ export const WORK_SHIFT_DEFINITIONS: Record<WorkShiftCode, ShiftDefinition> = {
     end: "21:00",
     description: "Terima handover + operasional + final closing outlet",
     sop_as: "3K",
+  },
+  "1LR": {
+    label: "Longshift 1LR",
+    outlet: "KISAMEN",
+    start: "09:00",
+    end: "21:00",
+    description: "Longshift: opening sampai final closing",
+    sop_as: "1K",
+    closing_as: "3K",
   },
   "1S": {
     label: "Shift 1S",
@@ -162,7 +179,7 @@ export function parseSopDescription(value?: string | null): SopInstructionMeta &
 /**
  * Apakah SOP bertag shift berlaku untuk shift staff hari ini.
  * Shift outlet lain mengikuti SOP shift KBU yang setara (1R = 1K, 2R = 3K,
- * 1S = opening 1K + final closing 3K), kecuali template diberi tag kodenya sendiri.
+ * 1S/1LR = opening 1K + final closing 3K, 1LK = 3K), kecuali template diberi tag kodenya sendiri.
  */
 export function templateAppliesToShift(
   shiftCodes: readonly string[] | undefined,
