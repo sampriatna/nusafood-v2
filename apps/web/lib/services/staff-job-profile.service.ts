@@ -349,7 +349,7 @@ export async function setStaffWorkShift(input: {
   }
   const shift = normalizeWorkShiftCode(input.shiftCode);
   if (!shift) {
-    throw new StaffJobError("Kode shift tidak dikenal (1K/2K/3K, 1R/2R, 1S)", "INVALID_SHIFT", 422);
+    throw new StaffJobError("Kode shift tidak dikenal (1K/2K/3K/1LK, 1R/2R/1LR, 1S)", "INVALID_SHIFT", 422);
   }
 
   const date = input.date || todayKeyInAppTz();

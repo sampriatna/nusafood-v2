@@ -55,15 +55,22 @@ describe("daily activity SOP metadata", () => {
     expect(templateAppliesToShift(["1K"], "1S", "Closing")).toBe(false);
     expect(templateAppliesToShift(["3K"], "1S", "Closing")).toBe(true);
     expect(templateAppliesToShift(["3K"], "1S", "Opening")).toBe(false);
+    // Longshift: 1LR opening s.d. final closing, 1LK operasional s.d. final closing
+    expect(templateAppliesToShift(["1K"], "1LR", "Opening")).toBe(true);
+    expect(templateAppliesToShift(["3K"], "1LR", "Closing")).toBe(true);
+    expect(templateAppliesToShift(["1K"], "1LR", "Closing")).toBe(false);
+    expect(templateAppliesToShift(["3K"], "1LK", "Closing")).toBe(true);
+    expect(templateAppliesToShift(["1K"], "1LK", "Opening")).toBe(false);
+    expect(shiftTimeLabel("1LK")).toBe("Longshift 1LK · 09:45–22:00");
     // Tag kode sendiri selalu berlaku
     expect(templateAppliesToShift(["1S"], "1S", "Closing")).toBe(true);
   });
 
   it("lists shift codes per outlet", () => {
-    expect(shiftCodesForOutlet("KBU")).toEqual(["1K", "2K", "3K"]);
-    expect(shiftCodesForOutlet("kisamen")).toEqual(["1R", "2R"]);
+    expect(shiftCodesForOutlet("KBU")).toEqual(["1K", "2K", "3K", "1LK"]);
+    expect(shiftCodesForOutlet("kisamen")).toEqual(["1R", "2R", "1LR"]);
     expect(shiftCodesForOutlet("SAMTARO")).toEqual(["1S"]);
-    expect(shiftCodesForOutlet("GENERAL")).toHaveLength(6);
+    expect(shiftCodesForOutlet("GENERAL")).toHaveLength(8);
   });
 
   it("uses Sunday hours for Samtaro", () => {
