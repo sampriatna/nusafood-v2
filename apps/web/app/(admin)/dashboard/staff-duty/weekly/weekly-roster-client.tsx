@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
   WORK_SHIFT_CODES,
-  WORK_SHIFT_DEFINITIONS,
+  shiftHours,
   type WorkShiftCode,
 } from "@/lib/daily-activity-sop";
 import { addDaysToDateKey, formatDateId, todayKeyInAppTz } from "@/lib/format-datetime";
@@ -147,6 +147,7 @@ export function WeeklyRosterClient({ outlets, lockedOutlet }: Props) {
   const visiblePositions =
     roster?.positions.filter((p) => showAll || !hasTemplatePositions || p.used_by_templates) ?? [];
   const waiterStaff = roster?.positions.find((p) => p.position === "Waiters")?.staff ?? [];
+  const shiftOptions: WorkShiftCode[] = roster?.shift_options ?? [...WORK_SHIFT_CODES];
 
   return (
     <div className="space-y-4">
@@ -154,7 +155,8 @@ export function WeeklyRosterClient({ outlets, lockedOutlet }: Props) {
         <CardContent className="space-y-1 p-3 text-sm">
           <p className="font-semibold">Isi sekali seminggu</p>
           <p className="text-muted-foreground">
-            Atur PIC posisi dan shift Waiter. Shift 1K/2K/3K menentukan SOP harian
+            Atur PIC posisi dan shift Waiter
+            {shiftOptions.length ? ` (${shiftOptions.join(" / ")})` : ""}. Shift menentukan SOP harian
             yang wajib dikerjakan, jadi staff tidak memilih kewajibannya sendiri.
           </p>
         </CardContent>
@@ -245,11 +247,14 @@ export function WeeklyRosterClient({ outlets, lockedOutlet }: Props) {
                           onChange={(e) => setShift(date, s.staff_id, e.target.value)}
                         >
                           <option value="">Belum ditetapkan</option>
-                          {WORK_SHIFT_CODES.map((code) => (
-                            <option key={code} value={code}>
-                              {code} · {WORK_SHIFT_DEFINITIONS[code].start}–{WORK_SHIFT_DEFINITIONS[code].end}
-                            </option>
-                          ))}
+                          {shiftOptions.map((code) => {
+                            const hours = shiftHours(code, date);
+                            return (
+                              <option key={code} value={code}>
+                                {code} · {hours.start}–{hours.end}
+                              </option>
+                            );
+                          })}
                         </select>
                       </label>
                     ))}

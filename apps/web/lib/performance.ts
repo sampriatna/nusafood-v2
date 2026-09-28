@@ -1,3 +1,5 @@
+import { normalizeWorkShiftCode, templateAppliesToShift } from "./daily-activity-sop";
+
 /**
  * Perhitungan kinerja murni (tanpa DB) — dipakai service & diuji terpisah.
  *
@@ -194,6 +196,8 @@ export type SopTemplateInput = {
   position_group: string | null;
   /** Shift kosong = berlaku semua shift. */
   shift_codes?: string[];
+  /** Kategori template (Opening/Monitoring/Closing) — dipakai shift tunggal seperti 1S. */
+  category?: string | null;
   /** Hindari template baru menghukum tanggal sebelum template dibuat. */
   created_date?: string | null;
 };
@@ -212,7 +216,7 @@ export function computeSopCompliance(input: {
   dates: string[];
   /** key `${staff_id}|${date}` → posisi aktif dari jadwal. */
   duties: Map<string, string[]>;
-  /** key `${staff_id}|${date}` → 1K/2K/3K. */
+  /** key `${staff_id}|${date}` → kode shift (1K/2K/3K/1R/2R/1S). */
   shifts?: Map<string, string>;
   /** key `${staff_id}|${template_id}|${date}` untuk laporan yang sah. */
   submissions: Set<string>;
@@ -231,7 +235,7 @@ export function computeSopCompliance(input: {
         if (t.outlet_id && t.outlet_id !== s.outlet_id) continue;
         if (!positions.some((p) => input.matchesPosition(t.position_group, p))) continue;
         if (t.shift_codes?.length) {
-          if (!shift || !t.shift_codes.includes(shift)) continue;
+          if (!templateAppliesToShift(t.shift_codes, normalizeWorkShiftCode(shift), t.category)) continue;
         }
         r.required += 1;
         if (input.submissions.has(`${s.staff_id}|${t.id}|${date}`)) r.done += 1;

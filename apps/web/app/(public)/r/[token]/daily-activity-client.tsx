@@ -30,6 +30,7 @@ import {
   WORK_SHIFT_CODES,
   WORK_SHIFT_DEFINITIONS,
   parseSopDescription,
+  shiftHours,
   shiftTimeLabel,
   stripOperationalPrefix,
   templateAppliesToShift,
@@ -58,6 +59,7 @@ type SubmitResponse = DailyReportSubmission | null;
 type ShiftResponse = {
   shift_code: WorkShiftCode | null;
   is_waiter?: boolean;
+  shift_options?: WorkShiftCode[];
 };
 
 type Props = {
@@ -189,6 +191,11 @@ export function DailyActivityClient({
   const [shiftSaving, setShiftSaving] = useState(false);
   const [shiftPickerOpen, setShiftPickerOpen] = useState(false);
   const [serverSaysWaiter, setServerSaysWaiter] = useState(false);
+  const [shiftOptions, setShiftOptions] = useState<WorkShiftCode[]>([...WORK_SHIFT_CODES]);
+  const todayKey = useMemo(
+    () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date()),
+    [],
+  );
   const [nowMinutes, setNowMinutes] = useState(() => jakartaMinutesNow());
 
   useEffect(() => {
@@ -271,6 +278,7 @@ export function DailyActivityClient({
         if (json.success && json.data) {
           setShiftCode(json.data.shift_code ?? null);
           setServerSaysWaiter(Boolean(json.data.is_waiter));
+          if (json.data.shift_options?.length) setShiftOptions(json.data.shift_options);
         }
       } finally {
         if (!cancelled) setShiftLoading(false);
@@ -289,7 +297,7 @@ export function DailyActivityClient({
     () =>
       templates.filter((template) => {
         const shifts = parseSopDescription(template.description).shift_codes;
-        return templateAppliesToShift(shifts, shiftCode);
+        return templateAppliesToShift(shifts, shiftCode, template.category);
       }),
     [templates, shiftCode],
   );
@@ -525,7 +533,7 @@ export function DailyActivityClient({
             {selectedTemplate.title}
           </h1>
           <div className="mt-1 flex flex-wrap gap-3 text-sm text-primary-foreground/80">
-            {shiftCode ? <span>{shiftTimeLabel(shiftCode)}</span> : null}
+            {shiftCode ? <span>{shiftTimeLabel(shiftCode, todayKey)}</span> : null}
             {selectedTemplate.target_time_start || selectedTemplate.target_time_end ? (
               <span className="flex items-center gap-1">
                 <Clock className="size-3.5" />
@@ -871,7 +879,7 @@ export function DailyActivityClient({
           {shiftCode ? (
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2.5 py-1">
               <Clock className="size-3.5" />
-              {shiftTimeLabel(shiftCode)}
+              {shiftTimeLabel(shiftCode, todayKey)}
             </span>
           ) : null}
         </div>
@@ -899,12 +907,12 @@ export function DailyActivityClient({
               </p>
               <h2 className="mt-1 text-xl font-bold">Kamu shift berapa hari ini?</h2>
               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                Pilihan ini menentukan SOP yang memang menjadi tanggung jawabmu. Opening hanya masuk 1K; 1K dan 2K melakukan handover; 3K melakukan final closing outlet.
+                Pilihan ini menentukan SOP yang memang menjadi tanggung jawabmu. Shift pagi mengerjakan opening, shift terakhir melakukan final closing outlet.
               </p>
             </div>
             <div className="space-y-2">
-              {WORK_SHIFT_CODES.map((code) => {
-                const shift = WORK_SHIFT_DEFINITIONS[code];
+              {shiftOptions.map((code) => {
+                const shift = { ...WORK_SHIFT_DEFINITIONS[code], ...shiftHours(code, todayKey) };
                 return (
                   <button
                     key={code}
@@ -950,7 +958,7 @@ export function DailyActivityClient({
               <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Shift hari ini</p>
-                  <p className="font-bold">{shiftTimeLabel(shiftCode)}</p>
+                  <p className="font-bold">{shiftTimeLabel(shiftCode, todayKey)}</p>
                 </div>
                 <Button
                   size="sm"

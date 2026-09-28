@@ -4,6 +4,7 @@ import { todayKeyInAppTz } from "@/lib/format-datetime";
 import {
   normalizeWorkShiftCode,
   parseSopDescription,
+  shiftCodesForOutlet,
   templateAppliesToShift,
   type WorkShiftCode,
 } from "@/lib/daily-activity-sop";
@@ -36,7 +37,7 @@ async function getActiveLink(tokenOrCode: string) {
         { shortCode: key.toLowerCase() },
       ],
     },
-    include: { staff: true },
+    include: { staff: { include: { outlet: { select: { code: true } } } } },
   });
   if (!link) {
     throw new DailyActivityShiftError(
@@ -58,11 +59,14 @@ async function getActiveLink(tokenOrCode: string) {
 export async function getStaffReportShift(tokenOrCode: string): Promise<{
   shift_code: WorkShiftCode | null;
   is_waiter: boolean;
+  /** Pilihan shift untuk outlet staff (KBU 1K/2K/3K, Kisamen 1R/2R, Samtaro 1S). */
+  shift_options: WorkShiftCode[];
 }> {
   const link = await getActiveLink(tokenOrCode);
   return {
     shift_code: await getStaffWorkShift(link.staffId),
     is_waiter: resolveStaffPositionGroup(link.staff.position ?? "") === "Waiters",
+    shift_options: shiftCodesForOutlet(link.staff.outlet?.code),
   };
 }
 
@@ -82,10 +86,11 @@ export async function setStaffReportShift(input: {
       422,
     );
   }
+  const allowed = shiftCodesForOutlet(link.staff.outlet?.code);
   const next = normalizeWorkShiftCode(input.shiftCode);
-  if (!next) {
+  if (!next || !allowed.includes(next)) {
     throw new DailyActivityShiftError(
-      "Pilih shift 1K, 2K, atau 3K.",
+      `Pilih shift ${allowed.join(" / ")}.`,
       "INVALID_SHIFT",
       422,
     );
@@ -141,7 +146,7 @@ export async function validateStaffReportSubmissionPolicy(input: {
         422,
       );
     }
-    if (!templateAppliesToShift(meta.shift_codes, shift)) {
+    if (!templateAppliesToShift(meta.shift_codes, shift, template.category)) {
       throw new DailyActivityShiftError(
         `Kegiatan ini bukan kewajiban Shift ${shift}. Muat ulang halaman SOP.`,
         "WRONG_SHIFT_TEMPLATE",

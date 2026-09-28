@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import {
   normalizeWorkShiftCode,
+  shiftCodesForOutlet,
   type WorkShiftCode,
 } from "@/lib/daily-activity-sop";
 import {
@@ -39,6 +40,8 @@ export type WeeklyRoster = {
   }[];
   cells: RosterCells;
   shift_cells: ShiftCells;
+  /** Kode shift outlet ini (KBU 1K/2K/3K, Kisamen 1R/2R, Samtaro 1S). */
+  shift_options: WorkShiftCode[];
 };
 
 export class RosterError extends Error {
@@ -180,6 +183,7 @@ export async function getWeeklyRoster(
     positions,
     cells,
     shift_cells: shiftCells,
+    shift_options: shiftCodesForOutlet(outlet.code),
   };
 }
 
@@ -213,6 +217,7 @@ export function buildShiftRows(
   dates: string[],
   shiftCells: ShiftCells,
   qualified: Map<string, Set<string>>,
+  allowedShifts: readonly WorkShiftCode[] = shiftCodesForOutlet(null),
 ): Map<string, Map<string, WorkShiftCode>> {
   const result = new Map<string, Map<string, WorkShiftCode>>();
   for (const date of dates) {
@@ -222,7 +227,9 @@ export function buildShiftRows(
         throw new RosterError("Shift waiter hanya boleh diberikan kepada staff yang bertugas sebagai Waiter");
       }
       const shift = normalizeWorkShiftCode(rawShift);
-      if (!shift) throw new RosterError("Shift waiter harus 1K, 2K, atau 3K");
+      if (!shift || !allowedShifts.includes(shift)) {
+        throw new RosterError(`Shift waiter outlet ini harus ${allowedShifts.join(" / ")}`);
+      }
       perStaff.set(staffId, shift);
     }
     result.set(date, perStaff);
@@ -242,12 +249,12 @@ export async function saveWeeklyRoster(input: {
   shiftCells?: ShiftCells;
   actor?: string;
 }): Promise<WeeklyRoster> {
-  const { staff, qualified } = await loadOutletStaff(input.outletCode);
+  const { outlet, staff, qualified } = await loadOutletStaff(input.outletCode);
   const dates = weekDates(input.weekStart);
   const rows = buildDutyRows(dates, input.cells, qualified);
   const shouldUpdateShifts = input.shiftCells !== undefined;
   const shiftRows: Map<string, Map<string, WorkShiftCode>> = shouldUpdateShifts
-    ? buildShiftRows(dates, input.shiftCells ?? {}, qualified)
+    ? buildShiftRows(dates, input.shiftCells ?? {}, qualified, shiftCodesForOutlet(outlet.code))
     : new Map();
   const ids = staff.map((s) => s.staffId);
   const waiterIds = staff

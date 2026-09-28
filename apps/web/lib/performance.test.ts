@@ -180,3 +180,42 @@ describe("worstScore", () => {
     expect(worstScore(null, undefined)).toBeNull();
   });
 });
+
+describe("computeSopCompliance with outlet shifts", () => {
+  const match = (g: string | null, p: string) => !g || g === p;
+  const staff = [
+    { staff_id: "W1", name: "Rani", outlet: "KISAMEN", outlet_id: "o2", primary: "Waiters", secondary: [] },
+  ];
+  const templates = [
+    { id: "OPEN", outlet_id: null, position_group: "Waiters", shift_codes: ["1K"], category: "Opening" },
+    { id: "HANDOVER", outlet_id: null, position_group: "Waiters", shift_codes: ["1K"], category: "Closing" },
+    { id: "FINAL", outlet_id: null, position_group: "Waiters", shift_codes: ["3K"], category: "Closing" },
+  ];
+
+  it("counts 2R like 3K (final closing only)", () => {
+    const r = computeSopCompliance({
+      staff,
+      templates,
+      dates: ["2026-09-26"],
+      duties: new Map(),
+      shifts: new Map([["W1|2026-09-26", "2R"]]),
+      submissions: new Set(["W1|FINAL|2026-09-26"]),
+      matchesPosition: match,
+    }).get("W1")!;
+    expect(r).toMatchObject({ required: 1, done: 1 });
+  });
+
+  it("counts 1S as opening + final closing without handover", () => {
+    const r = computeSopCompliance({
+      staff,
+      templates,
+      dates: ["2026-09-26"],
+      duties: new Map(),
+      shifts: new Map([["W1|2026-09-26", "1S"]]),
+      submissions: new Set(),
+      matchesPosition: match,
+    }).get("W1")!;
+    expect(r.required).toBe(2);
+    expect(r.missed.map((m) => m.template_id).sort()).toEqual(["FINAL", "OPEN"]);
+  });
+});
