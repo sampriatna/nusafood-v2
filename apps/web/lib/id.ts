@@ -29,8 +29,28 @@ export function generateToken(length = 32) {
     .slice(0, length);
 }
 
-export function getAppOrigin(): string {
-  return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
+function isLocalOrigin(url: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(url);
+}
+
+/**
+ * Alamat website untuk link di pesan WA (harus absolut supaya bisa di-tap).
+ * Urutan: NEXT_PUBLIC_APP_URL → domain produksi Vercel (otomatis) → kosong (path relatif).
+ * NEXT_PUBLIC_APP_URL berisi localhost diabaikan saat berjalan di Vercel — sering
+ * terbawa dari .env.example dan membuat link tidak bisa dibuka staff.
+ */
+export function getAppOrigin(env: Record<string, string | undefined> = process.env): string {
+  const onVercel = Boolean(env.VERCEL);
+  const configured = env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "") ?? "";
+  if (configured && !(onVercel && isLocalOrigin(configured))) {
+    return /^https?:\/\//i.test(configured) ? configured : `https://${configured}`;
+  }
+  const vercelHost =
+    env.VERCEL_PROJECT_PRODUCTION_URL?.trim() ||
+    env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL?.trim() ||
+    "";
+  if (vercelHost) return `https://${vercelHost.replace(/^https?:\/\//i, "").replace(/\/+$/, "")}`;
+  return configured;
 }
 
 export function buildReportLink(taskId: string, token: string) {

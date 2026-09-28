@@ -60,13 +60,30 @@ export function StaffChecklistClient({ taskId, token }: Props) {
       const res = await fetch(
         `/api/checklist-reports/${encodeURIComponent(taskId)}/public?token=${encodeURIComponent(token)}`,
       );
-      const json = (await res.json()) as {
+      const json = ((await res.json().catch(() => null)) ?? { success: false }) as {
         success: boolean;
         data?: ChecklistReport;
         error?: string;
       };
       if (!json.success || !json.data) {
-        setErrorMessage(json.error || "Link checklist tidak valid");
+        // Tugas biasa yang terbuka lewat link checklist → arahkan ke halaman laporan tugas.
+        if (res.status === 404) {
+          const taskRes = await fetch(
+            `/api/tasks/${encodeURIComponent(taskId)}/public?token=${encodeURIComponent(token)}`,
+            { cache: "no-store" },
+          ).catch(() => null);
+          if (taskRes?.ok) {
+            window.location.replace(
+              `/report/${encodeURIComponent(taskId)}?token=${encodeURIComponent(token)}`,
+            );
+            return;
+          }
+        }
+        setErrorMessage(
+          res.status >= 500
+            ? "Server belum bisa dihubungi. Tunggu sebentar lalu tekan Coba lagi."
+            : "Link checklist salah atau sudah tidak berlaku. Minta link baru ke atasan Anda.",
+        );
         setPageState("error");
         return;
       }
@@ -100,7 +117,7 @@ export function StaffChecklistClient({ taskId, token }: Props) {
       setItemPhotos(photos);
       setPageState("ready");
     } catch {
-      setErrorMessage("Terjadi kesalahan. Coba lagi nanti.");
+      setErrorMessage("Gagal memuat checklist. Periksa koneksi internet lalu tekan Coba lagi.");
       setPageState("error");
     }
   }, [taskId, token]);
