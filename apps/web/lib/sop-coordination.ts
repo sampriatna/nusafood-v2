@@ -47,7 +47,7 @@ const BY_POSITION: Record<string, CoordinationRule[]> = {
   Waiters: [
     { when: "Komplain customer atau pesanan terlalu lama", to: ["LeaderOutlet"], urgent: true },
     { when: "Pesanan salah / kurang", to: ["Dapur", "Bar"] },
-    { when: "Meja, area, atau WC kotor", to: ["PA"] },
+    { when: "Meja, area, atau WC kotor", to: ["Waiters"] },
     { when: "Barang customer tertinggal", to: ["LeaderOutlet"] },
     BROKEN,
   ],
@@ -94,10 +94,57 @@ const OFFICE_DEFAULT: CoordinationRule[] = [
   { when: "Pekerjaan terhambat / butuh keputusan", to: ["LeaderOutlet"] },
 ];
 
-/** Posisi yang biasanya ada di pusat (GENERAL) bila outlet tidak punya. */
-export const CENTRAL_POSITIONS = ["Purchasing", "Finance", "Maintenance", "MaintenanceKebon", "Gudang"];
+/**
+ * GENERAL adalah scope lintas outlet. Keputusan/urgent langsung ke Owner;
+ * Leader Outlet hanya dipakai sekali untuk koordinasi akses/operasional lapangan.
+ */
+const GENERAL_MAINTENANCE_RULES: CoordinationRule[] = [
+  {
+    when: "Butuh beli sparepart / material — payment sudah ACC Owner, nota wajib",
+    to: ["Purchasing"],
+  },
+  {
+    when: "Butuh koordinasi akses / operasional outlet",
+    to: ["LeaderOutlet"],
+  },
+  {
+    when: "Butuh keputusan, perbaikan menghentikan operasional, atau kondisi berbahaya",
+    to: ["Owner"],
+    urgent: true,
+  },
+];
 
-export function coordinationRulesFor(positionGroup?: string | null): CoordinationRule[] {
+const GENERAL_DEFAULT_RULES: CoordinationRule[] = [
+  {
+    when: "Pekerjaan terhambat / butuh keputusan",
+    to: ["Owner"],
+  },
+  {
+    when: "Butuh koordinasi akses / operasional outlet",
+    to: ["LeaderOutlet"],
+  },
+];
+
+/** Posisi yang biasanya ada di pusat / berlaku lintas outlet. */
+export const CENTRAL_POSITIONS = [
+  "Purchasing",
+  "Finance",
+  "Maintenance",
+  "MaintenanceKebon",
+  "Gudang",
+  "Owner",
+];
+
+export function coordinationRulesFor(
+  positionGroup?: string | null,
+  scope: "OUTLET" | "GENERAL" = "OUTLET",
+): CoordinationRule[] {
+  if (scope === "GENERAL") {
+    if (positionGroup === "Maintenance" || positionGroup === "MaintenanceKebon") {
+      return GENERAL_MAINTENANCE_RULES;
+    }
+    return GENERAL_DEFAULT_RULES;
+  }
   return BY_POSITION[positionGroup ?? ""] ?? OFFICE_DEFAULT;
 }
 

@@ -35,6 +35,9 @@ export type SopContext = {
 
 type DutyRow = { staff_id: string; active_positions: string | null; shift_code: string | null };
 
+/** Kontak pembelian operasional untuk staff GENERAL. */
+const GENERAL_PURCHASING_CONTACT_NAMES = ["Nurmahmud", "ADELA PUTRI"];
+
 function parseList(raw: string | null): string[] {
   if (!raw) return [];
   try {
@@ -60,9 +63,21 @@ export async function getSopContext(input: {
   const selfGroup = resolveStaffPositionGroup(input.position) || input.position;
 
   const general = await prisma.outlet.findFirst({ where: { code: "GENERAL" }, select: { id: true } });
+  const isGeneralScope = Boolean(general && general.id === input.outletId);
   const outletIds = [input.outletId, ...(general && general.id !== input.outletId ? [general.id] : [])];
   const staff = await prisma.staff.findMany({
-    where: { status: "ACTIVE", outletId: { in: outletIds } },
+    where: {
+      status: "ACTIVE",
+      ...(isGeneralScope
+        ? {
+            OR: [
+              { outletId: { in: outletIds } },
+              { position: "Owner" },
+              { name: { in: GENERAL_PURCHASING_CONTACT_NAMES } },
+            ],
+          }
+        : { outletId: { in: outletIds } }),
+    },
     select: { staffId: true, name: true, position: true, waNumber: true, outletId: true, role: true },
   });
 
@@ -88,10 +103,22 @@ export async function getSopContext(input: {
     const duty = dutyMap.get(s.staffId);
     const scheduled = parseList(duty?.active_positions ?? null);
     const positions: string[] = scheduled.length
-      ? scheduled
+      ? [...scheduled]
       : [resolveStaffPositionGroup(s.position ?? "")].filter(Boolean);
+
     // Jabatan "Leader" / "Kitchen Leader" belum tentu terbaca sebagai LeaderOutlet — role LEADER pasti leader.
     if (s.role === "LEADER" && !positions.includes("LeaderOutlet")) positions.push("LeaderOutlet");
+    // Owner selalu dapat dihubungi oleh staff GENERAL walau home outlet Owner bukan GENERAL.
+    if (s.position === "Owner" && !positions.includes("Owner")) positions.push("Owner");
+    // Mahmud / Adel menjadi kontak pembelian untuk kebutuhan lintas outlet.
+    if (
+      isGeneralScope &&
+      GENERAL_PURCHASING_CONTACT_NAMES.includes(s.name) &&
+      !positions.includes("Purchasing")
+    ) {
+      positions.push("Purchasing");
+    }
+
     const wa = normalizeWa(s.waNumber);
     const contact: Contact = {
       staff_id: s.staffId,
@@ -107,7 +134,11 @@ export async function getSopContext(input: {
     if (!directory[position]?.length && central[position]?.length) directory[position] = central[position];
   }
 
-  const coordination = resolveCoordination(coordinationRulesFor(selfGroup), directory, input.staffId);
+  const coordination = resolveCoordination(
+    coordinationRulesFor(selfGroup, isGeneralScope ? "GENERAL" : "OUTLET"),
+    directory,
+    input.staffId,
+  );
 
   // Serah terima: rekan posisi sama yang masih bertugas setelah staff ini pulang.
   const selfShift = normalizeWorkShiftCode(dutyMap.get(input.staffId)?.shift_code);

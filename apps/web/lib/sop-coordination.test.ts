@@ -8,7 +8,28 @@ describe("coordinationRulesFor", () => {
     expect(rules.find((r) => r.when.includes("sold-out"))?.to).toEqual(["Kasir", "Waiters"]);
   });
 
-  it("falls back to leader for office roles", () => {
+  it("routes cleaning coordination between waiters, not PA", () => {
+    const rules = coordinationRulesFor("Waiters");
+    expect(rules.find((r) => r.when.includes("WC kotor"))?.to).toEqual(["Waiters"]);
+  });
+
+  it("GENERAL maintenance goes to purchasing, leader once, and owner for decisions", () => {
+    const rules = coordinationRulesFor("Maintenance", "GENERAL");
+    expect(rules).toHaveLength(3);
+    expect(rules[0].to).toEqual(["Purchasing"]);
+    expect(rules[0].when).toMatch(/nota wajib/i);
+    expect(rules.filter((r) => r.to.includes("LeaderOutlet"))).toHaveLength(1);
+    expect(rules[2].to).toEqual(["Owner"]);
+    expect(rules[2].urgent).toBe(true);
+  });
+
+  it("GENERAL office roles escalate decisions to owner", () => {
+    const rules = coordinationRulesFor("Design", "GENERAL");
+    expect(rules[0].to).toEqual(["Owner"]);
+    expect(rules.filter((r) => r.to.includes("LeaderOutlet"))).toHaveLength(1);
+  });
+
+  it("falls back to leader for office roles at outlet scope", () => {
     expect(coordinationRulesFor("Design")[0].to).toEqual(["LeaderOutlet"]);
     expect(coordinationRulesFor(null)[0].to).toEqual(["LeaderOutlet"]);
   });
