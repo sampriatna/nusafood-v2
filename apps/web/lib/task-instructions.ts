@@ -1,4 +1,4 @@
-/** Pecah deskripsi tugas jadi bagian (Tujuan / Langkah / Standar selesai …) untuk halaman staff. */
+/** Pecah deskripsi tugas jadi bagian terstruktur untuk halaman staff. */
 
 export type InstructionSection = {
   title: string;
@@ -8,16 +8,45 @@ export type InstructionSection = {
 };
 
 const HEADING_RE =
-  /^(tujuan|langkah(?: kerja)?|cara kerja|metode|standar selesai|standar|alat(?: & bahan| dan bahan)?|bahan|catatan|keselamatan)\s*:\s*(.*)$/i;
+  /^(tujuan|temuan|pelapor|kategori|kegiatan asal|masalah|langkah(?: kerja)?|yang dikerjakan|tindak lanjut|cara kerja|metode|standar selesai|standar|alat(?: & bahan| dan bahan)?|bahan|catatan|keselamatan)\s*:\s*(.*)$/i;
 const ITEM_RE = /^\s*(?:\d+[.)]|[-•*])\s+(.*)$/;
+const STEP_HEADING_RE = /langkah|cara kerja|metode|yang dikerjakan|tindak lanjut/i;
+const ACTION_AFTER_COMMA_RE =
+  /,\s*(?=(?:cek|lakukan|uji|pastikan|laporkan|koordinasikan|lanjutkan|cocokkan|amankan|jangan|eskalasi|catat|bersihkan|ganti|perbaiki|hubungi|konfirmasi|hitung|siapkan|pisahkan|tutup|buka)\b)/i;
 
 function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
-function sectionKind(title: string, hasItems: boolean): InstructionSection["kind"] {
+function sectionKind(
+  title: string,
+  hasItems: boolean,
+  hasText: boolean,
+): InstructionSection["kind"] {
+  if (STEP_HEADING_RE.test(title) && (hasItems || hasText)) return "steps";
   if (!hasItems) return "text";
-  return /langkah|cara kerja|metode/i.test(title) ? "steps" : "bullets";
+  return "bullets";
+}
+
+/**
+ * Ubah instruksi satu paragraf menjadi langkah singkat yang bisa dicentang.
+ * Hanya dipakai untuk heading aksi (Langkah/Tindak lanjut/dll), bukan catatan bebas.
+ */
+function splitActionText(value: string): string[] {
+  return value
+    .split(/;\s*|\.\s+(?=[A-Z])/)
+    .flatMap((chunk) =>
+      chunk
+        .split(/,\s*(?:lalu|kemudian|selanjutnya)\s+/i)
+        .flatMap((part) => part.split(ACTION_AFTER_COMMA_RE)),
+    )
+    .map((item) =>
+      item
+        .replace(/^(?:lalu|kemudian|selanjutnya)\s+/i, "")
+        .replace(/[.;]+$/, "")
+        .trim(),
+    )
+    .filter(Boolean);
 }
 
 export function parseTaskInstructions(description: string): InstructionSection[] {
@@ -61,12 +90,23 @@ export function parseTaskInstructions(description: string): InstructionSection[]
     else current.text.push(line);
   }
 
-  return sections.map((s) => {
-    const kind = sectionKind(s.title, s.items.length > 0);
-    return {
-      title: s.title,
-      kind,
-      items: kind === "text" ? s.text : [...s.text, ...s.items],
-    };
-  });
+  return sections
+    .map((s) => {
+      const kind = sectionKind(s.title, s.items.length > 0, s.text.length > 0);
+      if (kind === "steps") {
+        // Jika sudah ada nomor/bullet eksplisit, itu sumber kebenaran langkah kerja.
+        // Teks bebas di bagian yang sama tidak dipaksa menjadi checkbox.
+        const items =
+          s.items.length > 0
+            ? s.items
+            : s.text.flatMap((text) => splitActionText(text));
+        return { title: s.title, kind, items };
+      }
+      return {
+        title: s.title,
+        kind,
+        items: kind === "text" ? s.text : [...s.text, ...s.items],
+      };
+    })
+    .filter((section) => section.items.length > 0);
 }
