@@ -39,7 +39,12 @@ function isPublicTaskApi(pathname: string) {
     Boolean(pathname.match(/^\/api\/staff-reports\/by-token\//)) ||
     pathname === "/api/staff-reports/submit" ||
     // Shift waiter dari link personal staff; token divalidasi di route.
-    pathname === "/api/staff-reports/shift"
+    pathname === "/api/staff-reports/shift" ||
+    // Push dipakai dari link personal /r/[token], bukan sesi admin.
+    // config hanya mengembalikan public key; subscribe/latest memvalidasi token staff di route.
+    pathname === "/api/push/config" ||
+    pathname === "/api/push/subscribe" ||
+    pathname === "/api/push/latest"
   )
 }
 
