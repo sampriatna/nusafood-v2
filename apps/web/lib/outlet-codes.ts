@@ -10,6 +10,7 @@ const OUTLET_CODE_ALIASES: Record<string, string> = {
   SAMTARO: "SAMTARO",
   "Samtaro Express": "SAMTARO",
   "samtaro express": "SAMTARO",
+  NF: "NUSAFISHING",
   NUSAFISHING: "NUSAFISHING",
   "Nusa Fishing": "NUSAFISHING",
   "nusa fishing": "NUSAFISHING",
