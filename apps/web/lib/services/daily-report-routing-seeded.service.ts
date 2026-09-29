@@ -65,7 +65,6 @@ function buildSeededDescription(
     "Catatan:",
     `Laporan asli staff: ${rawNote}`,
     input.checklist_summary ? `Checklist saat dilaporkan: ${input.checklist_summary}` : null,
-    `Template bahasa: ${language.seed_id}`,
     "",
     "Yang dikerjakan:",
     ...steps,
