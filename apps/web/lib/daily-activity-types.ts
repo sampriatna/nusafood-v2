@@ -30,6 +30,11 @@ export type ReportTemplateKind =
 
 export type { ReportPositionGroup } from "@nusafood/types";
 
+/**
+ * Pilihan yang memang ditampilkan ke staff.
+ * `perlu_belanja` tetap dipertahankan di type untuk membaca data lama/API lama,
+ * tetapi tidak lagi menjadi pilihan baru karena stok/pengadaan ditangani di Catatin.
+ */
 export const REPORT_CONDITION_OPTIONS: Array<{
   value: ReportConditionStatus;
   label: string;
@@ -38,17 +43,12 @@ export const REPORT_CONDITION_OPTIONS: Array<{
   { value: "aman", label: "Selesai — kondisi normal", requiresNote: false },
   {
     value: "kendala_ringan",
-    label: "Ada masalah yang perlu ditindaklanjuti",
+    label: "Ada masalah operasional — perlu ditindaklanjuti",
     requiresNote: true,
   },
   {
     value: "follow_up_leader",
     label: "Butuh keputusan leader",
-    requiresNote: true,
-  },
-  {
-    value: "perlu_belanja",
-    label: "Perlu barang / perbaikan",
     requiresNote: true,
   },
 ];
