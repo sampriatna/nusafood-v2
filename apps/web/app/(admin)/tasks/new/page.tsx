@@ -8,6 +8,8 @@ import { CreateTaskForm } from "./create-task-form";
 
 export const dynamic = "force-dynamic";
 
+const GENERAL_SCOPE_CODE = "GENERAL";
+
 /**
  * Kategori tugas operasional yang sengaja dikurasi.
  * Jangan gunakan seluruh master category hasil sync v1 di form ini karena
@@ -34,17 +36,41 @@ export default async function NewTaskPage() {
     listStaff({ status: "ACTIVE" }),
   ]);
 
+  const outletCodes = outlets
+    .map((outlet) => outlet.code)
+    .filter((code) => code.toUpperCase() !== GENERAL_SCOPE_CODE);
+
+  // GENERAL bukan outlet fisik. Staff GENERAL adalah tim lintas outlet dan harus
+  // tetap tersedia sebagai PIC saat tugas dibuat untuk KBU/KISAMEN/SAMTARO/dll.
+  // Clone ini hanya view-model untuk pilihan PIC; staff_id asli tetap dipakai.
+  const taskAssignableStaff = staff.flatMap((member) => {
+    if (String(member.outlet).trim().toUpperCase() !== GENERAL_SCOPE_CODE) {
+      return [member];
+    }
+
+    return [
+      member,
+      ...outletCodes.map((outletCode) => ({
+        ...member,
+        outlet: outletCode,
+      })),
+    ];
+  });
+
   return (
     <div className="min-h-screen bg-background pb-8">
       <MobileHeader title="Buat Tugas Baru" showBack backHref="/dashboard" />
       <main className="mx-auto max-w-xl space-y-4 px-4 py-4 sm:px-6">
         <p className="text-sm text-muted-foreground">
-          Pilih bagian kerja, jenis tugas, prioritas, lalu PIC yang bertanggung jawab.
+          Pilih lokasi/cakupan kerja, jenis tugas, prioritas, lalu PIC yang bertanggung jawab.
         </p>
         <CreateTaskForm
           outlets={outlets.map((o) => ({
             value: o.code,
-            label: `${o.code} — ${o.name}`,
+            label:
+              o.code.toUpperCase() === GENERAL_SCOPE_CODE
+                ? "GENERAL — Lintas Semua Outlet"
+                : `${o.code} — ${o.name}`,
           }))}
           areas={areas.map((a) => ({
             value: a.name,
@@ -52,7 +78,7 @@ export default async function NewTaskPage() {
             outlet: a.outlet,
           }))}
           categories={TASK_CATEGORIES.map((c) => ({ ...c }))}
-          staff={staff}
+          staff={taskAssignableStaff}
         />
       </main>
     </div>
