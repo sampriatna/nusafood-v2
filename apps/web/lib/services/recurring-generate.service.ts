@@ -4,6 +4,7 @@ import { dateKeyInAppTz, todayKeyInAppTz } from "@/lib/format-datetime";
 import { generateChecklistReport } from "@/lib/services/checklist.service";
 import { logSyncOperation } from "@/lib/services/dual-write.service";
 import { createTask } from "@/lib/services/task-write.service";
+import { sendWebPushToStaff } from "@/lib/services/web-push.service";
 import {
   getPicPositions,
   resolvePicCandidates,
@@ -228,8 +229,25 @@ export async function generateRecurringTasks(input?: {
           pic_wa: pic.wa,
           deadline: deadline.toISOString(),
           recurring_template_id: tpl.templateId,
-          send_whatsapp: input?.send_whatsapp !== false,
+          // Push/link personal adalah jalur utama. WA hanya jika diminta eksplisit.
+          send_whatsapp: input?.send_whatsapp === true,
         });
+
+        // Checklist lama hanya menyimpan nama/WA PIC. Hubungkan juga ke staff_id
+        // supaya otomatis muncul di link personal /r/[token].
+        await prisma.task.updateMany({
+          where: { taskId: gen.task.task_id },
+          data: {
+            recurringTemplateId: tpl.templateId,
+            ...(pic.staffId ? { staffId: pic.staffId } : {}),
+            ...(tpl.taskDescription
+              ? { taskDescription: tpl.taskDescription }
+              : {}),
+          },
+        });
+
+        await sendWebPushToStaff(pic.staffId);
+
         results.push({
           template_id: tpl.templateId,
           status: "created",
@@ -252,6 +270,7 @@ export async function generateRecurringTasks(input?: {
           where: { taskId: task.task_id },
           data: { recurringTemplateId: tpl.templateId },
         });
+        await sendWebPushToStaff(pic.staffId);
         results.push({
           template_id: tpl.templateId,
           status: "created",
