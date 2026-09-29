@@ -38,17 +38,17 @@ export const REPORT_CONDITION_OPTIONS: Array<{
   { value: "aman", label: "Aman", requiresNote: false },
   {
     value: "kendala_ringan",
-    label: "Kendala ringan",
+    label: "Ada kendala — perlu bantuan bagian lain",
     requiresNote: true,
   },
   {
     value: "follow_up_leader",
-    label: "Follow up leader",
+    label: "Butuh keputusan / persetujuan",
     requiresNote: true,
   },
   {
     value: "perlu_belanja",
-    label: "Perlu belanja/perbaikan",
+    label: "Perlu barang / perbaikan",
     requiresNote: true,
   },
 ];
