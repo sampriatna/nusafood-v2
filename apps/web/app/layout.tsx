@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
@@ -6,6 +6,16 @@ export const metadata: Metadata = {
   title: "TaskNF3 v2 - Nusa Food Task & Report System",
   description:
     "Sistem manajemen tugas operasional v2 untuk Kopi Buri Umah, Kisamen, dan Samtaro Express",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "NF3 Operasional",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ea580c",
 };
 
 export default function RootLayout({

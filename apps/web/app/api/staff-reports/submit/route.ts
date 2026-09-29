@@ -10,6 +10,7 @@ import {
   validateStaffReportSubmissionPolicy,
 } from "@/lib/services/daily-activity-shift.service";
 import { routeDailyReportIssue } from "@/lib/services/daily-report-routing-seeded.service";
+import { sendWebPushToStaff } from "@/lib/services/web-push.service";
 import { notifyLeadersOnKendala } from "@/lib/wa-notify-daily-report";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +97,16 @@ export async function POST(request: Request) {
         routing = await routeDailyReportIssue(routingInput);
       } catch (error) {
         console.error("[daily-report auto routing]", error);
+      }
+
+      // Push adalah jalur notifikasi utama untuk task hasil temuan operasional.
+      // Hanya dikirim saat work order baru terbentuk agar resubmit tidak spam.
+      if (
+        routing?.routed &&
+        !routing.already_routed &&
+        routing.target?.staff_id
+      ) {
+        await sendWebPushToStaff(routing.target.staff_id);
       }
 
       if (!routing?.routed || routing.needs_leader) {

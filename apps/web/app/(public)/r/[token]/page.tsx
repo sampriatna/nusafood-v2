@@ -6,6 +6,7 @@ import {
 import { loadSopContextForStaff } from "@/lib/services/sop-context.service";
 import type { ReportTemplate } from "@/lib/daily-activity-types";
 import { DailyActivityClient } from "./daily-activity-client";
+import { PushNotificationSetup } from "./push-notification-setup";
 
 type Props = {
   params: Promise<{ token: string }>;
@@ -54,6 +55,8 @@ export default async function DailyActivityPage({ params }: Props) {
 
     return (
       <>
+        <PushNotificationSetup token={token} />
+
         {incomingTasks.length ? (
           <section className="bg-muted/30 px-4 pt-4">
             <div className="mx-auto max-w-lg rounded-2xl border-2 border-orange-300 bg-orange-50 p-4 shadow-sm">
