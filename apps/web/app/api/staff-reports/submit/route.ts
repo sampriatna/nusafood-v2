@@ -9,11 +9,16 @@ import {
   DailyActivityShiftError,
   validateStaffReportSubmissionPolicy,
 } from "@/lib/services/daily-activity-shift.service";
+import { routeDailyReportIssue } from "@/lib/services/daily-report-routing.service";
 import { notifyLeadersOnKendala } from "@/lib/wa-notify-daily-report";
 
 export const dynamic = "force-dynamic";
 
-/** Public submit — if kendala → notify leaders (GAS + wa.me fallback). */
+/**
+ * Public submit.
+ * Kendala diarahkan dulu ke PIC operasional yang paling relevan. Leader hanya
+ * menjadi fallback / eskalasi untuk kendala yang memang butuh keputusan.
+ */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -65,9 +70,12 @@ export async function POST(request: Request) {
       checklist_answers: checklistAnswers,
     });
 
+    let routing = null;
     let notify = null;
+
     if (statusCondition !== "aman") {
-      notify = await notifyLeadersOnKendala({
+      const routingInput = {
+        submission_id: submission.id,
         staff_name: submission.staff_name || "Staff",
         staff_id: submission.staff_id,
         outlet: submission.outlet || submission.outlet_id,
@@ -75,19 +83,46 @@ export async function POST(request: Request) {
         activity_title: submission.report_title || "Kegiatan",
         status_condition: statusCondition,
         note: submission.note || "",
+        photo_url: submission.photo_url,
         checklist_summary:
           submission.checklist_total != null
             ? `${submission.checklist_checked}/${submission.checklist_total}`
             : undefined,
-        report_date: submission.report_date,
-        submission_id: submission.id,
-      });
+      };
+
+      // Routing tidak boleh menggagalkan laporan utama. Jika task/WA sedang
+      // bermasalah, laporan tetap tersimpan dan leader menjadi fallback.
+      try {
+        routing = await routeDailyReportIssue(routingInput);
+      } catch (error) {
+        console.error("[daily-report auto routing]", error);
+      }
+
+      if (!routing?.routed || routing.needs_leader) {
+        try {
+          notify = await notifyLeadersOnKendala({
+            staff_name: routingInput.staff_name,
+            staff_id: routingInput.staff_id,
+            outlet: routingInput.outlet,
+            position: routingInput.position,
+            activity_title: routingInput.activity_title,
+            status_condition: statusCondition,
+            note: routingInput.note,
+            checklist_summary: routingInput.checklist_summary,
+            report_date: submission.report_date,
+            submission_id: submission.id,
+          });
+        } catch (error) {
+          console.error("[daily-report leader fallback]", error);
+        }
+      }
     }
 
     return NextResponse.json({
       success: true,
       data: submission,
       error: null,
+      routing,
       notify,
     });
   } catch (error) {
