@@ -38,13 +38,17 @@ export default async function DailyActivityPage({ params }: Props) {
 
   try {
     const data = await getStaffReportByToken(token);
+    const recentCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const [sop, incomingTasks] = await Promise.all([
       loadSopContextForStaff(data.staff.staff_id),
       prisma.task.findMany({
         where: {
           staffId: data.staff.staff_id,
-          createdBy: { startsWith: "daily-report:" },
           status: { notIn: ["DONE", "VERIFIED"] },
+          OR: [
+            { createdAt: { gte: recentCutoff } },
+            { deadline: { gte: recentCutoff } },
+          ],
         },
         select: {
           taskId: true,
@@ -57,8 +61,8 @@ export default async function DailyActivityPage({ params }: Props) {
           areaName: true,
           deadline: true,
         },
-        orderBy: { createdAt: "desc" },
-        take: 20,
+        orderBy: [{ deadline: "asc" }, { createdAt: "desc" }],
+        take: 30,
       }),
     ]);
 
@@ -68,20 +72,20 @@ export default async function DailyActivityPage({ params }: Props) {
 
         {incomingTasks.length ? (
           <section className="bg-muted/30 px-4 pt-4">
-            <div className="mx-auto max-w-lg rounded-2xl border-2 border-orange-300 bg-orange-50 p-4 shadow-sm">
+            <div className="mx-auto max-w-lg rounded-2xl border-2 border-sky-300 bg-sky-50 p-4 shadow-sm">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-orange-700">
-                    Koordinasi operasional
+                  <p className="text-xs font-bold uppercase tracking-wide text-sky-700">
+                    Tugas personal
                   </p>
-                  <h1 className="mt-0.5 text-xl font-bold text-orange-950">
-                    Pekerjaan Masuk dari Kendala
+                  <h1 className="mt-0.5 text-xl font-bold text-sky-950">
+                    Tugas & Tindak Lanjut
                   </h1>
-                  <p className="mt-1 text-sm text-orange-900/75">
-                    Temuan staff yang diarahkan kepadamu. Buka pekerjaan, cek kondisi, lalu laporkan hasilnya.
+                  <p className="mt-1 text-sm text-sky-900/75">
+                    Tugas rutin, titipan, atau temuan operasional yang diarahkan kepadamu. Buka, kerjakan, lalu laporkan hasilnya.
                   </p>
                 </div>
-                <span className="rounded-full bg-orange-600 px-2.5 py-1 text-sm font-bold text-white">
+                <span className="rounded-full bg-sky-700 px-2.5 py-1 text-sm font-bold text-white">
                   {incomingTasks.length}
                 </span>
               </div>
@@ -90,7 +94,7 @@ export default async function DailyActivityPage({ params }: Props) {
                 {incomingTasks.map((task) => (
                   <article
                     key={task.taskId}
-                    className="rounded-xl border border-orange-200 bg-white p-3.5"
+                    className="rounded-xl border border-sky-200 bg-white p-3.5"
                   >
                     <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-muted-foreground">
                       <span>{task.outletName || "Outlet"}</span>
@@ -102,7 +106,7 @@ export default async function DailyActivityPage({ params }: Props) {
                       {task.taskTitle.replace(/^\[Kendala SOP\]\s*/i, "")}
                     </h2>
                     {task.taskDescription ? (
-                      <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+                      <p className="mt-1.5 line-clamp-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
                         {task.taskDescription}
                       </p>
                     ) : null}
@@ -115,7 +119,7 @@ export default async function DailyActivityPage({ params }: Props) {
                       {task.reportLink ? (
                         <a
                           href={task.reportLink}
-                          className="rounded-lg bg-orange-600 px-3 py-2 text-sm font-bold text-white active:scale-[0.98]"
+                          className="rounded-lg bg-sky-700 px-3 py-2 text-sm font-bold text-white active:scale-[0.98]"
                         >
                           Buka & kerjakan
                         </a>
