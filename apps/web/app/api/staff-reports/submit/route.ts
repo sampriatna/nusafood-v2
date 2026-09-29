@@ -9,7 +9,7 @@ import {
   DailyActivityShiftError,
   validateStaffReportSubmissionPolicy,
 } from "@/lib/services/daily-activity-shift.service";
-import { routeDailyReportIssue } from "@/lib/services/daily-report-routing.service";
+import { routeDailyReportIssue } from "@/lib/services/daily-report-routing-seeded.service";
 import { notifyLeadersOnKendala } from "@/lib/wa-notify-daily-report";
 
 export const dynamic = "force-dynamic";
