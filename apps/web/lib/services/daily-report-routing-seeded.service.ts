@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/db";
 import {
-  resolveDailyReportIssueLanguage,
-  type DailyReportRouteType,
-} from "@/lib/daily-report-issue-language-seed";
+  inferDailyReportIssueRouteType,
+  resolveDailyReportIssueLanguageSmart,
+  routeTypeHint,
+} from "@/lib/daily-report-issue-language-resolver";
+import type { DailyReportRouteType } from "@/lib/daily-report-issue-language-seed";
 import {
   routeDailyReportIssue as routeDailyReportIssueBase,
   type DailyReportRoutingResult,
@@ -37,7 +39,7 @@ function buildSeededDescription(
   input: RouteInput,
   result: DailyReportRoutingResult,
 ): { title: string; description: string } {
-  const language = resolveDailyReportIssueLanguage({
+  const language = resolveDailyReportIssueLanguageSmart({
     routeType: result.route_type,
     note: input.note,
     activityTitle: input.activity_title,
@@ -78,14 +80,22 @@ function buildSeededDescription(
 }
 
 /**
- * Routing assignment tetap memakai service lama. Setelah task berhasil dibuat,
- * bahasa task distandarkan dari seed supaya PIC menerima instruksi yang jelas
- * walaupun catatan staff singkat/tidak rapi.
+ * Routing assignment tetap memakai service lama. Seed hanya membantu memahami
+ * bahasa informal staff dan menstandarkan bahasa task sesudah routing berhasil.
  */
 export async function routeDailyReportIssue(
   input: RouteInput,
 ): Promise<DailyReportRoutingResult> {
-  const result = await routeDailyReportIssueBase(input);
+  const inferredRoute = inferDailyReportIssueRouteType({
+    note: input.note,
+    activityTitle: input.activity_title,
+  });
+  const hint = routeTypeHint(inferredRoute);
+  const routingInput = hint
+    ? { ...input, note: `${input.note}\n${hint}`.trim() }
+    : input;
+
+  const result = await routeDailyReportIssueBase(routingInput);
 
   if (!result.routed || result.already_routed || !result.task_id) {
     return result;
