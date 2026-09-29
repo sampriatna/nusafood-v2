@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import {
   DailyActivityError,
@@ -13,6 +14,14 @@ type Props = {
 };
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { token } = await params;
+  return {
+    title: "NF3 Operasional",
+    manifest: `/r/${encodeURIComponent(token)}/manifest.webmanifest`,
+  };
+}
 
 function deadlineLabel(value: Date) {
   return new Intl.DateTimeFormat("id-ID", {
