@@ -35,16 +35,8 @@ export function PushNotificationSetup({ token }: { token: string }) {
         return;
       }
 
-      const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent);
-      const isStandalone =
-        window.matchMedia("(display-mode: standalone)").matches ||
-        Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
-      if (isIOS && !isStandalone) {
-        if (!cancelled) setState("needs-install");
-        return;
-      }
-
       try {
+        // Jangan mengarahkan staff memasang PWA sebelum server push benar-benar aktif.
         const configRes = await fetch("/api/push/config", { cache: "no-store" });
         const configJson = await configRes.json();
         const config = configJson?.data;
@@ -54,6 +46,15 @@ export function PushNotificationSetup({ token }: { token: string }) {
         }
         if (cancelled) return;
         setPublicKey(config.public_key);
+
+        const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent);
+        const isStandalone =
+          window.matchMedia("(display-mode: standalone)").matches ||
+          Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+        if (isIOS && !isStandalone) {
+          setState("needs-install");
+          return;
+        }
 
         const registration = await navigator.serviceWorker.register("/push-sw.js", {
           scope: "/",
@@ -67,11 +68,12 @@ export function PushNotificationSetup({ token }: { token: string }) {
 
         const existing = await registration.pushManager.getSubscription();
         if (existing && Notification.permission === "granted") {
-          await fetch("/api/push/subscribe", {
+          const sync = await fetch("/api/push/subscribe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ token, subscription: existing.toJSON() }),
           });
+          if (!sync.ok) throw new Error("subscription sync failed");
           if (!cancelled) setState("active");
           return;
         }
@@ -79,7 +81,8 @@ export function PushNotificationSetup({ token }: { token: string }) {
         if (!cancelled) setState("idle");
       } catch (error) {
         console.error("[push setup]", error);
-        if (!cancelled) setState("error");
+        // Setup tambahan tidak boleh mengganggu SOP utama atau membingungkan staff.
+        if (!cancelled) setState("disabled");
       }
     }
 
@@ -179,7 +182,7 @@ export function PushNotificationSetup({ token }: { token: string }) {
             <button
               type="button"
               onClick={() => void enable()}
-              disabled={state === "saving"}
+              disabled={state === "saving" || !publicKey}
               className="mt-3 rounded-lg bg-sky-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
             >
               {state === "saving" ? "Mengaktifkan…" : "Aktifkan notifikasi"}
