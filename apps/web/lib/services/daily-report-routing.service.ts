@@ -4,7 +4,7 @@ import { resolveStaffPositionGroup } from "@/lib/position-groups";
 import { listStaff } from "@/lib/services/staff.service";
 import { createTask } from "@/lib/services/task-write.service";
 
-type RouteType =
+export type DailyReportRouteType =
   | "safety"
   | "maintenance"
   | "cleaning"
@@ -24,7 +24,7 @@ type RoutedTarget = {
 export type DailyReportRoutingResult = {
   routed: boolean;
   already_routed: boolean;
-  route_type: RouteType;
+  route_type: DailyReportRouteType;
   route_label: string;
   target: RoutedTarget | null;
   task_id?: string;
@@ -42,27 +42,38 @@ const CENTRAL_GROUPS = new Set([
   "SupirPA",
 ]);
 
-const ROUTE_LABEL: Record<RouteType, string> = {
+const ROUTE_LABEL: Record<DailyReportRouteType, string> = {
   safety: "Keselamatan / kondisi berbahaya",
-  maintenance: "Alat / fasilitas / perbaikan",
-  cleaning: "Kebersihan / area",
-  finance: "Kas / pembayaran",
-  purchasing: "Belanja / pengadaan",
-  stock: "Stok / bahan",
-  service: "Operasional / pelayanan",
-  other: "Kendala lain",
+  maintenance: "Perbaikan & alat",
+  cleaning: "Kebersihan & area",
+  finance: "Kas & pembayaran",
+  purchasing: "Belanja & pengadaan",
+  stock: "Stok & bahan",
+  service: "Pelayanan & operasional",
+  other: "Butuh tindak lanjut",
+};
+
+const TASK_PREFIX: Record<DailyReportRouteType, string> = {
+  safety: "Keselamatan",
+  maintenance: "Perbaikan & Alat",
+  cleaning: "Kebersihan & Area",
+  finance: "Kas & Pembayaran",
+  purchasing: "Belanja & Pengadaan",
+  stock: "Stok & Bahan",
+  service: "Pelayanan & Operasional",
+  other: "Tindak Lanjut",
 };
 
 function hasAny(text: string, terms: string[]): boolean {
   return terms.some((term) => text.includes(term));
 }
 
-function classifyIssue(input: {
+export function classifyDailyReportIssue(input: {
   note: string;
   activityTitle: string;
   position: string;
   statusCondition: ReportConditionStatus;
-}): RouteType {
+}): DailyReportRouteType {
   const text = `${input.activityTitle} ${input.note} ${input.position}`.toLowerCase();
 
   if (
@@ -203,7 +214,107 @@ function classifyIssue(input: {
   return "other";
 }
 
-function targetGroups(routeType: RouteType, reporterPosition: string): string[] {
+function maintenanceSubject(text: string): string {
+  const parts: string[] = [];
+  if (hasAny(text, ["mesin kopi", "espresso", "coffee machine"])) {
+    parts.push("Mesin Kopi");
+  }
+  if (text.includes("grinder")) parts.push("Grinder");
+  if (hasAny(text, ["freezer", "chiller"])) parts.push("Freezer / Chiller");
+  if (hasAny(text, [" ac ", "air conditioner"])) parts.push("AC");
+  if (hasAny(text, ["pompa", "keran", "mampet", "bocor"])) {
+    parts.push("Air / Plumbing");
+  }
+  if (hasAny(text, ["lampu", "listrik", "stop kontak", "saklar", "kabel"])) {
+    parts.push("Kelistrikan");
+  }
+  if (hasAny(text, ["kompor", "oven"])) parts.push("Kompor / Oven");
+  if (text.includes("printer")) parts.push("Printer");
+  if (text.includes("blender")) parts.push("Blender");
+  return [...new Set(parts)].slice(0, 2).join(" & ") || "Peralatan / Fasilitas";
+}
+
+function routeSubject(
+  routeType: DailyReportRouteType,
+  note: string,
+  activityTitle: string,
+): string {
+  const text = `${activityTitle} ${note}`.toLowerCase();
+
+  switch (routeType) {
+    case "maintenance":
+      return maintenanceSubject(` ${text} `);
+    case "cleaning":
+      if (text.includes("toilet") || text.includes(" wc ")) return "Toilet";
+      if (text.includes("sampah")) return "Sampah / Area";
+      if (text.includes("lantai")) return "Lantai / Area";
+      if (text.includes("meja")) return "Meja / Area";
+      return "Kebersihan Area";
+    case "finance":
+      if (text.includes("qris")) return "QRIS";
+      if (text.includes("edc")) return "EDC";
+      if (hasAny(text, ["selisih kas", "selisih uang", "uang kurang"])) {
+        return "Selisih Kas";
+      }
+      if (text.includes("refund")) return "Refund";
+      return "Transaksi / Kas";
+    case "purchasing":
+      if (hasAny(text, ["sparepart", "spare part"])) return "Sparepart";
+      return "Pengadaan Barang";
+    case "stock":
+      return "Stok Bahan";
+    case "service":
+      if (hasAny(text, ["pesanan", "order", "salah pesanan", "pesanan salah"])) {
+        return "Pesanan Customer";
+      }
+      if (hasAny(text, ["komplain", "complaint", "customer"])) {
+        return "Keluhan Customer";
+      }
+      return "Operasional Outlet";
+    case "safety":
+      return "Kondisi Berbahaya";
+    default:
+      return activityTitle || "Kendala Operasional";
+  }
+}
+
+export function buildDailyReportIssueTaskTitle(input: {
+  routeType: DailyReportRouteType;
+  note: string;
+  activityTitle: string;
+}): string {
+  return `${TASK_PREFIX[input.routeType]} — ${routeSubject(
+    input.routeType,
+    input.note,
+    input.activityTitle,
+  )}`;
+}
+
+function routeInstruction(routeType: DailyReportRouteType): string {
+  switch (routeType) {
+    case "maintenance":
+      return "Cek kondisi, lakukan perbaikan/kalibrasi yang diperlukan, uji fungsi, lalu laporkan hasil dan kebutuhan sparepart bila ada.";
+    case "cleaning":
+      return "Tindak lanjuti kebersihan area sampai standar outlet terpenuhi, lalu laporkan kondisi akhir.";
+    case "finance":
+      return "Cek transaksi atau kas terkait, cocokkan bukti, lalu laporkan hasil pengecekan dan selisih bila masih ada.";
+    case "purchasing":
+      return "Cek kebutuhan barang, pastikan spesifikasi/jumlahnya, lalu lanjutkan pengadaan sesuai prosedur.";
+    case "stock":
+      return "Cek stok fisik dan kebutuhan outlet, lalu koordinasikan pemenuhan atau pengadaan bila diperlukan.";
+    case "service":
+      return "Koordinasikan langsung dengan bagian terkait sampai kendala pelayanan/operasional selesai, lalu catat hasilnya.";
+    case "safety":
+      return "Amankan kondisi terlebih dahulu. Jangan operasikan alat/area yang berbahaya sebelum dinyatakan aman, lalu eskalasi ke leader.";
+    default:
+      return "Tindak lanjuti kendala, koordinasikan dengan pelapor bila perlu klarifikasi, lalu catat hasilnya.";
+  }
+}
+
+function targetGroups(
+  routeType: DailyReportRouteType,
+  reporterPosition: string,
+): string[] {
   const reporter = resolveStaffPositionGroup(reporterPosition) || reporterPosition;
   switch (routeType) {
     case "safety":
@@ -229,7 +340,7 @@ function targetGroups(routeType: RouteType, reporterPosition: string): string[] 
   }
 }
 
-function categoryFor(routeType: RouteType): string {
+function categoryFor(routeType: DailyReportRouteType): string {
   switch (routeType) {
     case "maintenance":
     case "safety":
@@ -247,7 +358,7 @@ function categoryFor(routeType: RouteType): string {
   }
 }
 
-function priorityFor(routeType: RouteType): TaskPriority {
+function priorityFor(routeType: DailyReportRouteType): TaskPriority {
   if (routeType === "safety") return "Urgent";
   if (["maintenance", "finance", "purchasing", "stock", "service"].includes(routeType)) {
     return "High";
@@ -255,7 +366,7 @@ function priorityFor(routeType: RouteType): TaskPriority {
   return "Medium";
 }
 
-function deadlineFor(routeType: RouteType): string {
+function deadlineFor(routeType: DailyReportRouteType): string {
   const now = new Date();
   const hours =
     routeType === "safety"
@@ -312,7 +423,9 @@ async function chooseTarget(input: {
         }),
       })),
     );
-    weighted.sort((a, b) => a.open - b.open || a.staff.name.localeCompare(b.staff.name, "id"));
+    weighted.sort(
+      (a, b) => a.open - b.open || a.staff.name.localeCompare(b.staff.name, "id"),
+    );
     return weighted[0]?.staff ?? null;
   }
 
@@ -331,7 +444,7 @@ export async function routeDailyReportIssue(input: {
   photo_url?: string | null;
   checklist_summary?: string;
 }): Promise<DailyReportRoutingResult> {
-  const routeType = classifyIssue({
+  const routeType = classifyDailyReportIssue({
     note: input.note,
     activityTitle: input.activity_title,
     position: input.position,
@@ -339,7 +452,9 @@ export async function routeDailyReportIssue(input: {
   });
   const routeLabel = ROUTE_LABEL[routeType];
   const needsLeader =
-    input.status_condition === "follow_up_leader" || routeType === "safety" || routeType === "other";
+    input.status_condition === "follow_up_leader" ||
+    routeType === "safety" ||
+    routeType === "other";
   const sourceKey = `daily-report:${input.submission_id}`;
 
   const existing = await prisma.task.findFirst({
@@ -347,7 +462,14 @@ export async function routeDailyReportIssue(input: {
     select: {
       taskId: true,
       reportLink: true,
-      staff: { select: { staffId: true, name: true, position: true, outlet: { select: { code: true } } } },
+      staff: {
+        select: {
+          staffId: true,
+          name: true,
+          position: true,
+          outlet: { select: { code: true } },
+        },
+      },
     },
   });
   if (existing) {
@@ -389,16 +511,22 @@ export async function routeDailyReportIssue(input: {
   }
 
   const note = input.note.trim() || "Tidak ada catatan tambahan.";
+  const taskTitle = buildDailyReportIssueTaskTitle({
+    routeType,
+    note,
+    activityTitle: input.activity_title,
+  });
   const description = [
-    `Otomatis dari laporan SOP harian ${input.submission_id}.`,
-    `Pelapor: ${input.staff_name} (${input.position})`,
-    `Outlet: ${input.outlet}`,
-    `Kegiatan: ${input.activity_title}`,
-    `Jenis kendala: ${routeLabel}`,
+    `Temuan dari ${input.staff_name} (${input.position} · ${input.outlet}).`,
+    `Kategori: ${routeLabel}`,
+    `Kegiatan asal: ${input.activity_title}`,
     input.checklist_summary ? `Checklist: ${input.checklist_summary}` : null,
-    `Catatan: ${note}`,
     "",
-    "Tindak lanjuti langsung ke pelapor bila butuh klarifikasi. Setelah selesai, isi hasil pekerjaan pada laporan tugas.",
+    "Masalah:",
+    note,
+    "",
+    "Tindak lanjut:",
+    routeInstruction(routeType),
   ]
     .filter(Boolean)
     .join("\n");
@@ -408,7 +536,7 @@ export async function routeDailyReportIssue(input: {
       outlet: input.outlet,
       area: input.position || "Operasional",
       category: categoryFor(routeType),
-      task_title: `[Kendala SOP] ${input.activity_title}`,
+      task_title: taskTitle,
       task_description: description,
       priority: priorityFor(routeType),
       pic_name: target.name,
