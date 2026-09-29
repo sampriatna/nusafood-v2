@@ -35,15 +35,15 @@ export const REPORT_CONDITION_OPTIONS: Array<{
   label: string;
   requiresNote: boolean;
 }> = [
-  { value: "aman", label: "Aman", requiresNote: false },
+  { value: "aman", label: "Selesai — kondisi normal", requiresNote: false },
   {
     value: "kendala_ringan",
-    label: "Ada kendala — perlu bantuan bagian lain",
+    label: "Ada masalah yang perlu ditindaklanjuti",
     requiresNote: true,
   },
   {
     value: "follow_up_leader",
-    label: "Butuh keputusan / persetujuan",
+    label: "Butuh keputusan leader",
     requiresNote: true,
   },
   {
