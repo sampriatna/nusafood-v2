@@ -322,7 +322,7 @@ function targetGroups(
     case "maintenance":
       return ["Maintenance", "MaintenanceKebon"];
     case "cleaning":
-      return ["PA", "Waiters"];
+      return ["Waiters"];
     case "finance":
       return ["Finance", "Kasir", "LeaderOutlet"];
     case "purchasing":
