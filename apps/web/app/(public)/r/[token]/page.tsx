@@ -8,6 +8,7 @@ import { loadSopContextForStaff } from "@/lib/services/sop-context.service";
 import type { ReportTemplate } from "@/lib/daily-activity-types";
 import { DailyActivityClient } from "./daily-activity-client";
 import { PushNotificationSetup } from "./push-notification-setup";
+import { RumahCultureStrip } from "./rumah-culture-strip";
 
 type Props = {
   params: Promise<{ token: string }>;
@@ -132,17 +133,20 @@ export default async function DailyActivityPage({ params }: Props) {
           </section>
         ) : null}
 
-        <DailyActivityClient
-          token={token}
-          initialData={{
-            staff: data.staff,
-            templates: data.templates as ReportTemplate[],
-            today_submissions: data.today_submissions,
-            link_active: data.link.is_active,
-            coordination: sop?.coordination ?? [],
-            track_record: sop?.track_record ?? null,
-          }}
-        />
+        <RumahCultureStrip />
+        <div id="daily-activity-root">
+          <DailyActivityClient
+            token={token}
+            initialData={{
+              staff: data.staff,
+              templates: data.templates as ReportTemplate[],
+              today_submissions: data.today_submissions,
+              link_active: data.link.is_active,
+              coordination: sop?.coordination ?? [],
+              track_record: sop?.track_record ?? null,
+            }}
+          />
+        </div>
       </>
     );
   } catch (error) {
