@@ -218,7 +218,7 @@ export function ReportLinksManager() {
                 : staffList
               ).map((staff) => (
                 <SelectItem key={staff.staff_id} value={staff.staff_id}>
-                  {staff.name} · {staff.outlet} · {staff.position}
+                  {staff.name} · {outletShortName(staff.outlet)} · {staff.position}
                 </SelectItem>
               ))}
             </SelectContent>
