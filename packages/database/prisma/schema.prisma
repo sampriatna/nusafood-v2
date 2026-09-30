@@ -698,3 +698,95 @@ model DisciplinaryEvent {
   @@index([disciplinaryLetterId, createdAt(sort: Desc)], map: "idx_disciplinary_events_letter")
   @@map("disciplinary_events")
 }
+
+
+/* ─── Project Management ───
+   Layer tambahan untuk project lintas fungsi.
+   Tidak mengubah flow Task existing; relasi task bersifat opsional lewat project_task_links.
+*/
+
+model Project {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectKey  String   @unique @map("project_key") @db.VarChar(80)
+  name        String   @db.VarChar(200)
+  goal        String?
+  leadStaffId String?  @map("lead_staff_id") @db.VarChar(50)
+  leadName    String?  @map("lead_name") @db.VarChar(200)
+  status      String   @default("ACTIVE") @db.VarChar(30)
+  health      String   @default("ON_TRACK") @db.VarChar(30)
+  startDate   DateTime? @map("start_date") @db.Date
+  deadline    DateTime? @db.Date
+  nextAction  String?  @map("next_action")
+  blocker     String?
+  createdBy   String?  @map("created_by") @db.VarChar(200)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status], map: "idx_prj_projects_status")
+  @@index([leadStaffId], map: "idx_prj_projects_lead")
+  @@map("prj_projects")
+}
+
+model ProjectWorkstream {
+  id           String   @id @default(uuid()) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  name         String   @db.VarChar(200)
+  ownerStaffId String?  @map("owner_staff_id") @db.VarChar(50)
+  ownerName    String?  @map("owner_name") @db.VarChar(200)
+  weight       Int      @default(1)
+  status       String   @default("ACTIVE") @db.VarChar(30)
+  health       String   @default("ON_TRACK") @db.VarChar(30)
+  nextAction   String?  @map("next_action")
+  blocker      String?
+  deadline     DateTime? @db.Date
+  sortOrder    Int      @default(10) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([projectId, name])
+  @@index([projectId, sortOrder], map: "idx_prj_workstreams_project")
+  @@index([ownerStaffId], map: "idx_prj_workstreams_owner")
+  @@map("prj_workstreams")
+}
+
+model ProjectMilestone {
+  id           String   @id @default(uuid()) @db.Uuid
+  workstreamId String   @map("workstream_id") @db.Uuid
+  title        String   @db.VarChar(300)
+  description  String?
+  weight       Int      @default(1)
+  status       String   @default("NOT_STARTED") @db.VarChar(30)
+  deadline     DateTime? @db.Date
+  evidenceUrl  String?  @map("evidence_url")
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(6)
+  sortOrder    Int      @default(10) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([workstreamId, sortOrder], map: "idx_prj_milestones_workstream")
+  @@map("prj_milestones")
+}
+
+model ProjectMember {
+  projectId String   @map("project_id") @db.Uuid
+  staffId   String   @map("staff_id") @db.VarChar(50)
+  role      String   @default("MEMBER") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([projectId, staffId])
+  @@map("prj_project_members")
+}
+
+model ProjectTaskLink {
+  id           String   @id @default(uuid()) @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  workstreamId String?  @map("workstream_id") @db.Uuid
+  milestoneId  String?  @map("milestone_id") @db.Uuid
+  taskId       String   @map("task_id") @db.VarChar(50)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([projectId, taskId])
+  @@index([projectId], map: "idx_prj_task_links_project")
+  @@index([taskId], map: "idx_prj_task_links_task")
+  @@map("prj_task_links")
+}

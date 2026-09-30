@@ -7,6 +7,7 @@ import {
   BarChart3,
   ClipboardList,
   FileWarning,
+  FolderKanban,
   Filter,
   ListChecks,
   Plus,
@@ -53,6 +54,12 @@ import {
 } from "@/lib/format-datetime";
 
 const QUICK_LINKS = [
+  {
+    href: "/projects",
+    icon: FolderKanban,
+    title: "Project",
+    subtitle: "PIC, progress & milestone",
+  },
   {
     href: "/dashboard/performance",
     icon: BarChart3,
