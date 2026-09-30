@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/db";
 import { DAILY_ACTIVITY_SEED_TEMPLATES } from "@/lib/daily-activity-seed";
 import {
+  DEPRECATED_ISSUE_TEMPLATE_CODES,
+  ISSUE_CATEGORY_TEMPLATES,
+} from "@/lib/daily-activity-issue-categories";
+import {
   DAILY_ACTIVITY_OPERATIONAL_OVERRIDES,
   DEPRECATED_DAILY_ACTIVITY_TEMPLATE_CODES,
 } from "@/lib/daily-activity-operational-overrides";
@@ -71,6 +75,9 @@ function getEffectiveSeedTemplates() {
   }
   for (const waiter of WAITER_V2_TEMPLATES) {
     byCode.set(waiter.code, waiter);
+  }
+  for (const issueCategory of ISSUE_CATEGORY_TEMPLATES) {
+    byCode.set(issueCategory.code, issueCategory);
   }
   return [...byCode.values()];
 }
@@ -209,6 +216,7 @@ export async function seedDailyActivityTemplates(): Promise<DailyActivitySeedRes
   const deprecatedCodes = [
     ...DEPRECATED_DAILY_ACTIVITY_TEMPLATE_CODES,
     ...WAITER_V1_TEMPLATE_CODES,
+    ...DEPRECATED_ISSUE_TEMPLATE_CODES,
   ];
   const deprecated = await prisma.reportTemplate.updateMany({
     where: {
