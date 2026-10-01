@@ -25,6 +25,7 @@ import {
 import { normalizePositionGroup } from "@/lib/position-groups";
 import { getEffectiveStaffPositionGroups } from "@/lib/services/staff-job-profile.service";
 import { TaskWriteError } from "@/lib/services/task-errors";
+import { markTasksSubmittedFromDailyReport } from "@/lib/services/pending-send.service";
 
 export { normalizePositionGroup };
 
@@ -762,6 +763,21 @@ export async function submitDailyReport(input: {
         checked: Boolean(answerMap.get(item.id)),
       })),
     });
+  }
+
+  try {
+    await markTasksSubmittedFromDailyReport({
+      outletId: staffRow.outletId,
+      dateKey: todayISO(),
+      title: template.title,
+      staffId: staff.staff_id,
+      note,
+      photoUrl: upserted.photoUrl,
+      submittedAt: now,
+    });
+  } catch (error) {
+    // laporan harian tetap tersimpan walau sinkron status tugas gagal
+    console.error("[submitDailyReport] sinkron status tugas gagal", error);
   }
 
   const submission = await prisma.dailyReportSubmission.findUniqueOrThrow({
