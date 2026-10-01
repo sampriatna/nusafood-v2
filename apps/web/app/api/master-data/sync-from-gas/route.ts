@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
   V1FullSyncError,
@@ -21,7 +21,7 @@ export async function POST() {
     }
     console.error("[POST /api/master-data/sync-from-gas]", error);
     return fail(
-      error instanceof Error ? error.message : "Sync master data gagal",
+      publicErrorMessage(error, "Sync master data gagal"),
       { code: "MASTER_DATA_SYNC_FAILED", status: 500 },
     );
   }

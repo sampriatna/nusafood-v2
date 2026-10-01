@@ -13,6 +13,7 @@ import {
   generateTaskId,
   generateToken,
   getAppOrigin,
+  isSafeMediaUrl,
 } from "@/lib/id";
 import { mapTaskToApi } from "@/lib/mappers/task";
 import {
@@ -648,6 +649,9 @@ export async function submitTaskReport(input: {
   afterPhotoUrl?: string;
   staffNote?: string;
 }): Promise<Task> {
+  if (input.afterPhotoUrl && !isSafeMediaUrl(input.afterPhotoUrl)) {
+    throw new TaskWriteError("Format foto tidak valid", "INVALID_PHOTO_URL", 422);
+  }
   if (!input.afterPhotoUrl?.trim()) {
     throw new TaskWriteError("Foto bukti wajib diupload", "PHOTO_REQUIRED", 422);
   }

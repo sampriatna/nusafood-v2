@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
   StaffWriteError,
@@ -22,7 +22,7 @@ export async function POST() {
     }
     console.error("[POST /api/staff/normalize-positions]", error);
     return fail(
-      error instanceof Error ? error.message : "Normalisasi jabatan gagal",
+      publicErrorMessage(error, "Normalisasi jabatan gagal"),
       { code: "STAFF_POSITION_NORMALIZE_FAILED", status: 500 },
     );
   }

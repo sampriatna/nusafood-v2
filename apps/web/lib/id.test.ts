@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReportLink, generateTaskId, generateToken, getAppOrigin } from "./id";
+import { buildReportLink, generateTaskId, generateToken, getAppOrigin, isSafeMediaUrl } from "./id";
 
 describe("id helpers", () => {
   it("generates TASK-YYYYMMDD-XXX", () => {
@@ -37,5 +37,13 @@ describe("id helpers", () => {
   it("keeps localhost for local development", () => {
     expect(getAppOrigin({ NEXT_PUBLIC_APP_URL: "http://localhost:3000" })).toBe("http://localhost:3000");
     expect(getAppOrigin({})).toBe("");
+  });
+
+  it("only accepts http(s) and inline images as media URLs", () => {
+    expect(isSafeMediaUrl("https://x.supabase.co/a.jpg")).toBe(true);
+    expect(isSafeMediaUrl("data:image/jpeg;base64,AAAA")).toBe(true);
+    expect(isSafeMediaUrl("")).toBe(true);
+    expect(isSafeMediaUrl("javascript:alert(1)")).toBe(false);
+    expect(isSafeMediaUrl("data:text/html;base64,PHNjcmlwdD4=")).toBe(false);
   });
 });

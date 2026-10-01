@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import type { MilestoneStatus } from "@/lib/project-types";
 import { requireAuth } from "@/lib/require-auth";
 import { updateMilestone } from "@/lib/services/project.service";
@@ -35,7 +35,7 @@ export async function PATCH(
     await updateMilestone(milestoneId, patch);
     return ok({ updated: true });
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal memperbarui milestone", {
+    return fail(publicErrorMessage(error, "Gagal memperbarui milestone"), {
       status: 500,
     });
   }

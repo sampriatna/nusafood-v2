@@ -27,3 +27,19 @@ export function fail(
     { status: options?.status ?? 400 },
   );
 }
+
+/**
+ * Pesan error yang aman dikirim ke browser: pesan validasi aplikasi diteruskan,
+ * error database/Prisma (berisi nama tabel & query) diganti pesan umum.
+ */
+export function publicErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  const internal =
+    error.name.startsWith("PrismaClient") ||
+    /prisma|invocation|\n|ECONN|ETIMEDOUT|relation |column /i.test(error.message);
+  if (internal) {
+    console.error("[api error]", error);
+    return fallback;
+  }
+  return error.message.slice(0, 300);
+}

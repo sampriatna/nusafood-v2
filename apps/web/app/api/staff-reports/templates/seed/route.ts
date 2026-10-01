@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
   DailyActivitySeedError,
@@ -22,7 +22,7 @@ export async function POST() {
     }
     console.error("[POST /api/staff-reports/templates/seed]", error);
     return fail(
-      error instanceof Error ? error.message : "Seed template kegiatan gagal",
+      publicErrorMessage(error, "Seed template kegiatan gagal"),
       { code: "DAILY_ACTIVITY_SEED_FAILED", status: 500 },
     );
   }

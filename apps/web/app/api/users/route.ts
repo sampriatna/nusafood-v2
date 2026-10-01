@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "@/lib/api/response";
 import type { StaffRole } from "@nusafood/types"
 import { ok, fail } from "@/lib/api/response"
 import { requireAuth } from "@/lib/require-auth"
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
     })
     return ok(user, undefined, { status: 201 })
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal membuat user", {
+    return fail(publicErrorMessage(error, "Gagal membuat user"), {
       code: "USER_CREATE_FAILED",
       status: 400,
     })

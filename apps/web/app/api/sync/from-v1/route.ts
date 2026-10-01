@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
   V1FullSyncError,
@@ -21,7 +21,7 @@ export async function POST() {
     }
     console.error("[POST /api/sync/from-v1]", error);
     return fail(
-      error instanceof Error ? error.message : "Sync v1 gagal",
+      publicErrorMessage(error, "Sync v1 gagal"),
       { code: "V1_FULL_SYNC_FAILED", status: 500 },
     );
   }

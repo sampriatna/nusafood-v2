@@ -97,3 +97,10 @@ export function generateRecurringTemplateId(
   return `REC-${yyyymmdd()}-${String(seq).padStart(3, "0")}`;
 }
 
+
+/** URL foto/bukti dari publik: hanya http(s) atau data:image (cegah javascript: / data:text/html). */
+export function isSafeMediaUrl(value: string | null | undefined): boolean {
+  const v = (value ?? "").trim();
+  if (!v) return true;
+  return /^https?:\/\//i.test(v) || /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(v);
+}

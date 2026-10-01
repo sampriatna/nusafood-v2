@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import {
   assertProjectPicStepAccess,
   ProjectPicError,
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       return fail(error.message, { code: error.code, status: error.status });
     }
     return fail(
-      error instanceof Error ? error.message : "Gagal upload bukti",
+      publicErrorMessage(error, "Gagal upload bukti"),
       { code: "PROJECT_EVIDENCE_UPLOAD_FAILED", status: 500 },
     );
   }

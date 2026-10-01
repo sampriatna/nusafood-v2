@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import type { ProjectHealth, ProjectStatus } from "@/lib/project-types";
 import { requireAuth } from "@/lib/require-auth";
 import { updateWorkstream } from "@/lib/services/project.service";
@@ -51,7 +51,7 @@ export async function PATCH(
     await updateWorkstream(workstreamId, patch);
     return ok({ updated: true });
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal memperbarui workstream", {
+    return fail(publicErrorMessage(error, "Gagal memperbarui workstream"), {
       status: 500,
     });
   }

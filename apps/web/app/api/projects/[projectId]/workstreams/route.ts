@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import { createWorkstream } from "@/lib/services/project.service";
 
@@ -25,7 +25,7 @@ export async function POST(
 
     return ok({ created: true }, undefined, { status: 201 });
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal membuat workstream", {
+    return fail(publicErrorMessage(error, "Gagal membuat workstream"), {
       status: 500,
     });
   }

@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "@/lib/api/response";
 import { prisma } from "@nusafood/database"
 import { ok } from "@/lib/api/response"
 import { requireAuth } from "@/lib/require-auth"
@@ -28,7 +29,7 @@ export async function GET() {
     checks.push({
       id: "database",
       ok: false,
-      detail: error instanceof Error ? error.message : "DB error",
+      detail: publicErrorMessage(error, "DB error"),
     })
   }
 

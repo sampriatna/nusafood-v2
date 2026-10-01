@@ -445,7 +445,10 @@ export async function generateStaffReportLink(
   if (staff.status !== "ACTIVE") {
     throw new DailyActivityError("Staff tidak aktif", "STAFF_INACTIVE", 400);
   }
-  const shortCode = await ensureUniqueShortCode(slugifyStaffName(staff.name));
+  // Nama + 4 karakter acak: tetap mudah dikenali staff, tapi tidak bisa ditebak orang lain.
+  const shortCode = await ensureUniqueShortCode(
+    `${slugifyStaffName(staff.name).slice(0, 16)}-${randomBytes(3).toString("hex")}`,
+  );
 
   const link = await prisma.$transaction(async (tx) => {
     await tx.staffReportLink.updateMany({

@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "@/lib/api/response";
 import type { StaffRole } from "@nusafood/types"
 import { ok, fail } from "@/lib/api/response"
 import { requireAuth } from "@/lib/require-auth"
@@ -61,7 +62,7 @@ export async function PATCH(
     }
     return ok(user)
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal update user", {
+    return fail(publicErrorMessage(error, "Gagal update user"), {
       code: "USER_UPDATE_FAILED",
       status: 400,
     })

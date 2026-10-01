@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
   OutletAccessError,
@@ -31,7 +31,7 @@ export async function POST(_request: Request, { params }: Params) {
     }
     console.error("[POST /api/checklist-reports/:id/resend-wa]", error);
     return fail(
-      error instanceof Error ? error.message : "Gagal kirim ulang WA checklist",
+      publicErrorMessage(error, "Gagal kirim ulang WA checklist"),
       { code: "RESEND_CHECKLIST_WA_FAILED", status: 502 },
     );
   }

@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { runSyncPayload } from "@/lib/services/sync.service";
 import type { SyncPayload } from "@nusafood/database/sync";
 import { requireAuth } from "@/lib/require-auth";
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     return ok(result);
   } catch (error) {
     console.error("[POST /api/internal/sync]", error);
-    return fail(error instanceof Error ? error.message : "Sync gagal", {
+    return fail(publicErrorMessage(error, "Sync gagal"), {
       code: "SYNC_FAILED",
       status: 500,
     });

@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
   ensureProjectPicLink,
@@ -19,7 +19,7 @@ export async function GET(
     const { projectId } = await context.params;
     return ok(await listProjectPicLinks(projectId));
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal memuat link PIC", {
+    return fail(publicErrorMessage(error, "Gagal memuat link PIC"), {
       status: 500,
     });
   }
@@ -45,7 +45,7 @@ export async function POST(
       typeof error === "object" && error && "status" in error
         ? Number((error as { status?: number }).status || 500)
         : 500;
-    return fail(error instanceof Error ? error.message : "Gagal membuat link PIC", {
+    return fail(publicErrorMessage(error, "Gagal membuat link PIC"), {
       status,
     });
   }
@@ -66,7 +66,7 @@ export async function DELETE(
     await revokeProjectPicLink(projectId, staffId);
     return ok({ revoked: true });
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal menonaktifkan link", {
+    return fail(publicErrorMessage(error, "Gagal menonaktifkan link"), {
       status: 500,
     });
   }
