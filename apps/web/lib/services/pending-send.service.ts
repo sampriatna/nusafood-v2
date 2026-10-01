@@ -49,6 +49,66 @@ export function buildTaskMessage(task: Task): string {
       });
 }
 
+export function normalizeReportTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/^checklist\s+/, "");
+}
+
+/** Kunci pencocokan tugas ↔ laporan kegiatan harian: outlet + tanggal (WIB) + judul. */
+export function dailyReportKey(outletId: string, dateKey: string, title: string): string {
+  return `${outletId}|${dateKey}|${normalizeReportTitle(title)}`;
+}
+
+/**
+ * Tugas yang sudah dikerjakan PIC walau statusnya belum berubah:
+ * - checklist-nya sudah disubmit (status laporan bukan OPEN), atau
+ * - kegiatan harian dengan judul sama sudah disubmit di link personal /r/
+ *   pada outlet & tanggal deadline yang sama.
+ */
+async function findAlreadyReportedTaskIds(
+  rows: { taskId: string; outletId: string; taskTitle: string; deadline: Date }[],
+): Promise<Set<string>> {
+  const done = new Set<string>();
+  if (!rows.length) return done;
+
+  const reports = await prisma.checklistReport.findMany({
+    where: {
+      taskId: { in: rows.map((r) => r.taskId) },
+      status: { not: "OPEN" },
+    },
+    select: { taskId: true },
+  });
+  for (const r of reports) if (r.taskId) done.add(r.taskId);
+
+  const dateKeys = [...new Set(rows.map((r) => dateKeyInAppTz(r.deadline)))];
+  const submissions = await prisma.dailyReportSubmission.findMany({
+    where: {
+      outletId: { in: [...new Set(rows.map((r) => r.outletId))] },
+      reportDate: { in: dateKeys.map(parseDateKey) },
+    },
+    select: { outletId: true, reportDate: true, template: { select: { title: true } } },
+  });
+  const submitted = new Set(
+    submissions.map((s) =>
+      dailyReportKey(s.outletId, s.reportDate.toISOString().slice(0, 10), s.template.title),
+    ),
+  );
+  for (const r of rows) {
+    if (submitted.has(dailyReportKey(r.outletId, dateKeyInAppTz(r.deadline), r.taskTitle))) {
+      done.add(r.taskId);
+    }
+  }
+  return done;
+}
+
+function parseDateKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!));
+}
+
 /** Tugas v2 beberapa hari terakhir yang belum dikirim WA-nya (tanpa GAS/Fonnte). */
 export async function listPendingSend(
   outlet?: string,
@@ -58,6 +118,7 @@ export async function listPendingSend(
   const where: Prisma.TaskWhereInput = {
     AND: [
       { waSentAt: null },
+      { submittedAt: null },
       { status: { in: [...UNSENT_STATUSES] } },
       { sourceVersion: "v2" },
       { createdAt: { gte: since } },
@@ -65,11 +126,13 @@ export async function listPendingSend(
     ],
   };
 
-  const rows = await prisma.task.findMany({
+  const candidates = await prisma.task.findMany({
     where,
     orderBy: { deadline: "asc" },
-    take: 50,
+    take: 150,
   });
+  const done = await findAlreadyReportedTaskIds(candidates);
+  const rows = candidates.filter((r) => !done.has(r.taskId)).slice(0, 50);
 
   const positions = await getPicPositions(
     [...new Set(rows.map((r) => r.recurringTemplateId).filter((id): id is string => Boolean(id)))],
