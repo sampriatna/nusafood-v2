@@ -6,6 +6,8 @@ import { updateMilestone } from "@/lib/services/project.service";
 const STATUSES = new Set<MilestoneStatus>([
   "NOT_STARTED",
   "IN_PROGRESS",
+  "WAITING_VALIDATION",
+  "REVISION",
   "DONE",
   "BLOCKED",
 ]);

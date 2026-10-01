@@ -5,6 +5,8 @@ import type {
   ProjectDetailDto,
   ProjectHealth,
   ProjectMilestoneDto,
+  ProjectMilestoneReviewDto,
+  ProjectMilestoneStepDto,
   ProjectStaffOption,
   ProjectStatus,
   ProjectSummaryDto,
@@ -36,6 +38,60 @@ function slugify(value: string): string {
   return slug || "project";
 }
 
+function stepDto(row: {
+  id: string;
+  milestoneId: string;
+  itemText: string;
+  isRequired: boolean;
+  requiresEvidence: boolean;
+  isChecked: boolean;
+  note: string | null;
+  evidenceUrl: string | null;
+  completedByStaffId: string | null;
+  completedAt: Date | null;
+  sortOrder: number;
+}): ProjectMilestoneStepDto {
+  return {
+    id: row.id,
+    milestone_id: row.milestoneId,
+    item_text: row.itemText,
+    is_required: row.isRequired,
+    requires_evidence: row.requiresEvidence,
+    is_checked: row.isChecked,
+    note: row.note || "",
+    evidence_url: row.evidenceUrl,
+    completed_by_staff_id: row.completedByStaffId,
+    completed_at: dateTime(row.completedAt),
+    sort_order: row.sortOrder,
+  };
+}
+
+function reviewDto(row: {
+  id: string;
+  milestoneId: string;
+  submittedByStaffId: string;
+  submittedByName: string;
+  submittedAt: Date;
+  status: string;
+  reviewedBy: string | null;
+  reviewedByName: string | null;
+  reviewedAt: Date | null;
+  reviewNote: string | null;
+}): ProjectMilestoneReviewDto {
+  return {
+    id: row.id,
+    milestone_id: row.milestoneId,
+    submitted_by_staff_id: row.submittedByStaffId,
+    submitted_by_name: row.submittedByName,
+    submitted_at: row.submittedAt.toISOString(),
+    status: row.status as ProjectMilestoneReviewDto["status"],
+    reviewed_by: row.reviewedBy,
+    reviewed_by_name: row.reviewedByName,
+    reviewed_at: dateTime(row.reviewedAt),
+    review_note: row.reviewNote || "",
+  };
+}
+
 function milestoneDto(row: {
   id: string;
   workstreamId: string;
@@ -47,7 +103,7 @@ function milestoneDto(row: {
   evidenceUrl: string | null;
   completedAt: Date | null;
   sortOrder: number;
-}): ProjectMilestoneDto {
+}, steps: ProjectMilestoneStepDto[] = [], latestReview: ProjectMilestoneReviewDto | null = null): ProjectMilestoneDto {
   return {
     id: row.id,
     workstream_id: row.workstreamId,
@@ -59,6 +115,8 @@ function milestoneDto(row: {
     evidence_url: row.evidenceUrl,
     completed_at: dateTime(row.completedAt),
     sort_order: row.sortOrder,
+    steps,
+    latest_review: latestReview,
   };
 }
 
@@ -109,7 +167,28 @@ async function buildProjects(projectId?: string): Promise<ProjectDetailDto[]> {
       })
     : [];
 
-  const milestoneDtos = milestones.map(milestoneDto);
+  const milestoneIds = milestones.map((row) => row.id);
+  const [steps, reviews] = milestoneIds.length
+    ? await Promise.all([
+        prisma.projectMilestoneStep.findMany({
+          where: { milestoneId: { in: milestoneIds } },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        }),
+        prisma.projectMilestoneReview.findMany({
+          where: { milestoneId: { in: milestoneIds } },
+          orderBy: { submittedAt: "desc" },
+        }),
+      ])
+    : [[], []];
+
+  const stepDtos = steps.map(stepDto);
+  const reviewDtos = reviews.map(reviewDto);
+  const milestoneDtos = milestones.map((row) => {
+    const ownSteps = stepDtos.filter((step) => step.milestone_id === row.id);
+    const latestReview =
+      reviewDtos.find((review) => review.milestone_id === row.id) || null;
+    return milestoneDto(row, ownSteps, latestReview);
+  });
 
   const workstreamDtos: ProjectWorkstreamDto[] = workstreams.map((row) => {
     const ownMilestones = milestoneDtos.filter(

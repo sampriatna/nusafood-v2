@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
   "/report",
   "/checklist",
   "/r",
+  "/p",
   "/api/health",
   "/api/auth/login",
   "/api/auth/logout",
@@ -40,6 +41,7 @@ function isPublicTaskApi(pathname: string) {
     pathname === "/api/staff-reports/submit" ||
     // Shift waiter dari link personal staff; token divalidasi di route.
     pathname === "/api/staff-reports/shift" ||
+    pathname.startsWith("/api/project-pic/") ||
     // Push dipakai dari link personal /r/[token], bukan sesi admin.
     // config hanya mengembalikan public key; subscribe/latest memvalidasi token staff di route.
     pathname === "/api/push/config" ||
