@@ -122,7 +122,7 @@ export default function ProjectsPage() {
         <div>
           <h2 className="text-lg font-semibold">Project Berjalan</h2>
           <p className="text-sm text-muted-foreground">
-            Satu project bisa punya beberapa workstream dan POC berbeda.
+            Satu project bisa punya beberapa workstream dan PIC berbeda.
           </p>
         </div>
         <Button onClick={() => setShowNew((value) => !value)}>
@@ -134,16 +134,16 @@ export default function ProjectsPage() {
       <Card>
         <CardContent className="p-4">
           <div className="grid gap-2 sm:grid-cols-[180px_1fr] sm:items-center">
-            <Label>Filter POC</Label>
+            <Label>Filter PIC</Label>
             <Select
               value={ownerFilter || "ALL"}
               onValueChange={(value) => setOwnerFilter(value === "ALL" ? "" : value)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Semua POC" />
+                <SelectValue placeholder="Semua PIC" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">Semua POC</SelectItem>
+                <SelectItem value="ALL">Semua PIC</SelectItem>
                 {staff.map((item) => (
                   <SelectItem key={item.staff_id} value={item.staff_id}>
                     {item.name}
@@ -178,7 +178,7 @@ export default function ProjectsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Project Lead / POC utama</Label>
+              <Label>PIC Utama Project</Label>
               <Select
                 value={form.lead_staff_id || "NONE"}
                 onValueChange={(value) =>
@@ -189,7 +189,7 @@ export default function ProjectsPage() {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Pilih POC" />
+                  <SelectValue placeholder="Pilih PIC" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="NONE">Belum ditentukan</SelectItem>
@@ -287,7 +287,7 @@ export default function ProjectsPage() {
 
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <p className="text-xs text-muted-foreground">Project Lead</p>
+                    <p className="text-xs text-muted-foreground">PIC Utama</p>
                     {project.lead_staff_id ? (
                       <button
                         type="button"
@@ -295,7 +295,7 @@ export default function ProjectsPage() {
                         onClick={() => setOwnerFilter(project.lead_staff_id || "")}
                       >
                         <UserRound className="size-3.5" />
-                        {project.lead_name || "POC"}
+                        {project.lead_name || "PIC"}
                       </button>
                     ) : (
                       <p className="font-medium">Belum ditentukan</p>
