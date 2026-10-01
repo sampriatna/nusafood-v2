@@ -1,129 +1,63 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  Camera,
-  CheckCircle2,
-  Circle,
-  Clock3,
-  Loader2,
-  RefreshCw,
-  Send,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Camera, ChevronDown, Loader2, Lock, MessageSquare, Send, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { checkMilestoneSubmit, deadlineState } from "@/lib/project-logic";
+import {
+  apiCall,
+  formatDeadline,
+  formatStamp,
+  MILESTONE_LABEL,
+  milestoneBadgeClass,
+} from "@/lib/project-ui";
 import type {
-  MilestoneStatus,
   ProjectMilestoneDto,
+  ProjectMilestoneStepDto,
   ProjectPicViewDto,
 } from "@/lib/project-types";
+import { cn } from "@/lib/utils";
 
-type ApiResponse<T> =
-  | { success: true; data: T; error: null }
-  | { success: false; data: null; error: string };
-
-const STATUS_LABEL: Record<MilestoneStatus, string> = {
-  NOT_STARTED: "Belum mulai",
-  IN_PROGRESS: "Sedang dikerjakan",
-  WAITING_VALIDATION: "Menunggu validasi",
-  REVISION: "Perlu revisi",
-  DONE: "Disetujui",
-  BLOCKED: "Terhambat",
-};
-
-function statusClass(status: MilestoneStatus) {
-  if (status === "DONE") return "bg-emerald-100 text-emerald-800";
-  if (status === "WAITING_VALIDATION") return "bg-sky-100 text-sky-800";
-  if (status === "REVISION" || status === "BLOCKED")
-    return "bg-red-100 text-red-800";
-  if (status === "IN_PROGRESS") return "bg-amber-100 text-amber-800";
-  return "bg-muted text-muted-foreground";
-}
-
-function milestoneReady(milestone: ProjectMilestoneDto) {
-  if (!milestone.steps.length) return false;
-  return milestone.steps.every((step) => {
-    if (step.is_required && !step.is_checked) return false;
-    if (step.requires_evidence && !step.evidence_url) return false;
-    return true;
-  });
+function todayWib(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
 }
 
 export function ProjectPicClient({ token }: { token: string }) {
   const { toast } = useToast();
   const [data, setData] = useState<ProjectPicViewDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submittingId, setSubmittingId] = useState<string | null>(null);
-  const [uploadingStep, setUploadingStep] = useState<string | null>(null);
-  const [savingStep, setSavingStep] = useState<string | null>(null);
-  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [fatal, setFatal] = useState<string | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch(
-        `/api/project-pic/by-token/${encodeURIComponent(token)}`,
-        { cache: "no-store" },
-      );
-      const json = (await response.json()) as ApiResponse<ProjectPicViewDto>;
-      if (!json.success) throw new Error(json.error);
-      setData(json.data);
-
-      const notes: Record<string, string> = {};
-      for (const workstream of json.data.workstreams) {
-        for (const milestone of workstream.milestones) {
-          for (const step of milestone.steps) {
-            notes[step.id] = step.note || "";
-          }
-        }
+      const view = await apiCall<ProjectPicViewDto>(`/api/project-pic/by-token/${encodeURIComponent(token)}`);
+      setData(view);
+      setFatal(null);
+      if (!opened.current && view.focus) {
+        setOpenId(view.focus.milestone_id);
+        opened.current = true;
       }
-      setNoteDrafts(notes);
     } catch (error) {
-      toast({
-        title: "Project tidak bisa dibuka",
-        description: error instanceof Error ? error.message : "Link tidak valid",
-        variant: "destructive",
-      });
+      setFatal(error instanceof Error ? error.message : "Link project tidak valid atau sudah dinonaktifkan.");
     } finally {
       setLoading(false);
     }
-  }, [token, toast]);
+  }, [token]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const assignedMilestones = useMemo(
-    () =>
-      data?.workstreams.reduce(
-        (sum, workstream) => sum + workstream.milestones.length,
-        0,
-      ) || 0,
-    [data],
-  );
-
-  async function patchStep(
-    stepId: string,
-    patch: {
-      is_checked?: boolean;
-      note?: string | null;
-      evidence_url?: string | null;
-    },
-  ) {
-    setSavingStep(stepId);
+  async function run(key: string, fn: () => Promise<unknown>) {
+    setBusyKey(key);
     try {
-      const response = await fetch(`/api/project-pic/steps/${stepId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, ...patch }),
-      });
-      const json = (await response.json()) as ApiResponse<unknown>;
-      if (!json.success) throw new Error(json.error);
-      await load();
+      await fn();
     } catch (error) {
       toast({
         title: "Belum tersimpan",
@@ -131,388 +65,465 @@ export function ProjectPicClient({ token }: { token: string }) {
         variant: "destructive",
       });
     } finally {
-      setSavingStep(null);
+      await load(); // selalu sinkron dengan server: owner mungkin mengubah data di tengah jalan
+      setBusyKey(null);
     }
   }
 
-  async function uploadEvidence(stepId: string, file?: File) {
+  const patchStep = (stepId: string, patch: Record<string, unknown>) =>
+    run(stepId, () =>
+      apiCall(`/api/project-pic/steps/${stepId}`, { method: "PATCH", body: JSON.stringify({ token, ...patch }) }),
+    );
+
+  const upload = (stepId: string, file?: File) => {
     if (!file) return;
-    setUploadingStep(stepId);
-    try {
+    return run(`up-${stepId}`, async () => {
       const form = new FormData();
       form.set("token", token);
       form.set("step_id", stepId);
       form.set("file", file);
+      const response = await fetch("/api/project-pic/upload", { method: "POST", body: form });
+      const json = await response.json();
+      if (!json.success) throw new Error(json.error || "Gagal upload bukti");
+    });
+  };
 
-      const response = await fetch("/api/project-pic/upload", {
+  const submit = (milestoneId: string) =>
+    run(`submit-${milestoneId}`, async () => {
+      await apiCall(`/api/project-pic/milestones/${milestoneId}/submit`, {
         method: "POST",
-        body: form,
+        body: JSON.stringify({ token }),
       });
-      const json = (await response.json()) as ApiResponse<{ url: string }>;
-      if (!json.success) throw new Error(json.error);
-      toast({ title: "Bukti tersimpan" });
-      await load();
-    } catch (error) {
-      toast({
-        title: "Upload bukti gagal",
-        description: error instanceof Error ? error.message : "Coba lagi",
-        variant: "destructive",
-      });
-    } finally {
-      setUploadingStep(null);
-    }
-  }
+      toast({ title: "Berhasil diajukan", description: "Owner akan memeriksa pekerjaanmu." });
+    });
 
-  async function submitMilestone(milestoneId: string) {
-    setSubmittingId(milestoneId);
-    try {
-      const response = await fetch(
-        `/api/project-pic/milestones/${milestoneId}/submit`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-        },
-      );
-      const json = (await response.json()) as ApiResponse<unknown>;
-      if (!json.success) throw new Error(json.error);
-      toast({
-        title: "Milestone diajukan",
-        description: "Menunggu validasi owner/leader.",
+  const reportBlocker = (milestoneId: string, text: string) =>
+    run(`blk-${milestoneId}`, async () => {
+      await apiCall(`/api/project-pic/milestones/${milestoneId}/blockers`, {
+        method: "POST",
+        body: JSON.stringify({ token, text }),
       });
-      await load();
-    } catch (error) {
-      toast({
-        title: "Belum bisa diajukan",
-        description: error instanceof Error ? error.message : "Coba lagi",
-        variant: "destructive",
-      });
-    } finally {
-      setSubmittingId(null);
-    }
-  }
+      toast({ title: "Kendala dilaporkan" });
+    });
+
+  const resolveBlocker = (blockerId: string) =>
+    run(`res-${blockerId}`, () =>
+      apiCall(`/api/project-pic/blockers/${blockerId}/resolve`, {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+    );
+
+  const milestones = useMemo(
+    () => data?.workstreams.flatMap((w) => w.milestones.map((m) => ({ ws: w, m }))) ?? [],
+    [data],
+  );
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-muted/30 px-4 py-10">
-        <div className="mx-auto flex max-w-lg items-center justify-center gap-2 rounded-2xl bg-card p-8 text-sm text-muted-foreground shadow-sm">
-          <Loader2 className="size-4 animate-spin" />
-          Memuat project…
+      <Shell>
+        <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Memuat project…
         </div>
-      </main>
+      </Shell>
     );
   }
 
-  if (!data) {
+  if (fatal || !data) {
     return (
-      <main className="min-h-screen bg-muted/30 px-4 py-10">
-        <div className="mx-auto max-w-lg rounded-2xl border bg-card p-8 text-center">
-          <AlertTriangle className="mx-auto mb-3 size-8 text-destructive" />
-          <h1 className="font-bold">Link project tidak tersedia</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Minta PIC utama atau owner mengirim link yang aktif.
-          </p>
+      <Shell>
+        <div className="rounded-2xl border bg-card p-6 text-center">
+          <AlertTriangle className="mx-auto mb-3 size-8 text-amber-600" />
+          <h1 className="text-lg font-bold">Project tidak bisa dibuka</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{fatal || "Link project tidak valid atau sudah dinonaktifkan."}</p>
         </div>
-      </main>
+      </Shell>
     );
   }
+
+  if (data.state === "PREPARING") {
+    return (
+      <Shell>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          Project NF3 · PIC {data.staff.name}
+        </p>
+        <div className="mt-3 rounded-2xl border-2 border-violet-200 bg-violet-50 p-6 text-center">
+          <h1 className="text-lg font-bold text-violet-950">PROJECT SEDANG DISIAPKAN</h1>
+          <p className="mt-2 text-sm text-violet-900/80">
+            Belum ada pekerjaan yang dipublish untuk kamu. PIC utama / owner sedang menyusun milestone dan checklist.
+          </p>
+          <p className="mt-3 text-sm font-semibold">{data.project.name}</p>
+        </div>
+      </Shell>
+    );
+  }
+
+  const today = todayWib();
+  const singleWorkstream = data.workstreams.length === 1;
+  const revisions = milestones.filter((x) => x.m.status === "REVISION");
 
   return (
-    <main className="min-h-screen bg-muted/30 pb-10">
-      <section className="border-b bg-card px-4 py-5">
-        <div className="mx-auto max-w-lg space-y-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-primary">
-              Project NF3 · PIC {data.staff.name}
+    <Shell>
+      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+        Project NF3 · PIC {data.staff.name}
+      </p>
+      <h1 className="mt-1 text-2xl font-bold leading-tight">{data.project.name}</h1>
+      {data.project.goal ? (
+        <p className="mt-2 text-sm">
+          <span className="font-semibold">Goal: </span>
+          {data.project.goal}
+        </p>
+      ) : null}
+      <p className="mt-1 text-sm text-muted-foreground">Deadline: {formatDeadline(data.project.deadline)}</p>
+
+      <section className="mt-4 rounded-2xl border bg-card p-4">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+          {data.scope === "ALL" ? "Progress project" : "Progress tanggung jawab saya"}
+        </p>
+        <div className="mt-1 flex items-end justify-between">
+          <span className="text-4xl font-bold leading-none">{data.project.progress}%</span>
+          <span className="text-sm text-muted-foreground">
+            {data.project.milestone_done} / {data.project.milestone_total} milestone disetujui
+          </span>
+        </div>
+        <Progress className="mt-3" value={data.project.progress} />
+        {singleWorkstream ? (
+          <p className="mt-3 text-sm">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Bagian saya </span>
+            {data.workstreams[0].name}
+          </p>
+        ) : null}
+      </section>
+
+      {revisions.map(({ m }) => (
+        <button
+          key={m.id}
+          type="button"
+          onClick={() => setOpenId(m.id)}
+          className="mt-3 w-full rounded-2xl border-2 border-red-300 bg-red-50 p-4 text-left"
+        >
+          <p className="text-xs font-bold uppercase tracking-wide text-red-700">Perlu revisi</p>
+          <p className="font-bold leading-snug text-red-950">{m.title}</p>
+          {m.latest_review?.review_note ? (
+            <p className="mt-1 text-sm text-red-900">
+              <span className="font-semibold">Catatan owner: </span>
+              {m.latest_review.review_note}
             </p>
-            <h1 className="mt-1 text-2xl font-bold">{data.project.name}</h1>
-            {data.project.goal ? (
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                <strong>Goal:</strong> {data.project.goal}
+          ) : null}
+        </button>
+      ))}
+
+      {data.focus ? (
+        <section className="mt-3 rounded-2xl border-2 border-primary/40 bg-primary/5 p-4">
+          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-primary">
+            <Target className="size-3.5" /> Fokus sekarang
+          </p>
+          <p className="mt-1 text-lg font-bold leading-snug">{data.focus.milestone_title}</p>
+          {data.focus.step_text ? (
+            <p className="mt-1 text-sm">
+              <span className="font-semibold">Langkah berikutnya: </span>
+              {data.focus.step_text}
+            </p>
+          ) : (
+            <p className="mt-1 text-sm">Semua langkah sudah dicentang. Cek bukti lalu ajukan validasi.</p>
+          )}
+          <Button className="mt-3 w-full" variant="outline" onClick={() => setOpenId(data.focus!.milestone_id)}>
+            Buka milestone
+          </Button>
+        </section>
+      ) : milestones.length && milestones.every((x) => x.m.status === "DONE" || x.m.status === "WAITING_VALIDATION") ? (
+        <section className="mt-3 rounded-2xl border bg-card p-4 text-sm">
+          {milestones.every((x) => x.m.status === "DONE")
+            ? "Semua milestone sudah disetujui. Kerja bagus!"
+            : "Semua yang bisa kamu kerjakan sudah diajukan. Tunggu validasi owner."}
+        </section>
+      ) : null}
+
+      {data.blockers.length ? (
+        <section className="mt-3 space-y-2">
+          {data.blockers.map((b) => (
+            <div key={b.id} className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-red-700">Kendala aktif</p>
+              <p className="mt-0.5">{b.text}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {b.milestone_title} · {b.reported_by_name}, {formatStamp(b.created_at)}
               </p>
+              <Button size="sm" variant="outline" className="mt-2" disabled={busyKey === `res-${b.id}`} onClick={() => resolveBlocker(b.id)}>
+                Sudah teratasi
+              </Button>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      <div className="mt-5 space-y-5">
+        {data.workstreams.map((ws) => (
+          <section key={ws.id}>
+            {!singleWorkstream ? (
+              <div className="mb-2 flex items-baseline justify-between">
+                <h2 className="text-sm font-bold uppercase tracking-wide">{ws.name}</h2>
+                <span className="text-xs text-muted-foreground">
+                  {ws.owner_name ? `PIC ${ws.owner_name} · ` : ""}
+                  {ws.progress}%
+                </span>
+              </div>
             ) : null}
-          </div>
-
-          <div className="rounded-xl border bg-muted/30 p-3">
-            <div className="mb-2 flex items-center justify-between text-sm">
-              <span>Progress project</span>
-              <strong>{data.project.progress}%</strong>
+            <div className="space-y-3">
+              {ws.milestones.map((m, i) => (
+                <MilestoneBlock
+                  key={m.id}
+                  index={i + 1}
+                  milestone={m}
+                  today={today}
+                  open={openId === m.id}
+                  onToggle={() => setOpenId(openId === m.id ? null : m.id)}
+                  busyKey={busyKey}
+                  onPatchStep={patchStep}
+                  onUpload={upload}
+                  onSubmit={() => submit(m.id)}
+                  onBlocker={(text) => reportBlocker(m.id, text)}
+                />
+              ))}
             </div>
-            <Progress value={data.project.progress} />
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>{data.workstreams.length} workstream kamu</span>
-              <span>{assignedMilestones} milestone</span>
-              {data.project.deadline ? (
-                <span>Deadline {data.project.deadline}</span>
-              ) : null}
-            </div>
-          </div>
+          </section>
+        ))}
+      </div>
+    </Shell>
+  );
+}
 
-          {data.project.next_action ? (
-            <div className="rounded-xl bg-sky-50 p-3 text-sm text-sky-950">
-              <p className="text-xs font-bold uppercase tracking-wide text-sky-700">
-                Fokus berikutnya
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="min-h-screen bg-muted/30 px-4 py-5">
+      <div className="mx-auto max-w-lg pb-24">{children}</div>
+    </main>
+  );
+}
+
+function MilestoneBlock({
+  index,
+  milestone: m,
+  today,
+  open,
+  onToggle,
+  busyKey,
+  onPatchStep,
+  onUpload,
+  onSubmit,
+  onBlocker,
+}: {
+  index: number;
+  milestone: ProjectMilestoneDto;
+  today: string;
+  open: boolean;
+  onToggle: () => void;
+  busyKey: string | null;
+  onPatchStep: (stepId: string, patch: Record<string, unknown>) => void;
+  onUpload: (stepId: string, file?: File) => void;
+  onSubmit: () => void;
+  onBlocker: (text: string) => void;
+}) {
+  const locked = m.status === "WAITING_VALIDATION" || m.status === "DONE";
+  const done = m.steps.filter((s) => s.is_checked).length;
+  const check = checkMilestoneSubmit(m.steps);
+  const dl = deadlineState(m.deadline, today, m.status === "DONE");
+  const [blockerText, setBlockerText] = useState("");
+  const [showBlocker, setShowBlocker] = useState(false);
+
+  return (
+    <article className="overflow-hidden rounded-2xl border bg-card">
+      <button type="button" onClick={onToggle} className="flex w-full items-start gap-3 p-4 text-left">
+        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold">{index}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold leading-snug">{m.title}</span>
+          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span className={cn("rounded-full px-2 py-0.5 font-semibold", milestoneBadgeClass(m.status))}>{MILESTONE_LABEL[m.status]}</span>
+            <span>
+              Langkah {done}/{m.steps.length}
+            </span>
+            {m.deadline ? (
+              <span className={cn(dl === "overdue" && "font-bold text-red-700", dl === "soon" && "font-bold text-amber-700")}>
+                {dl === "overdue" ? "Terlambat · " : "Deadline "}
+                {formatDeadline(m.deadline)}
+              </span>
+            ) : null}
+          </span>
+        </span>
+        <ChevronDown className={cn("mt-1 size-5 shrink-0 transition", open && "rotate-180")} />
+      </button>
+
+      {open ? (
+        <div className="space-y-4 border-t p-4">
+          {m.description ? <p className="text-sm text-muted-foreground">{m.description}</p> : null}
+
+          {m.status === "REVISION" && m.latest_review?.review_note ? (
+            <div className="rounded-xl bg-red-50 p-3 text-sm text-red-950">
+              <p className="text-xs font-bold uppercase text-red-700">Perlu revisi</p>
+              <p className="mt-0.5">
+                <span className="font-semibold">Catatan owner: </span>
+                {m.latest_review.review_note}
               </p>
-              <p className="mt-1 font-medium">{data.project.next_action}</p>
+            </div>
+          ) : null}
+          {m.status === "WAITING_VALIDATION" ? (
+            <p className="flex items-center gap-2 rounded-xl bg-sky-50 p-3 text-sm text-sky-950">
+              <Lock className="size-4 shrink-0" /> Milestone sedang menunggu validasi. Checklist dikunci sampai owner memeriksa.
+            </p>
+          ) : null}
+          {m.status === "DONE" ? (
+            <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-950">Disetujui. Milestone ini sudah selesai.</p>
+          ) : null}
+
+          <ul className="space-y-3">
+            {m.steps.map((s) => (
+              <StepRow key={s.id} step={s} locked={locked} busyKey={busyKey} onPatch={onPatchStep} onUpload={onUpload} />
+            ))}
+          </ul>
+
+          {!locked ? (
+            <div className="space-y-2">
+              {!check.canSubmit ? (
+                <div className="rounded-xl bg-muted p-3 text-sm">
+                  <p className="font-semibold">Belum bisa diajukan.</p>
+                  <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                    {check.reasons.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <Button className="h-12 w-full text-base" disabled={!check.canSubmit || busyKey === `submit-${m.id}`} onClick={onSubmit}>
+                {busyKey === `submit-${m.id}` ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
+                Ajukan Validasi
+              </Button>
+            </div>
+          ) : null}
+
+          {m.status !== "DONE" ? (
+            <div>
+              {!showBlocker ? (
+                <button type="button" className="text-sm font-medium text-red-700 underline-offset-2 hover:underline" onClick={() => setShowBlocker(true)}>
+                  Ada kendala? Laporkan
+                </button>
+              ) : (
+                <div className="space-y-2 rounded-xl border p-3">
+                  <Textarea value={blockerText} onChange={(e) => setBlockerText(e.target.value)} placeholder="Contoh: Supplier belum kasih harga." rows={3} />
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowBlocker(false)}>
+                      Batal
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={!blockerText.trim() || busyKey === `blk-${m.id}`}
+                      onClick={() => {
+                        onBlocker(blockerText);
+                        setBlockerText("");
+                        setShowBlocker(false);
+                      }}
+                    >
+                      Kirim kendala
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : null}
         </div>
-      </section>
+      ) : null}
+    </article>
+  );
+}
 
-      <div className="mx-auto max-w-lg space-y-4 px-4 py-4">
-        {data.workstreams.map((workstream) => (
-          <Card key={workstream.id} className="overflow-hidden">
-            <CardHeader className="border-b bg-card pb-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                    Workstream
-                  </p>
-                  <CardTitle className="mt-1 text-lg">{workstream.name}</CardTitle>
-                  {workstream.next_action ? (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Next: {workstream.next_action}
-                    </p>
-                  ) : null}
-                </div>
-                <strong className="text-lg">{workstream.progress}%</strong>
-              </div>
-              <Progress value={workstream.progress} />
-            </CardHeader>
+function StepRow({
+  step: s,
+  locked,
+  busyKey,
+  onPatch,
+  onUpload,
+}: {
+  step: ProjectMilestoneStepDto;
+  locked: boolean;
+  busyKey: string | null;
+  onPatch: (stepId: string, patch: Record<string, unknown>) => void;
+  onUpload: (stepId: string, file?: File) => void;
+}) {
+  const [note, setNote] = useState(s.note);
+  const [showNote, setShowNote] = useState(Boolean(s.note));
+  const busy = busyKey === s.id || busyKey === `up-${s.id}`;
+  useEffect(() => setNote(s.note), [s.note]);
 
-            <CardContent className="space-y-4 p-4">
-              {workstream.milestones.length === 0 ? (
-                <p className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
-                  Belum ada milestone yang diberikan.
-                </p>
-              ) : (
-                workstream.milestones.map((milestone, milestoneIndex) => {
-                  const locked =
-                    milestone.status === "WAITING_VALIDATION" ||
-                    milestone.status === "DONE";
-                  const ready = milestoneReady(milestone);
-                  const doneSteps = milestone.steps.filter(
-                    (step) => step.is_checked,
-                  ).length;
+  return (
+    <li className="rounded-xl border p-3">
+      <label className={cn("flex items-start gap-3", locked && "opacity-70")}>
+        <input
+          type="checkbox"
+          className="mt-0.5 size-6 shrink-0 accent-emerald-600"
+          checked={s.is_checked}
+          disabled={locked || busy}
+          onChange={(e) => onPatch(s.id, { is_checked: e.target.checked })}
+        />
+        <span className="min-w-0 flex-1 leading-snug">
+          <span className={cn("block font-medium", s.is_checked && "text-muted-foreground line-through")}>{s.item_text}</span>
+          <span className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+            {!s.is_required ? <span>Opsional</span> : null}
+            {s.requires_evidence ? (
+              <span className={cn("inline-flex items-center gap-1 font-semibold", s.evidence_url ? "text-emerald-700" : "text-amber-700")}>
+                <Camera className="size-3" /> {s.evidence_url ? "Bukti terunggah" : "Bukti wajib"}
+              </span>
+            ) : null}
+          </span>
+        </span>
+        {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+      </label>
 
-                  return (
-                    <section
-                      key={milestone.id}
-                      className="rounded-xl border bg-background p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex min-w-0 gap-2">
-                          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">
-                            {milestoneIndex + 1}
-                          </span>
-                          <div className="min-w-0">
-                            <h2 className="font-bold leading-snug">
-                              {milestone.title}
-                            </h2>
-                            <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              <span>
-                                {doneSteps}/{milestone.steps.length} langkah
-                              </span>
-                              {milestone.deadline ? (
-                                <span>· deadline {milestone.deadline}</span>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                        <span
-                          className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${statusClass(
-                            milestone.status,
-                          )}`}
-                        >
-                          {STATUS_LABEL[milestone.status]}
-                        </span>
-                      </div>
+      {s.evidence_url ? (
+        <a href={s.evidence_url} target="_blank" rel="noreferrer" className="mt-2 block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={s.evidence_url} alt="Bukti" className="max-h-40 rounded-lg border object-cover" />
+        </a>
+      ) : null}
 
-                      {milestone.latest_review?.status === "REVISION" ? (
-                        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-                          <p className="font-bold">Perlu diperbaiki</p>
-                          <p className="mt-1">
-                            {milestone.latest_review.review_note ||
-                              "Periksa kembali hasil pekerjaan."}
-                          </p>
-                        </div>
-                      ) : null}
+      {!locked ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {s.requires_evidence || s.evidence_url ? (
+            <label className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-sm font-medium active:scale-[0.98]">
+              <Camera className="size-4" />
+              {s.evidence_url ? "Ganti bukti" : "Upload foto"}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                onChange={(e) => {
+                  onUpload(s.id, e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          ) : null}
+          <button
+            type="button"
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium"
+            onClick={() => setShowNote((v) => !v)}
+          >
+            <MessageSquare className="size-4" />
+            {s.note ? "Catatan" : "Tambah catatan"}
+          </button>
+        </div>
+      ) : s.note ? (
+        <p className="mt-2 text-xs italic text-muted-foreground">Catatan: {s.note}</p>
+      ) : null}
 
-                      {milestone.status === "WAITING_VALIDATION" ? (
-                        <div className="mt-3 flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-sm text-sky-900">
-                          <Clock3 className="mt-0.5 size-4 shrink-0" />
-                          Hasil sudah dikirim. Tunggu owner/leader memvalidasi.
-                        </div>
-                      ) : null}
-
-                      {milestone.status === "DONE" ? (
-                        <div className="mt-3 flex items-start gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
-                          <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-                          Milestone sudah disetujui dan masuk ke progress project.
-                        </div>
-                      ) : null}
-
-                      <div className="mt-4 space-y-3">
-                        {milestone.steps.length === 0 ? (
-                          <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                            Owner belum membuat checklist langkah untuk milestone ini.
-                          </div>
-                        ) : (
-                          milestone.steps.map((step, stepIndex) => (
-                            <div
-                              key={step.id}
-                              className="rounded-lg border p-3"
-                            >
-                              <label className="flex cursor-pointer items-start gap-3">
-                                <input
-                                  type="checkbox"
-                                  checked={step.is_checked}
-                                  disabled={locked || savingStep === step.id}
-                                  onChange={(event) =>
-                                    void patchStep(step.id, {
-                                      is_checked: event.target.checked,
-                                      note: noteDrafts[step.id] || null,
-                                    })
-                                  }
-                                  className="mt-1 size-5 accent-black"
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <p
-                                    className={
-                                      step.is_checked
-                                        ? "text-sm font-medium line-through opacity-70"
-                                        : "text-sm font-medium"
-                                    }
-                                  >
-                                    {stepIndex + 1}. {step.item_text}
-                                  </p>
-                                  <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                                    {step.is_required ? (
-                                      <span>Wajib</span>
-                                    ) : (
-                                      <span>Opsional</span>
-                                    )}
-                                    {step.requires_evidence ? (
-                                      <span>· Bukti foto wajib</span>
-                                    ) : null}
-                                  </div>
-                                </div>
-                                {step.is_checked ? (
-                                  <CheckCircle2 className="size-5 shrink-0 text-emerald-600" />
-                                ) : (
-                                  <Circle className="size-5 shrink-0 text-muted-foreground" />
-                                )}
-                              </label>
-
-                              <div className="mt-3 space-y-2 pl-8">
-                                <Textarea
-                                  value={noteDrafts[step.id] || ""}
-                                  disabled={locked}
-                                  onChange={(event) =>
-                                    setNoteDrafts((current) => ({
-                                      ...current,
-                                      [step.id]: event.target.value,
-                                    }))
-                                  }
-                                  placeholder="Catatan hasil / kendala…"
-                                  className="min-h-16 text-sm"
-                                />
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={locked || savingStep === step.id}
-                                    onClick={() =>
-                                      void patchStep(step.id, {
-                                        note: noteDrafts[step.id] || null,
-                                      })
-                                    }
-                                  >
-                                    {savingStep === step.id ? (
-                                      <Loader2 className="mr-1 size-3.5 animate-spin" />
-                                    ) : null}
-                                    Simpan catatan
-                                  </Button>
-
-                                  <label className="inline-flex cursor-pointer items-center">
-                                    <Input
-                                      type="file"
-                                      accept="image/*"
-                                      capture="environment"
-                                      className="hidden"
-                                      disabled={locked || uploadingStep === step.id}
-                                      onChange={(event) => {
-                                        const file = event.target.files?.[0];
-                                        void uploadEvidence(step.id, file);
-                                        event.currentTarget.value = "";
-                                      }}
-                                    />
-                                    <span className="inline-flex h-9 items-center rounded-md border bg-background px-3 text-sm font-medium">
-                                      {uploadingStep === step.id ? (
-                                        <Loader2 className="mr-1.5 size-4 animate-spin" />
-                                      ) : (
-                                        <Camera className="mr-1.5 size-4" />
-                                      )}
-                                      {step.evidence_url
-                                        ? "Ganti bukti"
-                                        : "Upload bukti"}
-                                    </span>
-                                  </label>
-
-                                  {step.evidence_url ? (
-                                    <a
-                                      href={step.evidence_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-xs font-medium text-primary underline"
-                                    >
-                                      Lihat bukti
-                                    </a>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-
-                      {!locked ? (
-                        <div className="mt-4 border-t pt-4">
-                          <Button
-                            className="w-full"
-                            disabled={
-                              !ready || submittingId === milestone.id
-                            }
-                            onClick={() => void submitMilestone(milestone.id)}
-                          >
-                            {submittingId === milestone.id ? (
-                              <Loader2 className="mr-2 size-4 animate-spin" />
-                            ) : (
-                              <Send className="mr-2 size-4" />
-                            )}
-                            Ajukan Validasi Milestone
-                          </Button>
-                          {!ready ? (
-                            <p className="mt-2 text-center text-xs text-muted-foreground">
-                              Selesaikan langkah wajib dan bukti yang diminta sebelum mengajukan.
-                            </p>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </section>
-                  );
-                })
-              )}
-            </CardContent>
-          </Card>
-        ))}
-
-        <Button variant="outline" className="w-full" onClick={() => void load()}>
-          <RefreshCw className="mr-2 size-4" />
-          Refresh progress
-        </Button>
-      </div>
-    </main>
+      {showNote && !locked ? (
+        <Textarea
+          className="mt-2"
+          rows={2}
+          value={note}
+          placeholder="Catatan untuk langkah ini"
+          onChange={(e) => setNote(e.target.value)}
+          onBlur={() => note.trim() !== s.note.trim() && onPatch(s.id, { note })}
+        />
+      ) : null}
+    </li>
   );
 }

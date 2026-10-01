@@ -246,6 +246,40 @@ export function DashboardClient() {
   const [showFilters, setShowFilters] = useState(false);
   const [activeTab, setActiveTab] = useState<"tasks" | "checklists">("tasks");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [projectStats, setProjectStats] = useState<{
+    active: number;
+    waiting: number;
+    blocked: number;
+    overdue: number;
+  } | null>(null);
+
+  // Ringkasan Project (additive; gagal = kartu tetap tampil tanpa angka).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [list, waiting] = await Promise.all([
+          fetch("/api/projects", { cache: "no-store" }).then((r) => r.json()),
+          fetch("/api/projects/validations", { cache: "no-store" }).then((r) => r.json()),
+        ]);
+        if (cancelled || !list?.success || !waiting?.success) return;
+        const live = (list.data as { status: string; health_derived: string; overdue: number }[]).filter(
+          (p) => p.status === "ACTIVE" && p.health_derived !== "COMPLETED",
+        );
+        setProjectStats({
+          active: live.length,
+          waiting: (waiting.data as unknown[]).length,
+          blocked: live.filter((p) => p.health_derived === "BLOCKED").length,
+          overdue: live.reduce((sum, p) => sum + (p.overdue || 0), 0),
+        });
+      } catch {
+        /* abaikan */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedOutlet, setSelectedOutlet] = useState<string>("ALL");
@@ -582,7 +616,16 @@ export function DashboardClient() {
                       {item.title}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {item.subtitle}
+                      {item.href === "/projects" && projectStats
+                        ? [
+                            `${projectStats.active} aktif`,
+                            projectStats.waiting ? `${projectStats.waiting} menunggu validasi` : null,
+                            projectStats.blocked ? `${projectStats.blocked} blocked` : null,
+                            projectStats.overdue ? `${projectStats.overdue} terlambat` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : item.subtitle}
                     </p>
                   </div>
                 </CardContent>

@@ -8,6 +8,8 @@ export type MilestoneStatus =
   | "DONE"
   | "BLOCKED";
 
+export type SetupStatus = "DRAFT" | "READY" | "PUBLISHED";
+
 export type ProjectStaffOption = {
   staff_id: string;
   name: string;
@@ -39,6 +41,14 @@ export type ProjectMilestoneReviewDto = {
   reviewed_by_name: string | null;
   reviewed_at: string | null;
   review_note: string;
+  /** Kondisi checklist saat diajukan (riwayat, tidak ditimpa). */
+  snapshot: {
+    item_text: string;
+    is_required: boolean;
+    is_checked: boolean;
+    note: string;
+    evidence_url: string | null;
+  }[];
 };
 
 export type ProjectPicLinkDto = {
@@ -64,6 +74,37 @@ export type ProjectMilestoneDto = {
   sort_order: number;
   steps: ProjectMilestoneStepDto[];
   latest_review: ProjectMilestoneReviewDto | null;
+  /** Semua pengajuan, terbaru dulu (riwayat submission/revisi). */
+  reviews: ProjectMilestoneReviewDto[];
+  active_blockers: number;
+};
+
+export type ProjectBlockerDto = {
+  id: string;
+  project_id: string;
+  workstream_id: string | null;
+  milestone_id: string | null;
+  milestone_title: string | null;
+  workstream_name: string | null;
+  reported_by_name: string;
+  text: string;
+  created_at: string;
+};
+
+export type ProjectActivityDto = {
+  id: string;
+  action: string;
+  actor_type: "PIC" | "OWNER" | "SYSTEM";
+  actor_name: string | null;
+  message: string;
+  milestone_id: string | null;
+  created_at: string;
+};
+
+export type ProjectReadinessDto = {
+  ready: boolean;
+  missing: string[];
+  details: string[];
 };
 
 export type ProjectWorkstreamDto = {
@@ -83,6 +124,21 @@ export type ProjectWorkstreamDto = {
   milestones: ProjectMilestoneDto[];
 };
 
+export type ProjectPendingValidationDto = {
+  project_id: string;
+  project_name: string;
+  workstream_id: string;
+  workstream_name: string;
+  milestone_id: string;
+  milestone_title: string;
+  pic_name: string;
+  submitted_at: string;
+  steps_done: number;
+  steps_total: number;
+  evidence_count: number;
+  deadline: string | null;
+};
+
 export type ProjectSummaryDto = {
   id: string;
   project_key: string;
@@ -99,14 +155,48 @@ export type ProjectSummaryDto = {
   progress: number;
   workstream_count: number;
   created_by: string | null;
+  setup_status: SetupStatus;
+  published_at: string | null;
+  /** Health hasil hitung otomatis (atau override owner). */
+  health_derived: ProjectHealth;
+  health_override: ProjectHealth | null;
+  milestone_total: number;
+  milestone_done: number;
+  waiting_validation: number;
+  revision: number;
+  active_blockers: number;
+  overdue: number;
+  pic_names: string[];
+  /** Fokus berikutnya: pinned next_action, atau langkah wajib pertama yang belum selesai. */
+  focus_text: string | null;
 };
 
 export type ProjectDetailDto = ProjectSummaryDto & {
   workstreams: ProjectWorkstreamDto[];
+  readiness: ProjectReadinessDto;
+  blockers: ProjectBlockerDto[];
+  activity: ProjectActivityDto[];
+  weight_warning: boolean;
+};
+
+export type ProjectPicWorkloadDto = {
+  staff_id: string;
+  name: string;
+  projects: {
+    project_id: string;
+    project_name: string;
+    role: "PIC_UTAMA" | "BAGIAN";
+    workstream_names: string[];
+    progress: number;
+    waiting_validation: number;
+    overdue: number;
+  }[];
 };
 
 
 export type ProjectPicViewDto = {
+  /** PREPARING = struktur belum dipublish / belum ada pekerjaan untuk PIC ini. */
+  state: "READY" | "PREPARING";
   staff: {
     staff_id: string;
     name: string;
@@ -117,9 +207,20 @@ export type ProjectPicViewDto = {
     name: string;
     goal: string | null;
     deadline: string | null;
-    next_action: string | null;
+    /** Progress tanggung jawab PIC ini (bukan seluruh project) bila PIC bagian. */
     progress: number;
+    milestone_done: number;
+    milestone_total: number;
   };
+  scope: "ALL" | "OWN";
   link: ProjectPicLinkDto;
   workstreams: ProjectWorkstreamDto[];
+  focus: {
+    milestone_id: string;
+    milestone_title: string;
+    step_id: string | null;
+    step_text: string | null;
+    status: string;
+  } | null;
+  blockers: ProjectBlockerDto[];
 };

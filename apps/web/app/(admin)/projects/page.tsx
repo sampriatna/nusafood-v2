@@ -1,71 +1,78 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FolderKanban, Plus, UserRound, ChevronRight, AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, ChevronRight, ClipboardCheck, FolderKanban, Plus, Search } from "lucide-react";
 import { AdminPage } from "@/components/admin-page";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import {
+  apiCall,
+  formatDeadline,
+  formatStamp,
+  HEALTH_LABEL,
+  healthBadgeClass,
+} from "@/lib/project-ui";
 import type {
-  ProjectHealth,
+  ProjectPendingValidationDto,
   ProjectStaffOption,
   ProjectSummaryDto,
 } from "@/lib/project-types";
+import { cn } from "@/lib/utils";
 
-type ApiResponse<T> =
-  | { success: true; data: T; error: null }
-  | { success: false; data: null; error: string };
+type Tab = "ACTIVE" | "ATTENTION" | "BLOCKED" | "ARCHIVE";
 
-const healthLabel: Record<ProjectHealth, string> = {
-  ON_TRACK: "On Track",
-  NEED_ATTENTION: "Perlu Perhatian",
-  BLOCKED: "Blocked",
-  COMPLETED: "Selesai",
-};
+const TABS: { id: Tab; label: string }[] = [
+  { id: "ACTIVE", label: "Aktif" },
+  { id: "ATTENTION", label: "Perlu Perhatian" },
+  { id: "BLOCKED", label: "Blocked" },
+  { id: "ARCHIVE", label: "Selesai / Arsip" },
+];
+
+function isArchived(p: ProjectSummaryDto) {
+  return p.status === "COMPLETED" || p.status === "CANCELLED" || p.health_derived === "COMPLETED";
+}
 
 export default function ProjectsPage() {
+  const router = useRouter();
   const { toast } = useToast();
   const [projects, setProjects] = useState<ProjectSummaryDto[]>([]);
+  const [pending, setPending] = useState<ProjectPendingValidationDto[]>([]);
   const [staff, setStaff] = useState<ProjectStaffOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>("ACTIVE");
+  const [query, setQuery] = useState("");
+  const [picFilter, setPicFilter] = useState("ALL");
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [ownerFilter, setOwnerFilter] = useState("");
-  const [form, setForm] = useState({
-    name: "",
-    goal: "",
-    lead_staff_id: "",
-    next_action: "",
-    deadline: "",
-  });
+  const [form, setForm] = useState({ name: "", goal: "", lead_staff_id: "", deadline: "", start_date: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const ownerQuery = ownerFilter
-        ? `?owner=${encodeURIComponent(ownerFilter)}`
-        : "";
-      const [projectsRes, staffRes] = await Promise.all([
-        fetch(`/api/projects${ownerQuery}`, { cache: "no-store" }),
-        fetch("/api/projects/staff-options", { cache: "no-store" }),
+      const [list, validations, options] = await Promise.all([
+        apiCall<ProjectSummaryDto[]>("/api/projects"),
+        apiCall<ProjectPendingValidationDto[]>("/api/projects/validations"),
+        apiCall<ProjectStaffOption[]>("/api/projects/staff-options"),
       ]);
-      const projectsJson = (await projectsRes.json()) as ApiResponse<ProjectSummaryDto[]>;
-      const staffJson = (await staffRes.json()) as ApiResponse<ProjectStaffOption[]>;
-      if (!projectsJson.success) throw new Error(projectsJson.error);
-      setProjects(projectsJson.data);
-      if (staffJson.success) setStaff(staffJson.data);
+      setProjects(list);
+      setPending(validations);
+      setStaff(options);
     } catch (error) {
       toast({
         title: "Gagal memuat project",
@@ -75,36 +82,54 @@ export default function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [ownerFilter, toast]);
+  }, [toast]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const counts = useMemo(() => {
+    const live = projects.filter((p) => !isArchived(p));
+    return {
+      active: live.length,
+      attention: live.filter((p) => p.health_derived === "NEED_ATTENTION").length,
+      blocked: live.filter((p) => p.health_derived === "BLOCKED").length,
+      waiting: pending.length,
+    };
+  }, [projects, pending]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return projects.filter((p) => {
+      if (tab === "ARCHIVE" ? !isArchived(p) : isArchived(p)) return false;
+      if (tab === "ATTENTION" && p.health_derived !== "NEED_ATTENTION") return false;
+      if (tab === "BLOCKED" && p.health_derived !== "BLOCKED") return false;
+      if (q && !p.name.toLowerCase().includes(q)) return false;
+      if (picFilter !== "ALL") {
+        const lead = p.lead_staff_id === picFilter;
+        const named = staff.find((s) => s.staff_id === picFilter)?.name;
+        if (!lead && !(named && p.pic_names.includes(named))) return false;
+      }
+      return true;
+    });
+  }, [projects, tab, query, picFilter, staff]);
+
   async function createProject() {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
-      const response = await fetch("/api/projects", {
+      const created = await apiCall<ProjectSummaryDto>("/api/projects", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
+          name: form.name,
+          goal: form.goal || null,
           lead_staff_id: form.lead_staff_id || null,
           deadline: form.deadline || null,
+          start_date: form.start_date || null,
         }),
       });
-      const json = (await response.json()) as ApiResponse<ProjectSummaryDto>;
-      if (!json.success) throw new Error(json.error);
-      setForm({
-        name: "",
-        goal: "",
-        lead_staff_id: "",
-        next_action: "",
-        deadline: "",
-      });
       setShowNew(false);
-      await load();
+      router.push(`/projects/${created.id}`);
     } catch (error) {
       toast({
         title: "Gagal membuat project",
@@ -118,219 +143,240 @@ export default function ProjectsPage() {
 
   return (
     <AdminPage title="Project" backHref="/dashboard" maxWidth="3xl">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Project Berjalan</h2>
-          <p className="text-sm text-muted-foreground">
-            Satu project bisa punya beberapa workstream dan PIC berbeda.
-          </p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="grid flex-1 grid-cols-4 gap-2 text-center">
+          <Stat label="Aktif" value={counts.active} />
+          <Stat label="Perlu Perhatian" value={counts.attention} tone={counts.attention ? "amber" : undefined} />
+          <Stat label="Blocked" value={counts.blocked} tone={counts.blocked ? "red" : undefined} />
+          <Stat label="Menunggu Validasi" value={counts.waiting} tone={counts.waiting ? "sky" : undefined} />
         </div>
-        <Button onClick={() => setShowNew((value) => !value)}>
-          <Plus className="mr-2 size-4" />
-          Project
-        </Button>
+      </div>
+      <Button className="w-full sm:w-auto" onClick={() => setShowNew(true)}>
+        <Plus className="mr-2 size-4" />
+        Project Baru
+      </Button>
+
+      {pending.length ? (
+        <section className="space-y-2 rounded-xl border-2 border-sky-300 bg-sky-50 p-3">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-sky-900">
+            <ClipboardCheck className="size-4" />
+            Menunggu Validasi ({pending.length})
+          </h2>
+          {pending.map((item) => (
+            <Link
+              key={item.milestone_id}
+              href={`/projects/${item.project_id}?review=${item.milestone_id}`}
+              className="block rounded-lg border border-sky-200 bg-white p-3 active:scale-[0.99]"
+            >
+              <p className="text-xs text-muted-foreground">
+                {item.project_name} · {item.workstream_name}
+              </p>
+              <p className="font-semibold leading-snug">{item.milestone_title}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Diajukan {item.pic_name} · {formatStamp(item.submitted_at)} · langkah {item.steps_done}/
+                {item.steps_total} · {item.evidence_count} bukti
+              </p>
+              <span className="mt-2 inline-flex items-center text-sm font-semibold text-sky-800">
+                Review <ChevronRight className="size-4" />
+              </span>
+            </Link>
+          ))}
+        </section>
+      ) : null}
+
+      <div className="flex gap-1 overflow-x-auto rounded-lg bg-muted p-1">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "shrink-0 rounded-md px-3 py-2 text-sm font-medium",
+              tab === t.id ? "bg-background shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid gap-2 sm:grid-cols-[180px_1fr] sm:items-center">
-            <Label>Filter PIC</Label>
-            <Select
-              value={ownerFilter || "ALL"}
-              onValueChange={(value) => setOwnerFilter(value === "ALL" ? "" : value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Semua PIC" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Semua PIC</SelectItem>
-                {staff.map((item) => (
-                  <SelectItem key={item.staff_id} value={item.staff_id}>
-                    {item.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {showNew ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Buat Project Baru</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Nama project</Label>
-              <Input
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                placeholder="Contoh: Bisnis Ikan"
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Goal akhir</Label>
-              <Textarea
-                value={form.goal}
-                onChange={(event) => setForm({ ...form, goal: event.target.value })}
-                placeholder="Kapan project dianggap berhasil?"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>PIC Utama Project</Label>
-              <Select
-                value={form.lead_staff_id || "NONE"}
-                onValueChange={(value) =>
-                  setForm({
-                    ...form,
-                    lead_staff_id: value === "NONE" ? "" : value,
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih PIC" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">Belum ditentukan</SelectItem>
-                  {staff.map((item) => (
-                    <SelectItem key={item.staff_id} value={item.staff_id}>
-                      {item.name}{item.position ? ` · ${item.position}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Deadline</Label>
-              <Input
-                type="date"
-                value={form.deadline}
-                onChange={(event) =>
-                  setForm({ ...form, deadline: event.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Next action pertama</Label>
-              <Input
-                value={form.next_action}
-                onChange={(event) =>
-                  setForm({ ...form, next_action: event.target.value })
-                }
-                placeholder="Langkah berikut yang harus langsung bergerak"
-              />
-            </div>
-            <div className="flex justify-end gap-2 sm:col-span-2">
-              <Button variant="outline" onClick={() => setShowNew(false)}>
-                Batal
-              </Button>
-              <Button
-                onClick={createProject}
-                disabled={saving || !form.name.trim()}
-              >
-                {saving ? "Menyimpan..." : "Buat Project"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
+      <div className="grid gap-2 sm:grid-cols-[1fr_200px]">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Cari nama project"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <Select value={picFilter} onValueChange={setPicFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Semua PIC" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Semua PIC</SelectItem>
+            {staff.map((s) => (
+              <SelectItem key={s.staff_id} value={s.staff_id}>
+                {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {loading ? (
         <Card>
-          <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            Memuat project…
-          </CardContent>
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">Memuat project…</CardContent>
         </Card>
-      ) : projects.length === 0 ? (
+      ) : visible.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <FolderKanban className="mx-auto mb-3 size-9 text-muted-foreground" />
-            <p className="font-medium">Belum ada project</p>
+            <p className="font-medium">{projects.length ? "Tidak ada project di tab ini" : "Belum ada project"}</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Buat project pertama, lalu pecah menjadi workstream.
+              {projects.length ? "Coba tab atau filter lain." : "Tekan “Project Baru”, lalu susun milestone dan checklist-nya."}
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
-          {projects.map((project) => (
-            <Card key={project.id}>
-              <CardContent className="space-y-4 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link
-                      href={`/projects/${project.id}`}
-                      className="inline-flex items-center gap-1 font-semibold hover:underline"
-                    >
-                      <span className="truncate">{project.name}</span>
-                      <ChevronRight className="size-4 shrink-0" />
-                    </Link>
-                    {project.goal ? (
-                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                        {project.goal}
-                      </p>
-                    ) : null}
-                  </div>
-                  <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-medium">
-                    {healthLabel[project.health]}
-                  </span>
-                </div>
-
-                <div>
-                  <div className="mb-1 flex justify-between text-xs">
-                    <span className="text-muted-foreground">Progress</span>
-                    <strong>{project.progress}%</strong>
-                  </div>
-                  <Progress value={project.progress} />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-muted-foreground">PIC Utama</p>
-                    {project.lead_staff_id ? (
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 font-medium hover:underline"
-                        onClick={() => setOwnerFilter(project.lead_staff_id || "")}
-                      >
-                        <UserRound className="size-3.5" />
-                        {project.lead_name || "PIC"}
-                      </button>
-                    ) : (
-                      <p className="font-medium">Belum ditentukan</p>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Workstream</p>
-                    <p className="font-medium">{project.workstream_count}</p>
-                  </div>
-                </div>
-
-                {project.next_action ? (
-                  <div className="rounded-lg bg-muted/50 p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      Next Action
-                    </p>
-                    <p className="mt-1 text-sm">{project.next_action}</p>
-                  </div>
-                ) : null}
-
-                {project.blocker ? (
-                  <div className="flex gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm">
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
-                    <span>{project.blocker}</span>
-                  </div>
-                ) : null}
-
-                <p className="text-xs text-muted-foreground">
-                  {project.deadline ? `Deadline ${project.deadline}` : "Tanpa deadline"}
-                </p>
-              </CardContent>
-            </Card>
+          {visible.map((p) => (
+            <ProjectCard key={p.id} project={p} />
           ))}
         </div>
       )}
+
+      <Dialog open={showNew} onOpenChange={setShowNew}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Project Baru</DialogTitle>
+            <DialogDescription>
+              Isi yang inti dulu. Setelah dibuat, kamu menyusun bagian, milestone, dan checklist sebelum dibagikan ke PIC.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Nama project</Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Contoh: Bisnis Ikan Hias" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Goal / Definition of Done</Label>
+              <Textarea value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })} placeholder="Kapan project ini dianggap berhasil?" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>PIC utama</Label>
+              <Select value={form.lead_staff_id || "NONE"} onValueChange={(v) => setForm({ ...form, lead_staff_id: v === "NONE" ? "" : v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih PIC" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">Belum ditentukan</SelectItem>
+                  {staff.map((s) => (
+                    <SelectItem key={s.staff_id} value={s.staff_id}>
+                      {s.name}
+                      {s.position ? ` · ${s.position}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Deadline</Label>
+                <Input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Mulai (opsional)</Label>
+                <Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNew(false)}>
+              Batal
+            </Button>
+            <Button onClick={createProject} disabled={saving || !form.name.trim()}>
+              {saving ? "Menyimpan…" : "Buat & Susun"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminPage>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: number; tone?: "amber" | "red" | "sky" }) {
+  const toneClass =
+    tone === "amber"
+      ? "border-amber-300 bg-amber-50 text-amber-900"
+      : tone === "red"
+        ? "border-red-300 bg-red-50 text-red-900"
+        : tone === "sky"
+          ? "border-sky-300 bg-sky-50 text-sky-900"
+          : "bg-card";
+  return (
+    <div className={cn("rounded-lg border px-1 py-2", toneClass)}>
+      <p className="text-xl font-bold leading-none">{value}</p>
+      <p className="mt-1 text-[10px] leading-tight text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function ProjectCard({ project: p }: { project: ProjectSummaryDto }) {
+  return (
+    <Link href={`/projects/${p.id}`} className="block">
+      <Card className="h-full transition hover:border-primary/40">
+        <CardContent className="space-y-3 p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate font-semibold">{p.name}</p>
+              <p className="text-xs text-muted-foreground">
+                PIC: {p.lead_name || "belum ditentukan"}
+                {p.pic_names.length > 1 ? ` +${p.pic_names.length - 1}` : ""}
+              </p>
+            </div>
+            {p.setup_status === "PUBLISHED" ? (
+              <span className={cn("shrink-0 rounded-full px-2 py-1 text-[11px] font-medium", healthBadgeClass(p.health_derived))}>
+                {HEALTH_LABEL[p.health_derived]}
+              </span>
+            ) : (
+              <span className="shrink-0 rounded-full bg-violet-100 px-2 py-1 text-[11px] font-medium text-violet-800">
+                {p.setup_status === "READY" ? "Siap dibagikan" : "Disiapkan"}
+              </span>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-1 flex justify-between text-xs">
+              <span className="text-muted-foreground">
+                {p.milestone_done} / {p.milestone_total} milestone disetujui
+              </span>
+              <strong>{p.progress}%</strong>
+            </div>
+            <Progress value={p.progress} />
+          </div>
+
+          {p.focus_text && p.setup_status === "PUBLISHED" ? (
+            <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Berikutnya </span>
+              {p.focus_text}
+            </p>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>Deadline {formatDeadline(p.deadline)}</span>
+            {p.waiting_validation ? <span className="font-semibold text-sky-700">{p.waiting_validation} menunggu validasi</span> : null}
+            {p.revision ? <span className="font-semibold text-red-700">{p.revision} direvisi</span> : null}
+            {p.overdue ? <span className="font-semibold text-red-700">{p.overdue} terlambat</span> : null}
+            {p.active_blockers ? (
+              <span className="inline-flex items-center gap-1 font-semibold text-red-700">
+                <AlertTriangle className="size-3" /> {p.active_blockers} kendala
+              </span>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
