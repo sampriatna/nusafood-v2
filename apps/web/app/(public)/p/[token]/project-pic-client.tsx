@@ -471,7 +471,7 @@ function StepRow({
           type="checkbox"
           className="mt-0.5 size-6 shrink-0 accent-emerald-600"
           checked={s.is_checked}
-          disabled={locked || busy}
+          disabled={locked || busy || (s.requires_evidence && !s.evidence_url && !s.is_checked)}
           onChange={(e) => onPatch(s.id, { is_checked: e.target.checked })}
         />
         <span className="min-w-0 flex-1 leading-snug">
@@ -480,7 +480,7 @@ function StepRow({
             {!s.is_required ? <span>Opsional</span> : null}
             {s.requires_evidence ? (
               <span className={cn("inline-flex items-center gap-1 font-semibold", s.evidence_url ? "text-emerald-700" : "text-amber-700")}>
-                <Camera className="size-3" /> {s.evidence_url ? "Bukti terunggah" : "Bukti wajib"}
+                <Camera className="size-3" /> {s.evidence_url ? "Bukti terunggah" : "Upload foto dulu untuk menyelesaikan"}
               </span>
             ) : null}
           </span>
