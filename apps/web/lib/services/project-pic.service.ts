@@ -320,6 +320,9 @@ export async function updateProjectPicStep(
     evidence_url?: string | null;
   },
 ): Promise<ProjectMilestoneStepDto> {
+  if (input.evidence_url && !/^https?:\/\//i.test(input.evidence_url.trim())) {
+    throw new ProjectPicError("Link bukti harus diawali http:// atau https://", "INVALID_EVIDENCE_URL", 422);
+  }
   const step = await prisma.projectMilestoneStep.findUnique({ where: { id: stepId } });
   if (!step) {
     throw new ProjectPicError("Langkah tidak ditemukan", "STEP_NOT_FOUND", 404);

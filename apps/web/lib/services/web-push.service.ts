@@ -37,6 +37,27 @@ function rawPublicKeyToJwk(publicKey: string, privateKey: string): JWK {
   };
 }
 
+/** Hanya layanan push resmi browser — server tidak boleh dipakai mengirim request ke alamat sembarang. */
+const PUSH_HOST_SUFFIXES = [
+  "fcm.googleapis.com",
+  "android.googleapis.com",
+  "updates.push.services.mozilla.com",
+  "push.services.mozilla.com",
+  "notify.windows.com",
+  "push.apple.com",
+];
+
+export function isTrustedPushEndpoint(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    return PUSH_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+  } catch {
+    return false;
+  }
+}
+
 async function buildVapidAuthorization(endpoint: string) {
   const config = getVapidConfig();
   if (!config) return null;
@@ -80,7 +101,7 @@ export async function saveStaffPushSubscription(input: {
   endpoint: string;
   userAgent?: string | null;
 }) {
-  if (!/^https:\/\//i.test(input.endpoint)) {
+  if (!isTrustedPushEndpoint(input.endpoint)) {
     throw new Error("Push endpoint tidak valid");
   }
   await ensurePushSubscriptionsTable();

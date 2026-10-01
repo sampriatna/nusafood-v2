@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import { deleteMilestoneStep } from "@/lib/services/project-pic.service";
 
@@ -18,7 +18,7 @@ export async function DELETE(
       typeof error === "object" && error && "status" in error
         ? Number((error as { status?: number }).status || 500)
         : 500;
-    return fail(error instanceof Error ? error.message : "Gagal menghapus checklist", {
+    return fail(publicErrorMessage(error, "Gagal menghapus checklist"), {
       status,
     });
   }

@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import { reviewProjectMilestone } from "@/lib/services/project-pic.service";
 
@@ -30,7 +30,7 @@ export async function POST(
       typeof error === "object" && error && "status" in error
         ? Number((error as { status?: number }).status || 500)
         : 500;
-    return fail(error instanceof Error ? error.message : "Gagal memvalidasi milestone", {
+    return fail(publicErrorMessage(error, "Gagal memvalidasi milestone"), {
       status,
     });
   }

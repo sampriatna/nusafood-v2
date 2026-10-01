@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import type { ProjectHealth, ProjectStatus } from "@/lib/project-types";
 import { requireAuth } from "@/lib/require-auth";
 import {
@@ -33,7 +33,7 @@ export async function GET(
     const project = await getProject(projectId);
     return project ? ok(project) : fail("Project tidak ditemukan", { status: 404 });
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal memuat project", {
+    return fail(publicErrorMessage(error, "Gagal memuat project"), {
       status: 500,
     });
   }
@@ -76,7 +76,7 @@ export async function PATCH(
     const project = await updateProject(projectId, patch);
     return project ? ok(project) : fail("Project tidak ditemukan", { status: 404 });
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal memperbarui project", {
+    return fail(publicErrorMessage(error, "Gagal memperbarui project"), {
       status: 500,
     });
   }

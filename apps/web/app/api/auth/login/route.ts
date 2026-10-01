@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "@/lib/api/response";
 import {
   createSessionToken,
   SESSION_COOKIE_NAME,
@@ -128,7 +129,7 @@ export async function POST(request: Request) {
     return response
   } catch (error) {
     console.error("[POST /api/auth/login]", error)
-    return fail(error instanceof Error ? error.message : "Login gagal", {
+    return fail(publicErrorMessage(error, "Login gagal"), {
       code: "LOGIN_FAILED",
       status: 500,
     })

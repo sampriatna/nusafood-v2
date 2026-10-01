@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import {
   internalAuthFailure,
   verifyInternalRequest,
@@ -42,7 +42,7 @@ async function runGenerate(request: Request) {
   } catch (error) {
     console.error("[POST /api/internal/recurring/generate]", error);
     return fail(
-      error instanceof Error ? error.message : "Generate recurring gagal",
+      publicErrorMessage(error, "Generate recurring gagal"),
       { code: "RECURRING_GENERATE_FAILED", status: 500 },
     );
   }

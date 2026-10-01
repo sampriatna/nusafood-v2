@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import {
   createProject,
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const owner = new URL(request.url).searchParams.get("owner") || undefined;
     return ok(await listProjects(owner));
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal memuat project", {
+    return fail(publicErrorMessage(error, "Gagal memuat project"), {
       status: 500,
     });
   }
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal membuat project", {
+    return fail(publicErrorMessage(error, "Gagal membuat project"), {
       status: 500,
     });
   }

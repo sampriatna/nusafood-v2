@@ -3,7 +3,10 @@ import {
   DailyActivityError,
   getStaffReportByToken,
 } from "@/lib/services/daily-activity.service";
-import { saveStaffPushSubscription } from "@/lib/services/web-push.service";
+import {
+  isTrustedPushEndpoint,
+  saveStaffPushSubscription,
+} from "@/lib/services/web-push.service";
 
 type Body = {
   token?: string;
@@ -22,6 +25,13 @@ export async function POST(request: Request) {
       return fail("Token staff dan push endpoint wajib diisi", {
         code: "PUSH_INVALID_PAYLOAD",
         status: 400,
+      });
+    }
+
+    if (!isTrustedPushEndpoint(endpoint)) {
+      return fail("Alamat notifikasi browser tidak dikenali", {
+        code: "PUSH_INVALID_ENDPOINT",
+        status: 422,
       });
     }
 

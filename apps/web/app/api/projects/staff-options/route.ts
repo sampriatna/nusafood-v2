@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { requireAuth } from "@/lib/require-auth";
 import { listProjectStaffOptions } from "@/lib/services/project.service";
 
@@ -11,7 +11,7 @@ export async function GET() {
   try {
     return ok(await listProjectStaffOptions());
   } catch (error) {
-    return fail(error instanceof Error ? error.message : "Gagal memuat staff", {
+    return fail(publicErrorMessage(error, "Gagal memuat staff"), {
       status: 500,
     });
   }

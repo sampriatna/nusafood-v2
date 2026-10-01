@@ -1,4 +1,4 @@
-import { fail, ok } from "@/lib/api/response";
+import { fail, ok, publicErrorMessage } from "@/lib/api/response";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/require-auth";
 import {
@@ -219,10 +219,10 @@ export async function POST(request: Request) {
       entityType: "task",
       v2Status: "failed",
       errorMessage:
-        error instanceof Error ? error.message : "Gagal upload foto",
+        publicErrorMessage(error, "Gagal upload foto"),
     }).catch(() => undefined);
     return fail(
-      error instanceof Error ? error.message : "Gagal upload foto",
+      publicErrorMessage(error, "Gagal upload foto"),
       { code: "PHOTO_UPLOAD_FAILED", status: 500 },
     );
   }

@@ -1,4 +1,5 @@
 import type { ReportConditionStatus } from "@nusafood/types";
+import { isSafeMediaUrl } from "@/lib/id";
 import { NextResponse } from "next/server";
 import { fail } from "@/lib/api/response";
 import {
@@ -32,6 +33,9 @@ export async function POST(request: Request) {
         : typeof body.photo_base64 === "string"
           ? body.photo_base64
           : null;
+    if (!isSafeMediaUrl(photoUrl)) {
+      return fail("Format foto tidak valid", { code: "INVALID_PHOTO_URL", status: 422 });
+    }
     const statusCondition = body.status_condition as ReportConditionStatus;
     const checklistAnswers = Array.isArray(body.checklist_answers)
       ? body.checklist_answers.map(
