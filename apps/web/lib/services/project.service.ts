@@ -175,7 +175,7 @@ async function buildProjects(projectIds?: string[]): Promise<ProjectDetailDto[]>
       })
     : [];
   const milestoneIds = milestones.map((row) => row.id);
-  const [steps, reviews, blockers, lastActivity] = await Promise.all([
+  const [steps, reviews, blockers, lastActivity, memberRows] = await Promise.all([
     milestoneIds.length
       ? prisma.projectMilestoneStep.findMany({
           where: { milestoneId: { in: milestoneIds } },
@@ -197,7 +197,17 @@ async function buildProjects(projectIds?: string[]): Promise<ProjectDetailDto[]>
       where: { projectId: { in: ids } },
       _max: { createdAt: true },
     }),
+    workstreamIds.length
+      ? prisma.projectWorkstreamMember.findMany({ where: { workstreamId: { in: workstreamIds } } })
+      : [],
   ]);
+  const memberStaff = memberRows.length
+    ? await prisma.staff.findMany({
+        where: { staffId: { in: [...new Set(memberRows.map((m) => m.staffId))] } },
+        select: { staffId: true, name: true },
+      })
+    : [];
+  const memberName = new Map(memberStaff.map((m) => [m.staffId, m.name]));
 
   const today = todayKeyInAppTz();
   const stepsByMilestone = new Map<string, ProjectMilestoneStepDto[]>();
@@ -256,6 +266,9 @@ async function buildProjects(projectIds?: string[]): Promise<ProjectDetailDto[]>
       sort_order: row.sortOrder,
       progress: calcWorkstreamProgress(own),
       milestones: own,
+      members: memberRows
+        .filter((m) => m.workstreamId === row.id)
+        .map((m) => ({ staff_id: m.staffId, name: memberName.get(m.staffId) || "Anggota" })),
     };
   });
 
@@ -427,16 +440,17 @@ export async function getPicWorkload(staffId: string): Promise<ProjectPicWorkloa
   for (const project of projects) {
     if (project.status === "CANCELLED") continue;
     const own = project.workstreams.filter((w) => w.owner_staff_id === staffId);
+    const helper = project.workstreams.filter((w) => w.members.some((m) => m.staff_id === staffId));
     const isLead = project.lead_staff_id === staffId;
-    if (!isLead && !own.length) continue;
-    const scope = isLead ? project.workstreams : own;
+    if (!isLead && !own.length && !helper.length) continue;
+    const scope = isLead ? project.workstreams : [...own, ...helper];
     const ms = scope.flatMap((w) => w.milestones);
     result.projects.push({
       project_id: project.id,
       project_name: project.name,
-      role: isLead ? "PIC_UTAMA" : "BAGIAN",
-      workstream_names: own.map((w) => w.name),
-      progress: isLead ? project.progress : calcProjectProgress(own),
+      role: isLead ? "PIC_UTAMA" : own.length ? "BAGIAN" : "ANGGOTA",
+      workstream_names: [...own, ...helper].map((w) => w.name),
+      progress: isLead ? project.progress : calcProjectProgress(scope),
       waiting_validation: ms.filter((m) => m.status === "WAITING_VALIDATION").length,
       overdue: ms.filter((m) => deadlineState(m.deadline, today, m.status === "DONE") === "overdue").length,
     });
@@ -562,12 +576,13 @@ export async function updateProject(
   return getProject(projectId);
 }
 
-async function revokeLinkIfNoRole(projectId: string, staffId: string, actor: Actor) {
-  const [project, owned] = await Promise.all([
+export async function revokeLinkIfNoRole(projectId: string, staffId: string, actor: Actor) {
+  const [project, owned, memberOf] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId }, select: { leadStaffId: true } }),
     prisma.projectWorkstream.count({ where: { projectId, ownerStaffId: staffId } }),
+    prisma.projectWorkstreamMember.count({ where: { staffId, workstreamId: { in: (await prisma.projectWorkstream.findMany({ where: { projectId }, select: { id: true } })).map((w) => w.id) } } }),
   ]);
-  if (!project || project.leadStaffId === staffId || owned > 0) return;
+  if (!project || project.leadStaffId === staffId || owned > 0 || memberOf > 0) return;
   const link = await prisma.projectPicLink.findUnique({
     where: { projectId_staffId: { projectId, staffId } },
   });
@@ -974,4 +989,50 @@ export async function resolveBlocker(
       }),
     }),
   ]);
+}
+
+/* ─── anggota pendukung ─── */
+
+export async function addWorkstreamMember(workstreamId: string, staffId: string, actor: Actor): Promise<void> {
+  const ws = await prisma.projectWorkstream.findUnique({ where: { id: workstreamId } });
+  if (!ws) throw new ProjectError("Bagian tidak ditemukan", "WORKSTREAM_NOT_FOUND", 404);
+  const name = await assertActiveStaff(staffId);
+  if (!name) throw new ProjectError("Pilih anggota", "MEMBER_REQUIRED", 422);
+  if (ws.ownerStaffId === staffId) {
+    throw new ProjectError("Orang ini sudah menjadi PIC bagian ini", "ALREADY_PIC", 409);
+  }
+  const exists = await prisma.projectWorkstreamMember.findUnique({
+    where: { workstreamId_staffId: { workstreamId, staffId } },
+  });
+  if (exists) throw new ProjectError("Sudah menjadi anggota bagian ini", "ALREADY_MEMBER", 409);
+  await prisma.$transaction([
+    prisma.projectWorkstreamMember.create({ data: { workstreamId, staffId } }),
+    prisma.projectActivity.create({
+      data: activityData({
+        projectId: ws.projectId,
+        workstreamId,
+        action: "MEMBER_ADDED",
+        actor,
+        message: `${name} ditambahkan sebagai anggota bagian “${ws.name}”.`,
+      }),
+    }),
+  ]);
+}
+
+export async function removeWorkstreamMember(workstreamId: string, staffId: string, actor: Actor): Promise<void> {
+  const ws = await prisma.projectWorkstream.findUnique({ where: { id: workstreamId } });
+  if (!ws) return;
+  const staff = await prisma.staff.findUnique({ where: { staffId }, select: { name: true } });
+  const removed = await prisma.projectWorkstreamMember.deleteMany({ where: { workstreamId, staffId } });
+  if (!removed.count) return;
+  await prisma.projectActivity.create({
+    data: activityData({
+      projectId: ws.projectId,
+      workstreamId,
+      action: "MEMBER_REMOVED",
+      actor,
+      message: `${staff?.name || "Anggota"} dikeluarkan dari bagian “${ws.name}”.`,
+    }),
+  });
+  await revokeLinkIfNoRole(ws.projectId, staffId, actor);
 }

@@ -122,6 +122,8 @@ export type ProjectWorkstreamDto = {
   sort_order: number;
   progress: number;
   milestones: ProjectMilestoneDto[];
+  /** Anggota pendukung (bukan accountable). */
+  members: { staff_id: string; name: string }[];
 };
 
 export type ProjectPendingValidationDto = {
@@ -185,7 +187,7 @@ export type ProjectPicWorkloadDto = {
   projects: {
     project_id: string;
     project_name: string;
-    role: "PIC_UTAMA" | "BAGIAN";
+    role: "PIC_UTAMA" | "BAGIAN" | "ANGGOTA";
     workstream_names: string[];
     progress: number;
     waiting_validation: number;
@@ -213,6 +215,8 @@ export type ProjectPicViewDto = {
     milestone_total: number;
   };
   scope: "ALL" | "OWN";
+  /** Bagian yang boleh diajukan validasinya oleh PIC ini (anggota pendukung tidak). */
+  submit_workstream_ids: string[];
   link: ProjectPicLinkDto;
   workstreams: ProjectWorkstreamDto[];
   focus: {

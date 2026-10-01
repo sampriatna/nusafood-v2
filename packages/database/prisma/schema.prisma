@@ -878,3 +878,13 @@ model ProjectBlocker {
   @@index([projectId, resolvedAt], map: "idx_prj_blockers_project")
   @@map("prj_blockers")
 }
+
+model ProjectWorkstreamMember {
+  workstreamId String   @map("workstream_id") @db.Uuid
+  staffId      String   @map("staff_id") @db.VarChar(50)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([workstreamId, staffId])
+  @@index([staffId], map: "idx_prj_ws_members_staff")
+  @@map("prj_workstream_members")
+}

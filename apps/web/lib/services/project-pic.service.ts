@@ -4,6 +4,7 @@ import { ProjectError } from "@/lib/project-errors";
 import {
   calcProjectProgress,
   canSubmitFromStatus,
+  canSubmitWorkstream,
   canWorkOnWorkstream,
   checkMilestoneSubmit,
   computeFocus,
@@ -84,7 +85,19 @@ async function scopeOf(project: { id: string; leadStaffId: string | null }, staf
     where: { projectId: project.id },
     select: { id: true, ownerStaffId: true },
   });
-  return picScope(project.leadStaffId, workstreams, staffId);
+  const members = workstreams.length
+    ? await prisma.projectWorkstreamMember.findMany({
+        where: { workstreamId: { in: workstreams.map((w) => w.id) } },
+      })
+    : [];
+  return picScope(
+    project.leadStaffId,
+    workstreams.map((w) => ({
+      ...w,
+      memberStaffIds: members.filter((m) => m.workstreamId === w.id).map((m) => m.staffId),
+    })),
+    staffId,
+  );
 }
 
 async function assertAssigned(projectId: string, staffId: string) {
@@ -181,7 +194,11 @@ export async function publishAndShare(
   const project = await publishProject(projectId, actor);
   const picIds = [
     ...new Set(
-      [project.lead_staff_id, ...project.workstreams.map((w) => w.owner_staff_id)].filter(
+      [
+        project.lead_staff_id,
+        ...project.workstreams.map((w) => w.owner_staff_id),
+        ...project.workstreams.flatMap((w) => w.members.map((m) => m.staff_id)),
+      ].filter(
         (id): id is string => Boolean(id),
       ),
     ),
@@ -210,6 +227,7 @@ function emptyView(
       milestone_total: 0,
     },
     scope: scope.kind === "ALL" ? "ALL" : "OWN",
+    submit_workstream_ids: [],
     link: picLinkDto(ctx.link, ctx.staff.name),
     workstreams: [],
     focus: null,
@@ -256,6 +274,7 @@ export async function getProjectPicView(key: string): Promise<ProjectPicViewDto>
       milestone_total: milestones.length,
     },
     scope: scope.kind === "ALL" ? "ALL" : "OWN",
+    submit_workstream_ids: visible.filter((w) => canSubmitWorkstream(scope, w.id)).map((w) => w.id),
     link: picLinkDto(ctx.link, ctx.staff.name),
     workstreams: visible,
     focus: computeFocus(milestones),
@@ -267,7 +286,7 @@ export async function getProjectPicView(key: string): Promise<ProjectPicViewDto>
 
 /* ─── aksi PIC ─── */
 
-async function assertMilestoneAccess(key: string, milestoneId: string) {
+async function assertMilestoneAccess(key: string, milestoneId: string, options: { accountable?: boolean } = {}) {
   const ctx = await resolveActiveLink(key);
   const milestone = await prisma.projectMilestone.findUnique({ where: { id: milestoneId } });
   if (!milestone) err("Milestone tidak ditemukan", "MILESTONE_NOT_FOUND", 404);
@@ -283,6 +302,9 @@ async function assertMilestoneAccess(key: string, milestoneId: string) {
   }
   if (!canWorkOnWorkstream(scope, workstream.id)) {
     err("Milestone ini bukan tanggung jawab kamu", "FORBIDDEN", 403);
+  }
+  if (options.accountable && !canSubmitWorkstream(scope, workstream.id)) {
+    err("Hanya PIC bagian ini yang bisa melakukan aksi ini. Kamu anggota pendukung.", "MEMBER_NOT_ALLOWED", 403);
   }
   if (!ctx.project.publishedAt) {
     err("Project sedang disiapkan", "PROJECT_NOT_PUBLISHED", 409);
@@ -396,7 +418,7 @@ export async function updateProjectPicStep(
 }
 
 export async function submitProjectMilestone(key: string, milestoneId: string): Promise<void> {
-  const access = await assertMilestoneAccess(key, milestoneId);
+  const access = await assertMilestoneAccess(key, milestoneId, { accountable: true });
   const { staff, project, workstream } = access;
 
   await prisma.$transaction(async (tx) => {
@@ -496,7 +518,7 @@ export async function resolveProjectPicBlocker(key: string, blockerId: string): 
   const blocker = await prisma.projectBlocker.findUnique({ where: { id: blockerId } });
   if (!blocker || blocker.resolvedAt) return;
   if (!blocker.milestoneId) err("Akses ditolak", "FORBIDDEN", 403);
-  const { staff } = await assertMilestoneAccess(key, blocker.milestoneId);
+  const { staff } = await assertMilestoneAccess(key, blocker.milestoneId, { accountable: true });
   await prisma.$transaction([
     prisma.projectBlocker.update({
       where: { id: blockerId },

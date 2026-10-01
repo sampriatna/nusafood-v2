@@ -248,9 +248,11 @@ export function ProjectPicClient({ token }: { token: string }) {
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {b.milestone_title} · {b.reported_by_name}, {formatStamp(b.created_at)}
               </p>
-              <Button size="sm" variant="outline" className="mt-2" disabled={busyKey === `res-${b.id}`} onClick={() => resolveBlocker(b.id)}>
-                Sudah teratasi
-              </Button>
+              {b.workstream_id && data.submit_workstream_ids.includes(b.workstream_id) ? (
+                <Button size="sm" variant="outline" className="mt-2" disabled={busyKey === `res-${b.id}`} onClick={() => resolveBlocker(b.id)}>
+                  Sudah teratasi
+                </Button>
+              ) : null}
             </div>
           ))}
         </section>
@@ -282,6 +284,7 @@ export function ProjectPicClient({ token }: { token: string }) {
                   onUpload={upload}
                   onSubmit={() => submit(m.id)}
                   onBlocker={(text) => reportBlocker(m.id, text)}
+                  canSubmit={data.submit_workstream_ids.includes(ws.id)}
                 />
               ))}
             </div>
@@ -311,6 +314,7 @@ function MilestoneBlock({
   onUpload,
   onSubmit,
   onBlocker,
+  canSubmit,
 }: {
   index: number;
   milestone: ProjectMilestoneDto;
@@ -322,6 +326,7 @@ function MilestoneBlock({
   onUpload: (stepId: string, file?: File) => void;
   onSubmit: () => void;
   onBlocker: (text: string) => void;
+  canSubmit: boolean;
 }) {
   const locked = m.status === "WAITING_VALIDATION" || m.status === "DONE";
   const done = m.steps.filter((s) => s.is_checked).length;
@@ -380,7 +385,14 @@ function MilestoneBlock({
             ))}
           </ul>
 
-          {!locked ? (
+          {!locked && !canSubmit ? (
+            <p className="rounded-xl bg-muted p-3 text-sm text-muted-foreground">
+              Kamu membantu di bagian ini. Yang mengajukan validasi adalah PIC bagian.
+              {check.canSubmit ? " Semua langkah wajib sudah beres, kabari PIC-nya." : ""}
+            </p>
+          ) : null}
+
+          {!locked && canSubmit ? (
             <div className="space-y-2">
               {!check.canSubmit ? (
                 <div className="rounded-xl bg-muted p-3 text-sm">

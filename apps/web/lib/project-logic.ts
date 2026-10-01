@@ -160,22 +160,37 @@ export function canSubmitFromStatus(status: string): boolean {
 
 export type PicScope =
   | { kind: "ALL" }
-  | { kind: "OWN"; workstreamIds: string[] }
+  /** workstreamIds = bagian yang menjadi tanggung jawab (accountable); helperIds = bagian sebagai anggota pendukung. */
+  | { kind: "OWN"; workstreamIds: string[]; helperIds: string[] }
   | { kind: "NONE" };
 
-/** PIC utama melihat semua workstream; PIC workstream hanya miliknya. */
+/** PIC utama melihat semua workstream; PIC bagian hanya miliknya; anggota hanya bagian yang diikutinya. */
 export function picScope(
   leadStaffId: string | null,
-  workstreams: { id: string; ownerStaffId: string | null }[],
+  workstreams: { id: string; ownerStaffId: string | null; memberStaffIds?: string[] }[],
   staffId: string,
 ): PicScope {
   if (leadStaffId && leadStaffId === staffId) return { kind: "ALL" };
   const own = workstreams.filter((x) => x.ownerStaffId === staffId).map((x) => x.id);
-  return own.length ? { kind: "OWN", workstreamIds: own } : { kind: "NONE" };
+  const helper = workstreams
+    .filter((x) => x.ownerStaffId !== staffId && x.memberStaffIds?.includes(staffId))
+    .map((x) => x.id);
+  return own.length || helper.length
+    ? { kind: "OWN", workstreamIds: own, helperIds: helper }
+    : { kind: "NONE" };
 }
 
-/** Boleh mengerjakan milestone di workstream tertentu? (PIC utama boleh seluruhnya.) */
+/** Boleh mengerjakan langkah (centang, catatan, bukti, lapor kendala) di workstream ini? Anggota boleh. */
 export function canWorkOnWorkstream(scope: PicScope, workstreamId: string): boolean {
+  if (scope.kind === "ALL") return true;
+  if (scope.kind === "OWN") {
+    return scope.workstreamIds.includes(workstreamId) || scope.helperIds.includes(workstreamId);
+  }
+  return false;
+}
+
+/** Hanya yang accountable (PIC utama / PIC bagian) yang boleh mengajukan validasi. Anggota tidak. */
+export function canSubmitWorkstream(scope: PicScope, workstreamId: string): boolean {
   if (scope.kind === "ALL") return true;
   if (scope.kind === "OWN") return scope.workstreamIds.includes(workstreamId);
   return false;
