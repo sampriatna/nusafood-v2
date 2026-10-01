@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
   Circle,
   Copy,
+  CopyPlus,
   Link2,
   Pencil,
   Plus,
@@ -31,6 +32,7 @@ import {
   healthBadgeClass,
   PROJECT_STATUS_LABEL,
 } from "@/lib/project-ui";
+import type { LinkedTaskDto } from "@/lib/services/project-structure.service";
 import type {
   ProjectDetailDto,
   ProjectMilestoneDto,
@@ -51,6 +53,9 @@ import { MilestoneCard } from "./milestone-card";
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const router = useRouter();
+  const [tasks, setTasks] = useState<LinkedTaskDto[]>([]);
+  const [taskInput, setTaskInput] = useState({ task_id: "", milestone_id: "" });
   const { toast } = useToast();
   const [project, setProject] = useState<ProjectDetailDto | null>(null);
   const [staff, setStaff] = useState<ProjectStaffOption[]>([]);
@@ -71,11 +76,13 @@ export default function ProjectDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const [detail, options, picLinks] = await Promise.all([
+      const [detail, options, picLinks, linked] = await Promise.all([
         apiCall<ProjectDetailDto>(`/api/projects/${projectId}`),
         apiCall<ProjectStaffOption[]>("/api/projects/staff-options"),
         apiCall<ProjectPicLinkDto[]>(`/api/projects/${projectId}/pic-links`),
+        apiCall<LinkedTaskDto[]>(`/api/projects/${projectId}/tasks`),
       ]);
+      setTasks(linked);
       setProject(detail);
       setStaff(options);
       setLinks(picLinks);
@@ -197,6 +204,19 @@ export default function ProjectDetailPage() {
                   {project.setup_status === "READY" ? "Siap dibagikan" : "Sedang disiapkan"}
                 </span>
               )}
+              <Button
+                size="icon"
+                variant="outline"
+                aria-label="Duplikat project"
+                disabled={busy}
+                onClick={async () => {
+                  if (!window.confirm("Duplikat struktur project ini? PIC, bukti, dan progress tidak ikut disalin.")) return;
+                  const copy = await act(() => apiCall<ProjectDetailDto>(`/api/projects/${projectId}/duplicate`, { method: "POST", body: JSON.stringify({}) }), "Project diduplikasi");
+                  if (copy) router.push(`/projects/${copy.id}`);
+                }}
+              >
+                <CopyPlus className="size-4" />
+              </Button>
               <Button size="icon" variant="outline" aria-label="Edit project" onClick={() => setEditProject(true)}>
                 <Pencil className="size-4" />
               </Button>
@@ -544,6 +564,61 @@ export default function ProjectDetailPage() {
           </Card>
         </section>
       ) : null}
+
+      {/* Task terkait */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Task terkait</h2>
+        <Card>
+          <CardContent className="space-y-3 p-3">
+            {tasks.length === 0 ? <p className="text-sm text-muted-foreground">Belum ada task yang dihubungkan. Task rutin tidak wajib masuk project.</p> : null}
+            {tasks.map((t) => (
+              <div key={t.link_id} className="flex items-start justify-between gap-2 rounded-md bg-muted/40 p-2 text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium leading-snug">{t.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t.task_id} · {t.status}
+                    {t.staff_name ? ` · ${t.staff_name}` : ""}
+                    {t.milestone_id ? ` · ${allMilestones.find((x) => x.m.id === t.milestone_id)?.m.title ?? ""}` : ""}
+                  </p>
+                </div>
+                <Button size="icon" variant="ghost" aria-label="Lepas task" disabled={busy} onClick={() => act(() => apiCall(`/api/projects/${projectId}/tasks`, { method: "DELETE", body: JSON.stringify({ link_id: t.link_id }) }), "Task dilepas")}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            ))}
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <input
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                placeholder="ID task, mis. TSK-2026…"
+                value={taskInput.task_id}
+                onChange={(e) => setTaskInput({ ...taskInput, task_id: e.target.value })}
+              />
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={taskInput.milestone_id}
+                onChange={(e) => setTaskInput({ ...taskInput, milestone_id: e.target.value })}
+              >
+                <option value="">Tanpa milestone</option>
+                {allMilestones.map(({ ws, m }) => (
+                  <option key={m.id} value={m.id}>
+                    {ws.name} › {m.title}
+                  </option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                disabled={busy || !taskInput.task_id.trim()}
+                onClick={async () => {
+                  const done = await act(() => apiCall(`/api/projects/${projectId}/tasks`, { method: "POST", body: JSON.stringify(taskInput) }), "Task dihubungkan");
+                  if (done !== undefined) setTaskInput({ task_id: "", milestone_id: "" });
+                }}
+              >
+                Hubungkan
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
 
       {/* Riwayat */}
       <section className="space-y-2">

@@ -60,16 +60,19 @@ export default function ProjectsPage() {
   const [picFilter, setPicFilter] = useState("ALL");
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", goal: "", lead_staff_id: "", deadline: "", start_date: "" });
+  const [templates, setTemplates] = useState<{ id: string; name: string; description: string; milestone_count: number }[]>([]);
+  const [form, setForm] = useState({ name: "", goal: "", lead_staff_id: "", deadline: "", start_date: "", template_id: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, validations, options] = await Promise.all([
+      const [list, validations, options, tpls] = await Promise.all([
         apiCall<ProjectSummaryDto[]>("/api/projects"),
         apiCall<ProjectPendingValidationDto[]>("/api/projects/validations"),
         apiCall<ProjectStaffOption[]>("/api/projects/staff-options"),
+        apiCall<{ id: string; name: string; description: string; milestone_count: number }[]>("/api/projects/templates"),
       ]);
+      setTemplates(tpls);
       setProjects(list);
       setPending(validations);
       setStaff(options);
@@ -126,6 +129,7 @@ export default function ProjectsPage() {
           lead_staff_id: form.lead_staff_id || null,
           deadline: form.deadline || null,
           start_date: form.start_date || null,
+          template_id: form.template_id || undefined,
         }),
       });
       setShowNew(false);
@@ -260,6 +264,29 @@ export default function ProjectsPage() {
               <Label>Nama project</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Contoh: Bisnis Ikan Hias" />
             </div>
+            {templates.length ? (
+              <div className="space-y-1.5">
+                <Label>Mulai dari</Label>
+                <Select value={form.template_id || "NONE"} onValueChange={(v) => setForm({ ...form, template_id: v === "NONE" ? "" : v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">Kosong (susun sendiri)</SelectItem>
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        Template: {t.name} · {t.milestone_count} milestone
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.template_id ? (
+                  <p className="text-xs text-muted-foreground">
+                    {templates.find((t) => t.id === form.template_id)?.description} Struktur bisa diubah setelah dibuat.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="space-y-1.5">
               <Label>Goal / Definition of Done</Label>
               <Textarea value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })} placeholder="Kapan project ini dianggap berhasil?" />
