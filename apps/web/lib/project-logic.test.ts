@@ -3,6 +3,7 @@ import {
   calcProjectProgress,
   calcWorkstreamProgress,
   canSubmitFromStatus,
+  canSubmitWorkstream,
   canWorkOnWorkstream,
   checkMilestoneSubmit,
   computeFocus,
@@ -136,8 +137,25 @@ describe("permission PIC", () => {
   });
   it("PIC workstream hanya miliknya", () => {
     const s = picScope("dul", ws, "dian");
-    expect(s).toEqual({ kind: "OWN", workstreamIds: ["w2"] });
+    expect(s).toEqual({ kind: "OWN", workstreamIds: ["w2"], helperIds: [] });
     expect(canWorkOnWorkstream(s, "w1")).toBe(false);
+  });
+  it("anggota pendukung: boleh mengerjakan tapi tidak boleh submit", () => {
+    const withMember = [
+      { id: "w1", ownerStaffId: "dul", memberStaffIds: ["mahmud"] },
+      { id: "w2", ownerStaffId: "dian", memberStaffIds: [] },
+    ];
+    const s = picScope("dul", withMember, "mahmud");
+    expect(s).toEqual({ kind: "OWN", workstreamIds: [], helperIds: ["w1"] });
+    expect(canWorkOnWorkstream(s, "w1")).toBe(true);
+    expect(canSubmitWorkstream(s, "w1")).toBe(false);
+    expect(canWorkOnWorkstream(s, "w2")).toBe(false);
+  });
+  it("PIC bagian & PIC utama boleh submit; bukan PIC tidak", () => {
+    expect(canSubmitWorkstream(picScope("dul", ws, "dian"), "w2")).toBe(true);
+    expect(canSubmitWorkstream(picScope("dul", ws, "dian"), "w1")).toBe(false);
+    expect(canSubmitWorkstream(picScope("dul", ws, "dul"), "w2")).toBe(true);
+    expect(canSubmitWorkstream(picScope("dul", ws, "x"), "w1")).toBe(false);
   });
   it("bukan PIC lagi → NONE", () => {
     const s = picScope("dul", ws, "orang-lain");

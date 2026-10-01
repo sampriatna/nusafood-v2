@@ -429,6 +429,42 @@ export default function ProjectDetailPage() {
                       )}
                       {!ws.owner_staff_id && project.lead_name ? " (PIC utama)" : ""}
                     </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {ws.members.map((mem) => (
+                        <span key={mem.staff_id} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px]">
+                          {mem.name}
+                          <button
+                            type="button"
+                            aria-label={`Keluarkan ${mem.name}`}
+                            className="text-muted-foreground hover:text-destructive"
+                            disabled={busy}
+                            onClick={() =>
+                              act(() => apiCall(`/api/projects/workstreams/${ws.id}/members`, { method: "DELETE", body: JSON.stringify({ staff_id: mem.staff_id }) }), "Anggota dikeluarkan")
+                            }
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      <select
+                        className="h-6 rounded-full border bg-background px-2 text-[11px]"
+                        value=""
+                        disabled={busy}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          if (id) void act(() => apiCall(`/api/projects/workstreams/${ws.id}/members`, { method: "POST", body: JSON.stringify({ staff_id: id }) }), "Anggota ditambahkan");
+                        }}
+                      >
+                        <option value="">+ Anggota</option>
+                        {staff
+                          .filter((st) => st.staff_id !== ws.owner_staff_id && !ws.members.some((mem) => mem.staff_id === st.staff_id))
+                          .map((st) => (
+                            <option key={st.staff_id} value={st.staff_id}>
+                              {st.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <strong className="mr-1 text-lg">{ws.progress}%</strong>
@@ -546,6 +582,7 @@ export default function ProjectDetailPage() {
                     ...project.workstreams
                       .filter((w) => w.owner_staff_id)
                       .map((w) => [w.owner_staff_id as string, w.owner_name || "PIC"] as const),
+                    ...project.workstreams.flatMap((w) => w.members.map((m) => [m.staff_id, `${m.name} (anggota)`] as const)),
                   ],
                 ),
               ]
