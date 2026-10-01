@@ -790,3 +790,56 @@ model ProjectTaskLink {
   @@index([taskId], map: "idx_prj_task_links_task")
   @@map("prj_task_links")
 }
+
+
+model ProjectPicLink {
+  id        String    @id @default(uuid()) @db.Uuid
+  projectId String    @map("project_id") @db.Uuid
+  staffId   String    @map("staff_id") @db.VarChar(50)
+  token     String    @unique @db.VarChar(128)
+  shortCode String    @unique @map("short_code") @db.VarChar(64)
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  @@unique([projectId, staffId])
+  @@index([projectId], map: "idx_prj_pic_links_project")
+  @@index([staffId], map: "idx_prj_pic_links_staff")
+  @@map("prj_pic_links")
+}
+
+model ProjectMilestoneStep {
+  id                 String    @id @default(uuid()) @db.Uuid
+  milestoneId        String    @map("milestone_id") @db.Uuid
+  itemText           String    @map("item_text") @db.VarChar(500)
+  isRequired         Boolean   @default(true) @map("is_required")
+  requiresEvidence   Boolean   @default(false) @map("requires_evidence")
+  isChecked          Boolean   @default(false) @map("is_checked")
+  note               String?
+  evidenceUrl        String?   @map("evidence_url")
+  completedByStaffId String?   @map("completed_by_staff_id") @db.VarChar(50)
+  completedAt        DateTime? @map("completed_at") @db.Timestamptz(6)
+  sortOrder          Int       @default(10) @map("sort_order")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([milestoneId, sortOrder], map: "idx_prj_milestone_steps_milestone")
+  @@map("prj_milestone_steps")
+}
+
+model ProjectMilestoneReview {
+  id                 String    @id @default(uuid()) @db.Uuid
+  milestoneId        String    @map("milestone_id") @db.Uuid
+  submittedByStaffId String    @map("submitted_by_staff_id") @db.VarChar(50)
+  submittedByName    String    @map("submitted_by_name") @db.VarChar(200)
+  submittedAt        DateTime  @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  status             String    @default("PENDING") @db.VarChar(30)
+  reviewedBy         String?   @map("reviewed_by") @db.VarChar(100)
+  reviewedByName     String?   @map("reviewed_by_name") @db.VarChar(200)
+  reviewedAt         DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewNote         String?   @map("review_note")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([milestoneId, submittedAt(sort: Desc)], map: "idx_prj_milestone_reviews_milestone")
+  @@map("prj_milestone_reviews")
+}
