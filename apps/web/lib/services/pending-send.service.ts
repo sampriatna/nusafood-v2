@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { mapTaskToApi } from "@/lib/mappers/task";
 import { buildOutletWhere } from "@/lib/outlet-scope";
 import { dateKeyInAppTz } from "@/lib/format-datetime";
-import { logSyncOperation } from "@/lib/services/dual-write.service";
+import { logSyncOperation, writeAuditLog } from "@/lib/services/dual-write.service";
 import {
   getPicPositions,
   resolvePicCandidates,
@@ -107,6 +107,68 @@ async function findAlreadyReportedTaskIds(
 function parseDateKey(key: string): Date {
   const [y, m, d] = key.split("-").map(Number);
   return new Date(Date.UTC(y!, m! - 1, d!));
+}
+
+/** Status tugas yang belum dikerjakan PIC — boleh ditandai SUBMITTED dari kegiatan harian. */
+const NOT_YET_SUBMITTED = ["CREATED", "SENT", "WA_FAILED", "OPEN", "OPENED", "LATE"] as const;
+
+/**
+ * Kegiatan harian di link personal /r/ disubmit → tugas berjudul sama di outlet
+ * yang sama dengan deadline hari itu (WIB) ikut berstatus SUBMITTED, supaya tidak
+ * tampil "Belum dikerjakan" dan siap diverifikasi leader.
+ */
+export async function markTasksSubmittedFromDailyReport(input: {
+  outletId: string;
+  dateKey: string;
+  title: string;
+  staffId: string;
+  note?: string | null;
+  photoUrl?: string | null;
+  submittedAt?: Date;
+}): Promise<string[]> {
+  const title = normalizeReportTitle(input.title);
+  if (!title) return [];
+  const dayStart = new Date(parseDateKey(input.dateKey).getTime() - 7 * 60 * 60 * 1000);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const candidates = await prisma.task.findMany({
+    where: {
+      outletId: input.outletId,
+      deadline: { gte: dayStart, lt: dayEnd },
+      status: { in: [...NOT_YET_SUBMITTED] },
+      submittedAt: null,
+    },
+    select: { id: true, taskId: true, taskTitle: true, deadline: true, status: true },
+  });
+  const matches = candidates.filter((t) => normalizeReportTitle(t.taskTitle) === title);
+  if (!matches.length) return [];
+
+  const now = input.submittedAt ?? new Date();
+  for (const task of matches) {
+    const isLate = now > task.deadline;
+    const data = {
+      status: "SUBMITTED" as const,
+      submittedAt: now,
+      staffNote: input.note?.trim() || null,
+      afterPhotoUrl: input.photoUrl ?? null,
+      isLate,
+    };
+    await prisma.task.update({ where: { id: task.id }, data });
+    await prisma.checklistReport.updateMany({
+      where: { taskId: task.taskId, status: "OPEN" },
+      data,
+    });
+    await writeAuditLog({
+      entityType: "task",
+      entityId: task.taskId,
+      action: "submitted",
+      actorType: "staff",
+      actorId: input.staffId,
+      oldValue: { status: task.status },
+      newValue: { status: "SUBMITTED", via: "daily_report" },
+    });
+  }
+  return matches.map((t) => t.taskId);
 }
 
 /** Tugas v2 beberapa hari terakhir yang belum dikirim WA-nya (tanpa GAS/Fonnte). */
