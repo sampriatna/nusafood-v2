@@ -63,8 +63,6 @@ function stepDto(row: {
     completed_by_staff_id: row.completedByStaffId,
     completed_at: dateTime(row.completedAt),
     sort_order: row.sortOrder,
-    steps,
-    latest_review: latestReview,
   };
 }
 
@@ -117,6 +115,8 @@ function milestoneDto(row: {
     evidence_url: row.evidenceUrl,
     completed_at: dateTime(row.completedAt),
     sort_order: row.sortOrder,
+    steps,
+    latest_review: latestReview,
   };
 }
 
