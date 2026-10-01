@@ -184,6 +184,8 @@ export async function listPendingSend(
       { status: { in: [...UNSENT_STATUSES] } },
       { sourceVersion: "v2" },
       { createdAt: { gte: since } },
+      // Deadline lewat → tidak relevan dikirim lagi (pantau di daftar tugas/terlambat).
+      { deadline: { gte: now } },
       ...(outlet ? [buildOutletWhere(outlet)] : []),
     ],
   };

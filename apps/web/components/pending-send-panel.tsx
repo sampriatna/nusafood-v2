@@ -138,8 +138,8 @@ export function PendingSendPanel({ onGenerated }: Props) {
             Siap Dikirim ({tasks.length})
           </p>
           <p className="text-xs text-muted-foreground">
-            Tugas yang belum dikirim ke PIC. Tap Kirim WA, lalu tekan kirim di
-            WhatsApp.
+            Tugas yang belum dikirim ke PIC dan deadline-nya belum lewat. Tap
+            Kirim WA, lalu tekan kirim di WhatsApp.
           </p>
         </div>
         <ul className="divide-y">
