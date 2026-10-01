@@ -6,182 +6,82 @@ import {
   AlertTriangle,
   CheckCircle2,
   Circle,
-  CircleDot,
-  Clock3,
   Copy,
   Link2,
+  Pencil,
   Plus,
-  Save,
+  RefreshCw,
+  Send,
+  ShieldOff,
   Trash2,
-  XCircle,
 } from "lucide-react";
 import { AdminPage } from "@/components/admin-page";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { todayKeyInAppTz } from "@/lib/format-datetime";
+import { deadlineState, weightWarning } from "@/lib/project-logic";
+import {
+  absoluteUrl,
+  apiCall,
+  formatDeadline,
+  formatStamp,
+  HEALTH_LABEL,
+  healthBadgeClass,
+  PROJECT_STATUS_LABEL,
+} from "@/lib/project-ui";
 import type {
-  MilestoneStatus,
   ProjectDetailDto,
-  ProjectHealth,
   ProjectMilestoneDto,
   ProjectPicLinkDto,
+  ProjectPicWorkloadDto,
   ProjectStaffOption,
   ProjectWorkstreamDto,
 } from "@/lib/project-types";
-
-type ApiResponse<T> =
-  | { success: true; data: T; error: null }
-  | { success: false; data: null; error: string };
-
-const HEALTH_OPTIONS: { value: ProjectHealth; label: string }[] = [
-  { value: "ON_TRACK", label: "On Track" },
-  { value: "NEED_ATTENTION", label: "Perlu Perhatian" },
-  { value: "BLOCKED", label: "Blocked" },
-  { value: "COMPLETED", label: "Selesai" },
-];
-
-const MILESTONE_LABEL: Record<MilestoneStatus, string> = {
-  NOT_STARTED: "Belum Mulai",
-  IN_PROGRESS: "Berjalan",
-  WAITING_VALIDATION: "Menunggu Validasi",
-  REVISION: "Perlu Revisi",
-  DONE: "Disetujui",
-  BLOCKED: "Blocked",
-};
-
-function milestoneIcon(status: MilestoneStatus) {
-  if (status === "DONE") {
-    return <CheckCircle2 className="size-4 text-emerald-600" />;
-  }
-  if (status === "WAITING_VALIDATION") {
-    return <Clock3 className="size-4 text-sky-600" />;
-  }
-  if (status === "REVISION" || status === "BLOCKED") {
-    return <AlertTriangle className="size-4 text-destructive" />;
-  }
-  if (status === "IN_PROGRESS") {
-    return <CircleDot className="size-4 text-amber-600" />;
-  }
-  return <Circle className="size-4 text-muted-foreground" />;
-}
-
-function milestoneStatusClass(status: MilestoneStatus) {
-  if (status === "DONE") return "bg-emerald-100 text-emerald-800";
-  if (status === "WAITING_VALIDATION") return "bg-sky-100 text-sky-800";
-  if (status === "REVISION" || status === "BLOCKED")
-    return "bg-red-100 text-red-800";
-  if (status === "IN_PROGRESS") return "bg-amber-100 text-amber-800";
-  return "bg-muted text-muted-foreground";
-}
+import { cn } from "@/lib/utils";
+import {
+  EditProjectDialog,
+  MilestoneDialog,
+  PicWorkloadDialog,
+  ReviewDialog,
+  WorkstreamDialog,
+} from "./dialogs";
+import { MilestoneCard } from "./milestone-card";
 
 export default function ProjectDetailPage() {
-  const params = useParams<{ projectId: string }>();
-  const projectId = String(params.projectId);
+  const { projectId } = useParams<{ projectId: string }>();
   const { toast } = useToast();
-
   const [project, setProject] = useState<ProjectDetailDto | null>(null);
   const [staff, setStaff] = useState<ProjectStaffOption[]>([]);
-  const [picLinks, setPicLinks] = useState<ProjectPicLinkDto[]>([]);
+  const [links, setLinks] = useState<ProjectPicLinkDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
 
-  const [projectDraft, setProjectDraft] = useState({
-    lead_staff_id: "",
-    health: "ON_TRACK" as ProjectHealth,
-    next_action: "",
-    blocker: "",
-    deadline: "",
+  const [editProject, setEditProject] = useState(false);
+  const [wsDialog, setWsDialog] = useState<{ open: boolean; ws: ProjectWorkstreamDto | null }>({ open: false, ws: null });
+  const [msDialog, setMsDialog] = useState<{ open: boolean; wsId: string; ms: ProjectMilestoneDto | null }>({
+    open: false,
+    wsId: "",
+    ms: null,
   });
-
-  const [workstreamDrafts, setWorkstreamDrafts] = useState<
-    Record<
-      string,
-      {
-        owner_staff_id: string;
-        health: ProjectHealth;
-        next_action: string;
-        blocker: string;
-        deadline: string;
-      }
-    >
-  >({});
-
-  const [newWorkstream, setNewWorkstream] = useState({
-    name: "",
-    owner_staff_id: "",
-    next_action: "",
-    deadline: "",
-  });
-
-  const [milestoneDrafts, setMilestoneDrafts] = useState<
-    Record<string, { title: string; deadline: string }>
-  >({});
-
-  const [stepDrafts, setStepDrafts] = useState<
-    Record<
-      string,
-      {
-        item_text: string;
-        is_required: boolean;
-        requires_evidence: boolean;
-      }
-    >
-  >({});
-
-  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const [reviewId, setReviewId] = useState<string | null>(null);
+  const [workload, setWorkload] = useState<ProjectPicWorkloadDto | null>(null);
+  const todayKey = todayKeyInAppTz();
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
-      const [projectRes, staffRes, linksRes] = await Promise.all([
-        fetch(`/api/projects/${projectId}`, { cache: "no-store" }),
-        fetch("/api/projects/staff-options", { cache: "no-store" }),
-        fetch(`/api/projects/${projectId}/pic-links`, { cache: "no-store" }),
+      const [detail, options, picLinks] = await Promise.all([
+        apiCall<ProjectDetailDto>(`/api/projects/${projectId}`),
+        apiCall<ProjectStaffOption[]>("/api/projects/staff-options"),
+        apiCall<ProjectPicLinkDto[]>(`/api/projects/${projectId}/pic-links`),
       ]);
-
-      const projectJson = (await projectRes.json()) as ApiResponse<ProjectDetailDto>;
-      const staffJson = (await staffRes.json()) as ApiResponse<ProjectStaffOption[]>;
-      const linksJson = (await linksRes.json()) as ApiResponse<ProjectPicLinkDto[]>;
-
-      if (!projectJson.success) throw new Error(projectJson.error);
-
-      const data = projectJson.data;
-      setProject(data);
-      setProjectDraft({
-        lead_staff_id: data.lead_staff_id || "",
-        health: data.health,
-        next_action: data.next_action || "",
-        blocker: data.blocker || "",
-        deadline: data.deadline || "",
-      });
-
-      const drafts: typeof workstreamDrafts = {};
-      for (const workstream of data.workstreams) {
-        drafts[workstream.id] = {
-          owner_staff_id: workstream.owner_staff_id || "",
-          health: workstream.health,
-          next_action: workstream.next_action || "",
-          blocker: workstream.blocker || "",
-          deadline: workstream.deadline || "",
-        };
-      }
-      setWorkstreamDrafts(drafts);
-
-      if (staffJson.success) setStaff(staffJson.data);
-      if (linksJson.success) setPicLinks(linksJson.data);
+      setProject(detail);
+      setStaff(options);
+      setLinks(picLinks);
     } catch (error) {
       toast({
-        title: "Gagal memuat project",
+        title: "Project tidak bisa dimuat",
         description: error instanceof Error ? error.message : "Terjadi kesalahan",
         variant: "destructive",
       });
@@ -194,978 +94,560 @@ export default function ProjectDetailPage() {
     void load();
   }, [load]);
 
-  const linksByStaff = useMemo(
-    () => new Map(picLinks.map((link) => [link.staff_id, link])),
-    [picLinks],
+  // Buka dialog review langsung dari inbox (?review=<milestoneId>).
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("review");
+    if (id) setReviewId(id);
+  }, []);
+
+  const allMilestones = useMemo(
+    () => project?.workstreams.flatMap((w) => w.milestones.map((m) => ({ ws: w, m }))) ?? [],
+    [project],
   );
+  const reviewTarget = useMemo(() => allMilestones.find((x) => x.m.id === reviewId) ?? null, [allMilestones, reviewId]);
 
-  async function saveProject() {
+  async function act<T>(fn: () => Promise<T>, okMessage?: string): Promise<T | undefined> {
+    setBusy(true);
     try {
-      const response = await fetch(`/api/projects/${projectId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...projectDraft,
-          lead_staff_id: projectDraft.lead_staff_id || null,
-          deadline: projectDraft.deadline || null,
-        }),
-      });
-      const json = (await response.json()) as ApiResponse<ProjectDetailDto>;
-      if (!json.success) throw new Error(json.error);
-      toast({ title: "Project diperbarui" });
+      const result = await fn();
+      if (okMessage) toast({ title: okMessage });
       await load();
+      return result;
     } catch (error) {
       toast({
-        title: "Gagal menyimpan project",
+        title: "Belum berhasil",
         description: error instanceof Error ? error.message : "Terjadi kesalahan",
         variant: "destructive",
       });
+      return undefined;
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function saveWorkstream(workstream: ProjectWorkstreamDto) {
-    const draft = workstreamDrafts[workstream.id];
-    if (!draft) return;
+  async function copyLink(link: ProjectPicLinkDto) {
+    const url = absoluteUrl(link.path);
     try {
-      const response = await fetch(`/api/projects/workstreams/${workstream.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...draft,
-          owner_staff_id: draft.owner_staff_id || null,
-          deadline: draft.deadline || null,
-        }),
-      });
-      const json = (await response.json()) as ApiResponse<{ updated: true }>;
-      if (!json.success) throw new Error(json.error);
-      toast({ title: `${workstream.name} diperbarui` });
-      await load();
-    } catch (error) {
-      toast({
-        title: "Gagal menyimpan workstream",
-        description: error instanceof Error ? error.message : "Terjadi kesalahan",
-        variant: "destructive",
-      });
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link disalin", description: url });
+    } catch {
+      window.prompt("Salin link PIC:", url);
     }
   }
 
-  async function createOrCopyPicLink(staffId: string) {
-    const existing = linksByStaff.get(staffId);
-    if (existing) {
-      await copyPicLink(existing);
-      return;
-    }
-
+  async function openWorkload(staffId: string | null) {
+    if (!staffId) return;
     try {
-      const response = await fetch(`/api/projects/${projectId}/pic-links`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staff_id: staffId }),
-      });
-      const json = (await response.json()) as ApiResponse<ProjectPicLinkDto>;
-      if (!json.success) throw new Error(json.error);
-      await copyPicLink(json.data);
-      await load();
+      setWorkload(await apiCall<ProjectPicWorkloadDto>(`/api/projects/pic/${encodeURIComponent(staffId)}`));
     } catch (error) {
-      toast({
-        title: "Gagal membuat link PIC",
-        description: error instanceof Error ? error.message : "Terjadi kesalahan",
-        variant: "destructive",
-      });
+      toast({ title: "Gagal memuat", description: error instanceof Error ? error.message : "", variant: "destructive" });
     }
   }
 
-  async function copyPicLink(link: ProjectPicLinkDto) {
-    const absolute =
-      typeof window === "undefined"
-        ? link.path
-        : `${window.location.origin}${link.path}`;
-    await navigator.clipboard.writeText(absolute);
-    toast({
-      title: "Link PIC disalin",
-      description: absolute,
-    });
-  }
-
-  async function addWorkstream() {
-    if (!newWorkstream.name.trim()) return;
-    try {
-      const response = await fetch(`/api/projects/${projectId}/workstreams`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...newWorkstream,
-          owner_staff_id: newWorkstream.owner_staff_id || null,
-          deadline: newWorkstream.deadline || null,
-        }),
-      });
-      const json = (await response.json()) as ApiResponse<{ created: true }>;
-      if (!json.success) throw new Error(json.error);
-      setNewWorkstream({
-        name: "",
-        owner_staff_id: "",
-        next_action: "",
-        deadline: "",
-      });
-      await load();
-    } catch (error) {
-      toast({
-        title: "Gagal menambah workstream",
-        description: error instanceof Error ? error.message : "Terjadi kesalahan",
-        variant: "destructive",
-      });
-    }
-  }
-
-  async function addMilestone(workstreamId: string) {
-    const draft = milestoneDrafts[workstreamId] || { title: "", deadline: "" };
-    if (!draft.title.trim()) return;
-
-    try {
-      const response = await fetch(
-        `/api/projects/workstreams/${workstreamId}/milestones`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: draft.title,
-            deadline: draft.deadline || null,
-          }),
-        },
-      );
-      const json = (await response.json()) as ApiResponse<{ created: true }>;
-      if (!json.success) throw new Error(json.error);
-      setMilestoneDrafts((current) => ({
-        ...current,
-        [workstreamId]: { title: "", deadline: "" },
-      }));
-      await load();
-    } catch (error) {
-      toast({
-        title: "Gagal menambah milestone",
-        description: error instanceof Error ? error.message : "Terjadi kesalahan",
-        variant: "destructive",
-      });
-    }
-  }
-
-  async function addStep(milestoneId: string) {
-    const draft = stepDrafts[milestoneId] || {
-      item_text: "",
-      is_required: true,
-      requires_evidence: false,
-    };
-    if (!draft.item_text.trim()) return;
-
-    try {
-      const response = await fetch(
-        `/api/projects/milestones/${milestoneId}/steps`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(draft),
-        },
-      );
-      const json = (await response.json()) as ApiResponse<unknown>;
-      if (!json.success) throw new Error(json.error);
-      setStepDrafts((current) => ({
-        ...current,
-        [milestoneId]: {
-          item_text: "",
-          is_required: true,
-          requires_evidence: false,
-        },
-      }));
-      await load();
-    } catch (error) {
-      toast({
-        title: "Gagal menambah checklist",
-        description: error instanceof Error ? error.message : "Terjadi kesalahan",
-        variant: "destructive",
-      });
-    }
-  }
-
-  async function deleteStep(stepId: string) {
-    try {
-      const response = await fetch(`/api/projects/milestone-steps/${stepId}`, {
-        method: "DELETE",
-      });
-      const json = (await response.json()) as ApiResponse<unknown>;
-      if (!json.success) throw new Error(json.error);
-      await load();
-    } catch (error) {
-      toast({
-        title: "Gagal menghapus langkah",
-        description: error instanceof Error ? error.message : "Terjadi kesalahan",
-        variant: "destructive",
-      });
-    }
-  }
-
-  async function reviewMilestone(
-    milestone: ProjectMilestoneDto,
-    decision: "APPROVED" | "REVISION",
-  ) {
-    const note = reviewNotes[milestone.id] || "";
-    try {
-      const response = await fetch(
-        `/api/projects/milestones/${milestone.id}/review`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ decision, note }),
-        },
-      );
-      const json = (await response.json()) as ApiResponse<unknown>;
-      if (!json.success) throw new Error(json.error);
-      setReviewNotes((current) => ({ ...current, [milestone.id]: "" }));
-      toast({
-        title:
-          decision === "APPROVED"
-            ? "Milestone disetujui"
-            : "Revisi dikirim ke PIC",
-      });
-      await load();
-    } catch (error) {
-      toast({
-        title: "Validasi gagal",
-        description: error instanceof Error ? error.message : "Terjadi kesalahan",
-        variant: "destructive",
-      });
-    }
-  }
-
-  if (loading && !project) {
+  if (loading) {
     return (
       <AdminPage title="Project" backHref="/projects" maxWidth="3xl">
-        <Card>
-          <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            Memuat…
-          </CardContent>
-        </Card>
+        <p className="p-8 text-center text-sm text-muted-foreground">Memuat project…</p>
       </AdminPage>
     );
   }
-
   if (!project) {
     return (
       <AdminPage title="Project" backHref="/projects" maxWidth="3xl">
-        <Card>
-          <CardContent className="p-8 text-center">Project tidak ditemukan.</CardContent>
-        </Card>
+        <p className="p-8 text-center text-sm text-muted-foreground">Project tidak ditemukan.</p>
       </AdminPage>
     );
   }
 
-  const mainPicLink = project.lead_staff_id
-    ? linksByStaff.get(project.lead_staff_id)
-    : undefined;
+  const published = project.setup_status === "PUBLISHED";
+  const wsWarn = weightWarning(project.workstreams);
+  const waiting = allMilestones.filter((x) => x.m.status === "WAITING_VALIDATION");
+  const revisions = allMilestones.filter((x) => x.m.status === "REVISION");
+  const deadlineSt = deadlineState(project.deadline, todayKey, project.health_derived === "COMPLETED");
+
+  const checklist: { label: string; ok: boolean }[] = [
+    { label: "Nama project", ok: true },
+    { label: "Goal / Definition of Done", ok: Boolean(project.goal) },
+    { label: "PIC utama", ok: !project.readiness.missing.includes("PIC_REQUIRED") },
+    { label: "Deadline", ok: Boolean(project.deadline) },
+    { label: "Bagian kerja (workstream)", ok: project.workstream_count > 0 },
+    { label: "Milestone", ok: project.workstream_count > 0 && !project.readiness.missing.includes("MILESTONE_REQUIRED") && project.milestone_total > 0 },
+    { label: "Checklist langkah", ok: project.milestone_total > 0 && !project.readiness.missing.includes("CHECKLIST_REQUIRED") },
+  ];
 
   return (
-    <AdminPage title={project.name} backHref="/projects" maxWidth="3xl">
+    <AdminPage title="Project" backHref="/projects" maxWidth="3xl">
+      {/* Header */}
       <Card>
-        <CardContent className="space-y-5 p-5">
-          <div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold">{project.name}</h2>
-                {project.goal ? (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    <strong>Definition of Done:</strong> {project.goal}
-                  </p>
-                ) : null}
-              </div>
-              <strong className="text-2xl">{project.progress}%</strong>
+        <CardContent className="space-y-4 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold leading-tight">{project.name}</h1>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {PROJECT_STATUS_LABEL[project.status]} · dibuat {project.created_by || "owner"}
+              </p>
             </div>
-            <Progress value={project.progress} className="mt-3" />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Progress hanya bertambah dari milestone yang sudah divalidasi.
-            </p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>PIC Utama Project</Label>
-              <Select
-                value={projectDraft.lead_staff_id || "NONE"}
-                onValueChange={(value) =>
-                  setProjectDraft({
-                    ...projectDraft,
-                    lead_staff_id: value === "NONE" ? "" : value,
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih PIC" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">Belum ditentukan</SelectItem>
-                  {staff.map((item) => (
-                    <SelectItem key={item.staff_id} value={item.staff_id}>
-                      {item.name}
-                      {item.position ? ` · ${item.position}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {project.lead_staff_id ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    void createOrCopyPicLink(project.lead_staff_id as string)
-                  }
-                >
-                  {mainPicLink ? (
-                    <Copy className="mr-2 size-4" />
-                  ) : (
-                    <Link2 className="mr-2 size-4" />
-                  )}
-                  {mainPicLink ? "Salin Link PIC Utama" : "Buat Link PIC Utama"}
-                </Button>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Kondisi project</Label>
-              <Select
-                value={projectDraft.health}
-                onValueChange={(value) =>
-                  setProjectDraft({
-                    ...projectDraft,
-                    health: value as ProjectHealth,
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {HEALTH_OPTIONS.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Next action project</Label>
-              <Textarea
-                value={projectDraft.next_action}
-                onChange={(event) =>
-                  setProjectDraft({
-                    ...projectDraft,
-                    next_action: event.target.value,
-                  })
-                }
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Blocker</Label>
-              <Textarea
-                value={projectDraft.blocker}
-                onChange={(event) =>
-                  setProjectDraft({
-                    ...projectDraft,
-                    blocker: event.target.value,
-                  })
-                }
-                placeholder="Kosongkan bila tidak ada hambatan"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Deadline</Label>
-              <Input
-                type="date"
-                value={projectDraft.deadline}
-                onChange={(event) =>
-                  setProjectDraft({
-                    ...projectDraft,
-                    deadline: event.target.value,
-                  })
-                }
-              />
-            </div>
-
-            <div className="flex items-end justify-end">
-              <Button onClick={saveProject}>
-                <Save className="mr-2 size-4" />
-                Simpan Project
+            <div className="flex shrink-0 items-center gap-2">
+              {published ? (
+                <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", healthBadgeClass(project.health_derived))}>
+                  {HEALTH_LABEL[project.health_derived]}
+                </span>
+              ) : (
+                <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-800">
+                  {project.setup_status === "READY" ? "Siap dibagikan" : "Sedang disiapkan"}
+                </span>
+              )}
+              <Button size="icon" variant="outline" aria-label="Edit project" onClick={() => setEditProject(true)}>
+                <Pencil className="size-4" />
               </Button>
             </div>
           </div>
+
+          {project.goal ? (
+            <div className="rounded-lg bg-muted/50 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Goal / Definition of Done</p>
+              <p className="mt-1 text-sm">{project.goal}</p>
+            </div>
+          ) : null}
+
+          <div>
+            <div className="mb-1 flex items-baseline justify-between">
+              <span className="text-xs text-muted-foreground">
+                Progress dari milestone yang disetujui · {project.milestone_done}/{project.milestone_total}
+              </span>
+              <strong className="text-lg">{project.progress}%</strong>
+            </div>
+            <Progress value={project.progress} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">PIC utama</p>
+              {project.lead_staff_id ? (
+                <button type="button" className="font-semibold underline-offset-2 hover:underline" onClick={() => openWorkload(project.lead_staff_id)}>
+                  {project.lead_name}
+                </button>
+              ) : (
+                <p className="font-semibold text-amber-700">Belum dipilih</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Deadline</p>
+              <p className={cn("font-semibold", deadlineSt === "overdue" && "text-red-700", deadlineSt === "soon" && "text-amber-700")}>
+                {formatDeadline(project.deadline)}
+                {deadlineSt === "overdue" ? " · terlambat" : ""}
+              </p>
+            </div>
+          </div>
+
+          {published && project.focus_text ? (
+            <p className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Fokus berikutnya </span>
+              {project.focus_text}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
-      <div>
-        <h3 className="text-lg font-semibold">Workstream & Eksekusi</h3>
-        <p className="text-sm text-muted-foreground">
-          Pecah project menjadi bidang kerja. Setiap PIC mendapat link pribadi
-          untuk mengerjakan checklist dan mengajukan validasi.
-        </p>
-      </div>
+      {/* Setup / publish gate */}
+      {!published ? (
+        <Card className="border-violet-300">
+          <CardContent className="space-y-4 p-4">
+            <div>
+              <h2 className="font-bold">Kesiapan project</h2>
+              <p className="text-sm text-muted-foreground">
+                Link PIC baru bisa dibagikan setelah ada PIC, bagian kerja, milestone, dan checklist langkah.
+              </p>
+            </div>
+            <ul className="grid gap-1.5 sm:grid-cols-2">
+              {checklist.map((item) => (
+                <li key={item.label} className="flex items-center gap-2 text-sm">
+                  {item.ok ? <CheckCircle2 className="size-4 text-emerald-600" /> : <Circle className="size-4 text-muted-foreground" />}
+                  <span className={item.ok ? "" : "text-muted-foreground"}>{item.label}</span>
+                </li>
+              ))}
+            </ul>
 
-      {project.workstreams.map((workstream) => {
-        const draft = workstreamDrafts[workstream.id] || {
-          owner_staff_id: workstream.owner_staff_id || "",
-          health: workstream.health,
-          next_action: workstream.next_action || "",
-          blocker: workstream.blocker || "",
-          deadline: workstream.deadline || "",
-        };
-        const milestoneDraft = milestoneDrafts[workstream.id] || {
-          title: "",
-          deadline: "",
-        };
-        const workstreamLink = workstream.owner_staff_id
-          ? linksByStaff.get(workstream.owner_staff_id)
-          : undefined;
-
-        return (
-          <Card key={workstream.id}>
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">{workstream.name}</CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {
-                      workstream.milestones.filter(
-                        (item) => item.status === "DONE",
-                      ).length
-                    }
-                    /{workstream.milestones.length} milestone disetujui
-                  </p>
-                </div>
-                <strong>{workstream.progress}%</strong>
-              </div>
-              <Progress value={workstream.progress} />
-            </CardHeader>
-
-            <CardContent className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>PIC Workstream</Label>
-                  <Select
-                    value={draft.owner_staff_id || "NONE"}
-                    onValueChange={(value) =>
-                      setWorkstreamDrafts((current) => ({
-                        ...current,
-                        [workstream.id]: {
-                          ...draft,
-                          owner_staff_id: value === "NONE" ? "" : value,
-                        },
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih PIC" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="NONE">Belum ditentukan</SelectItem>
-                      {staff.map((item) => (
-                        <SelectItem key={item.staff_id} value={item.staff_id}>
-                          {item.name}
-                          {item.position ? ` · ${item.position}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  {workstream.owner_staff_id ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        void createOrCopyPicLink(
-                          workstream.owner_staff_id as string,
-                        )
-                      }
-                    >
-                      {workstreamLink ? (
-                        <Copy className="mr-2 size-4" />
-                      ) : (
-                        <Link2 className="mr-2 size-4" />
-                      )}
-                      {workstreamLink
-                        ? "Salin Link Kerja PIC"
-                        : "Buat Link Kerja PIC"}
-                    </Button>
-                  ) : null}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Kondisi</Label>
-                  <Select
-                    value={draft.health}
-                    onValueChange={(value) =>
-                      setWorkstreamDrafts((current) => ({
-                        ...current,
-                        [workstream.id]: {
-                          ...draft,
-                          health: value as ProjectHealth,
-                        },
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {HEALTH_OPTIONS.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Next action</Label>
-                  <Input
-                    value={draft.next_action}
-                    onChange={(event) =>
-                      setWorkstreamDrafts((current) => ({
-                        ...current,
-                        [workstream.id]: {
-                          ...draft,
-                          next_action: event.target.value,
-                        },
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Blocker</Label>
-                  <Input
-                    value={draft.blocker}
-                    onChange={(event) =>
-                      setWorkstreamDrafts((current) => ({
-                        ...current,
-                        [workstream.id]: {
-                          ...draft,
-                          blocker: event.target.value,
-                        },
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Deadline</Label>
-                  <Input
-                    type="date"
-                    value={draft.deadline}
-                    onChange={(event) =>
-                      setWorkstreamDrafts((current) => ({
-                        ...current,
-                        [workstream.id]: {
-                          ...draft,
-                          deadline: event.target.value,
-                        },
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="flex items-end justify-end">
+            {project.workstream_count === 0 && project.lead_staff_id ? (
+              <div className="rounded-lg border bg-muted/40 p-3">
+                <p className="text-sm font-medium">Project ini dikerjakan satu PIC saja?</p>
+                <div className="mt-2 flex flex-wrap gap-2">
                   <Button
-                    variant="outline"
-                    onClick={() => void saveWorkstream(workstream)}
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      act(
+                        () => apiCall(`/api/projects/${projectId}/workstreams`, { method: "POST", body: JSON.stringify({ simple: true }) }),
+                        `Bagian “Eksekusi Utama” dibuat untuk ${project.lead_name}`,
+                      )
+                    }
                   >
-                    <Save className="mr-2 size-4" />
-                    Simpan Workstream
+                    Ya, {project.lead_name} mengerjakan semuanya
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setWsDialog({ open: true, ws: null })}>
+                    Tidak, tambah beberapa bagian
                   </Button>
                 </div>
               </div>
+            ) : null}
 
-              <div className="space-y-3 border-t pt-4">
-                <div>
-                  <p className="font-medium">Milestone & Checklist Validasi</p>
-                  <p className="text-xs text-muted-foreground">
-                    PIC menyelesaikan langkah di bawah. Milestone baru masuk
-                    progress setelah kamu setujui.
-                  </p>
-                </div>
-
-                {workstream.milestones.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    Belum ada milestone.
-                  </div>
-                ) : null}
-
-                {workstream.milestones.map((milestone, index) => {
-                  const stepDraft = stepDrafts[milestone.id] || {
-                    item_text: "",
-                    is_required: true,
-                    requires_evidence: false,
-                  };
-                  const locked =
-                    milestone.status === "WAITING_VALIDATION" ||
-                    milestone.status === "DONE";
-
-                  return (
-                    <section
-                      key={milestone.id}
-                      className="rounded-xl border bg-muted/10 p-4"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex min-w-0 gap-2">
-                          <span className="mt-0.5">
-                            {milestoneIcon(milestone.status)}
-                          </span>
-                          <div>
-                            <p className="font-semibold">
-                              {index + 1}. {milestone.title}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {milestone.deadline
-                                ? `Deadline ${milestone.deadline}`
-                                : "Tanpa deadline"}{" "}
-                              · {milestone.steps.filter((s) => s.is_checked).length}/
-                              {milestone.steps.length} langkah selesai
-                            </p>
-                          </div>
-                        </div>
-
-                        <span
-                          className={`w-fit rounded-full px-2 py-1 text-[11px] font-bold ${milestoneStatusClass(
-                            milestone.status,
-                          )}`}
-                        >
-                          {MILESTONE_LABEL[milestone.status]}
-                        </span>
-                      </div>
-
-                      {milestone.status === "WAITING_VALIDATION" ? (
-                        <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-3">
-                          <p className="font-semibold text-sky-950">
-                            Menunggu validasi
-                          </p>
-                          <p className="mt-1 text-xs text-sky-800">
-                            Diajukan oleh{" "}
-                            {milestone.latest_review?.submitted_by_name || "PIC"}
-                            {milestone.latest_review?.submitted_at
-                              ? ` · ${new Date(
-                                  milestone.latest_review.submitted_at,
-                                ).toLocaleString("id-ID")}`
-                              : ""}
-                          </p>
-
-                          <Textarea
-                            className="mt-3 bg-white"
-                            value={reviewNotes[milestone.id] || ""}
-                            onChange={(event) =>
-                              setReviewNotes((current) => ({
-                                ...current,
-                                [milestone.id]: event.target.value,
-                              }))
-                            }
-                            placeholder="Catatan validasi. Wajib jika minta revisi."
-                          />
-
-                          <div className="mt-3 flex flex-wrap justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              onClick={() =>
-                                void reviewMilestone(milestone, "REVISION")
-                              }
-                            >
-                              <XCircle className="mr-2 size-4" />
-                              Minta Revisi
-                            </Button>
-                            <Button
-                              onClick={() =>
-                                void reviewMilestone(milestone, "APPROVED")
-                              }
-                            >
-                              <CheckCircle2 className="mr-2 size-4" />
-                              Setujui
-                            </Button>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {milestone.status === "REVISION" &&
-                      milestone.latest_review?.review_note ? (
-                        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-                          <strong>Catatan revisi:</strong>{" "}
-                          {milestone.latest_review.review_note}
-                        </div>
-                      ) : null}
-
-                      {milestone.status === "DONE" ? (
-                        <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
-                          <strong>Disetujui.</strong> Milestone ini sudah dihitung
-                          ke progress project.
-                        </div>
-                      ) : null}
-
-                      <div className="mt-4 space-y-2">
-                        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                          Checklist langkah
-                        </p>
-
-                        {milestone.steps.length === 0 ? (
-                          <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                            Belum ada langkah. Tambahkan urutan pekerjaan agar PIC
-                            tahu persis apa yang harus dilakukan.
-                          </p>
-                        ) : (
-                          milestone.steps.map((step, stepIndex) => (
-                            <div
-                              key={step.id}
-                              className="flex items-start gap-3 rounded-lg border bg-background p-3"
-                            >
-                              {step.is_checked ? (
-                                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-                              ) : (
-                                <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium">
-                                  {stepIndex + 1}. {step.item_text}
-                                </p>
-                                <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                                  <span>
-                                    {step.is_required ? "Wajib" : "Opsional"}
-                                  </span>
-                                  {step.requires_evidence ? (
-                                    <span>· Bukti foto wajib</span>
-                                  ) : null}
-                                  {step.completed_at ? (
-                                    <span>· selesai</span>
-                                  ) : null}
-                                </div>
-                                {step.note ? (
-                                  <p className="mt-2 rounded bg-muted/50 p-2 text-xs">
-                                    Catatan PIC: {step.note}
-                                  </p>
-                                ) : null}
-                                {step.evidence_url ? (
-                                  <a
-                                    href={step.evidence_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="mt-2 inline-block text-xs font-medium text-primary underline"
-                                  >
-                                    Lihat bukti
-                                  </a>
-                                ) : null}
-                              </div>
-                              {!locked ? (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-8 shrink-0"
-                                  onClick={() => void deleteStep(step.id)}
-                                  aria-label="Hapus langkah"
-                                >
-                                  <Trash2 className="size-4" />
-                                </Button>
-                              ) : null}
-                            </div>
-                          ))
-                        )}
-
-                        {!locked ? (
-                          <div className="rounded-lg border border-dashed p-3">
-                            <Input
-                              value={stepDraft.item_text}
-                              onChange={(event) =>
-                                setStepDrafts((current) => ({
-                                  ...current,
-                                  [milestone.id]: {
-                                    ...stepDraft,
-                                    item_text: event.target.value,
-                                  },
-                                }))
-                              }
-                              placeholder="Contoh: Foto 10 SKU ikan dengan ukuran & harga"
-                            />
-                            <div className="mt-2 flex flex-wrap gap-4 text-sm">
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={stepDraft.is_required}
-                                  onChange={(event) =>
-                                    setStepDrafts((current) => ({
-                                      ...current,
-                                      [milestone.id]: {
-                                        ...stepDraft,
-                                        is_required: event.target.checked,
-                                      },
-                                    }))
-                                  }
-                                />
-                                Wajib
-                              </label>
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={stepDraft.requires_evidence}
-                                  onChange={(event) =>
-                                    setStepDrafts((current) => ({
-                                      ...current,
-                                      [milestone.id]: {
-                                        ...stepDraft,
-                                        requires_evidence:
-                                          event.target.checked,
-                                      },
-                                    }))
-                                  }
-                                />
-                                Wajib bukti foto
-                              </label>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="mt-3"
-                              disabled={!stepDraft.item_text.trim()}
-                              onClick={() => void addStep(milestone.id)}
-                            >
-                              <Plus className="mr-1 size-4" />
-                              Tambah Langkah
-                            </Button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </section>
-                  );
-                })}
-
-                <div className="grid gap-2 pt-2 sm:grid-cols-[1fr_180px_auto]">
-                  <Input
-                    value={milestoneDraft.title}
-                    onChange={(event) =>
-                      setMilestoneDrafts((current) => ({
-                        ...current,
-                        [workstream.id]: {
-                          ...milestoneDraft,
-                          title: event.target.value,
-                        },
-                      }))
-                    }
-                    placeholder="Tambah milestone…"
-                  />
-                  <Input
-                    type="date"
-                    value={milestoneDraft.deadline}
-                    onChange={(event) =>
-                      setMilestoneDrafts((current) => ({
-                        ...current,
-                        [workstream.id]: {
-                          ...milestoneDraft,
-                          deadline: event.target.value,
-                        },
-                      }))
-                    }
-                  />
-                  <Button
-                    variant="secondary"
-                    onClick={() => void addMilestone(workstream.id)}
-                    disabled={!milestoneDraft.title.trim()}
-                  >
-                    <Plus className="mr-1 size-4" />
-                    Tambah
-                  </Button>
-                </div>
+            {!project.readiness.ready ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                <p className="font-semibold">Belum siap dibagikan. Yang perlu dilengkapi:</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                  {project.readiness.details.map((d) => (
+                    <li key={d}>{d}</li>
+                  ))}
+                </ul>
               </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+            ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Tambah Workstream</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Nama bagian</Label>
-            <Input
-              value={newWorkstream.name}
-              onChange={(event) =>
-                setNewWorkstream({
-                  ...newWorkstream,
-                  name: event.target.value,
-                })
-              }
-              placeholder="Contoh: Produk & Pakan"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>PIC Workstream</Label>
-            <Select
-              value={newWorkstream.owner_staff_id || "NONE"}
-              onValueChange={(value) =>
-                setNewWorkstream({
-                  ...newWorkstream,
-                  owner_staff_id: value === "NONE" ? "" : value,
-                })
+            <Button
+              className="w-full"
+              disabled={busy || !project.readiness.ready}
+              onClick={() =>
+                act(
+                  () => apiCall(`/api/projects/${projectId}/publish`, { method: "POST" }),
+                  "Project dibagikan. Link PIC sudah dibuat.",
+                )
               }
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih PIC" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="NONE">Belum ditentukan</SelectItem>
-                {staff.map((item) => (
-                  <SelectItem key={item.staff_id} value={item.staff_id}>
-                    {item.name}
-                    {item.position ? ` · ${item.position}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Next action</Label>
-            <Input
-              value={newWorkstream.next_action}
-              onChange={(event) =>
-                setNewWorkstream({
-                  ...newWorkstream,
-                  next_action: event.target.value,
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Deadline</Label>
-            <Input
-              type="date"
-              value={newWorkstream.deadline}
-              onChange={(event) =>
-                setNewWorkstream({
-                  ...newWorkstream,
-                  deadline: event.target.value,
-                })
-              }
-            />
-          </div>
-
-          <div className="flex justify-end sm:col-span-2">
-            <Button onClick={() => void addWorkstream()} disabled={!newWorkstream.name.trim()}>
-              <Plus className="mr-2 size-4" />
-              Tambah Workstream
+              <Send className="mr-2 size-4" />
+              Bagikan ke PIC
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Butuh keputusan */}
+      {waiting.length || revisions.length || project.blockers.length ? (
+        <section className="space-y-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Perlu tindakan</h2>
+          {waiting.map(({ ws, m }) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setReviewId(m.id)}
+              className="flex w-full items-center justify-between gap-3 rounded-lg border-2 border-sky-300 bg-sky-50 p-3 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block text-xs text-muted-foreground">{ws.name} · menunggu validasi</span>
+                <span className="block font-semibold leading-snug">{m.title}</span>
+                <span className="block text-xs text-muted-foreground">
+                  Diajukan {m.reviews.find((r) => r.status === "PENDING")?.submitted_by_name} ·{" "}
+                  {formatStamp(m.reviews.find((r) => r.status === "PENDING")?.submitted_at ?? null)}
+                </span>
+              </span>
+              <span className="shrink-0 text-sm font-bold text-sky-800">Review</span>
+            </button>
+          ))}
+          {revisions.map(({ ws, m }) => (
+            <div key={m.id} className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+              <p className="text-xs text-muted-foreground">{ws.name} · menunggu perbaikan PIC</p>
+              <p className="font-semibold">{m.title}</p>
+              {m.latest_review?.review_note ? <p className="mt-1 text-red-900">Catatan: {m.latest_review.review_note}</p> : null}
+            </div>
+          ))}
+          {project.blockers.map((b) => (
+            <div key={b.id} className="flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-700" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">
+                  Kendala · {b.workstream_name}
+                  {b.milestone_title ? ` › ${b.milestone_title}` : ""} · {b.reported_by_name}, {formatStamp(b.created_at)}
+                </p>
+                <p className="font-medium">{b.text}</p>
+              </div>
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => act(() => apiCall(`/api/projects/blockers/${b.id}`, { method: "POST" }), "Kendala ditandai selesai")}>
+                Selesai
+              </Button>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      {/* Bagian kerja */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Bagian kerja</h2>
+          <Button size="sm" variant="outline" onClick={() => setWsDialog({ open: true, ws: null })}>
+            <Plus className="mr-1 size-4" /> Bagian
+          </Button>
+        </div>
+        {wsWarn.warn || project.weight_warning ? (
+          <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-900">
+            Bobot khusus dipakai tetapi totalnya bukan 100. Progress tetap dihitung proporsional.
+          </p>
+        ) : null}
+
+        {project.workstreams.length === 0 ? (
+          <Card>
+            <CardContent className="p-6 text-center text-sm text-muted-foreground">Belum ada bagian kerja.</CardContent>
+          </Card>
+        ) : null}
+
+        {project.workstreams.map((ws) => {
+          const done = ws.milestones.filter((m) => m.status === "DONE").length;
+          const wait = ws.milestones.filter((m) => m.status === "WAITING_VALIDATION").length;
+          const msWarn = weightWarning(ws.milestones);
+          const picName = ws.owner_name || project.lead_name;
+          const picId = ws.owner_staff_id || project.lead_staff_id;
+          return (
+            <Card key={ws.id}>
+              <CardContent className="space-y-3 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold leading-tight">{ws.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      PIC:{" "}
+                      {picId ? (
+                        <button type="button" className="font-medium text-foreground underline-offset-2 hover:underline" onClick={() => openWorkload(picId)}>
+                          {picName}
+                        </button>
+                      ) : (
+                        <span className="text-amber-700">belum dipilih</span>
+                      )}
+                      {!ws.owner_staff_id && project.lead_name ? " (PIC utama)" : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <strong className="mr-1 text-lg">{ws.progress}%</strong>
+                    <Button size="icon" variant="ghost" aria-label="Edit bagian" onClick={() => setWsDialog({ open: true, ws })}>
+                      <Pencil className="size-4" />
+                    </Button>
+                    {ws.milestones.length === 0 ? (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label="Hapus bagian"
+                        className="text-destructive"
+                        onClick={() => {
+                          if (window.confirm(`Hapus bagian “${ws.name}”?`)) {
+                            void act(() => apiCall(`/api/projects/workstreams/${ws.id}`, { method: "DELETE" }), "Bagian dihapus");
+                          }
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+                <Progress value={ws.progress} />
+                <p className="text-xs text-muted-foreground">
+                  {done}/{ws.milestones.length} milestone disetujui
+                  {ws.deadline ? ` · deadline ${formatDeadline(ws.deadline)}` : ""}
+                  {wait ? ` · ${wait} menunggu validasi` : ""}
+                </p>
+                {msWarn.warn ? (
+                  <p className="text-xs text-amber-800">Bobot milestone bagian ini totalnya {msWarn.total}, bukan 100.</p>
+                ) : null}
+
+                <div className="space-y-2">
+                  {ws.milestones.map((m) => (
+                    <MilestoneCard
+                      key={m.id}
+                      milestone={m}
+                      todayKey={todayKey}
+                      onChanged={load}
+                      onReview={(x) => setReviewId(x.id)}
+                      onEdit={(x) => setMsDialog({ open: true, wsId: ws.id, ms: x })}
+                    />
+                  ))}
+                </div>
+                <Button size="sm" variant="outline" className="w-full" onClick={() => setMsDialog({ open: true, wsId: ws.id, ms: null })}>
+                  <Plus className="mr-1 size-4" /> Milestone
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </section>
+
+      {/* Link PIC */}
+      {published ? (
+        <section className="space-y-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Link PIC</h2>
+          <Card>
+            <CardContent className="divide-y p-0">
+              {links.length === 0 ? <p className="p-4 text-sm text-muted-foreground">Belum ada link aktif.</p> : null}
+              {links.map((link) => (
+                <div key={link.id} className="space-y-2 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold">{link.staff_name}</p>
+                      <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                        <Link2 className="size-3" /> {absoluteUrl(link.path)}
+                      </p>
+                    </div>
+                    <Button size="sm" onClick={() => copyLink(link)}>
+                      <Copy className="mr-1 size-4" /> Salin
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        if (window.confirm(`Buat link baru untuk ${link.staff_name}? Link lama langsung tidak berlaku.`)) {
+                          void act(
+                            () => apiCall(`/api/projects/${projectId}/pic-links`, { method: "POST", body: JSON.stringify({ staff_id: link.staff_id, rotate: true }) }),
+                            "Link baru dibuat",
+                          );
+                        }
+                      }}
+                    >
+                      <RefreshCw className="mr-1 size-4" /> Link baru
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive"
+                      disabled={busy}
+                      onClick={() => {
+                        if (window.confirm(`Nonaktifkan link ${link.staff_name}? Progress dan riwayat tidak berubah.`)) {
+                          void act(
+                            () => apiCall(`/api/projects/${projectId}/pic-links`, { method: "DELETE", body: JSON.stringify({ staff_id: link.staff_id }) }),
+                            "Link dinonaktifkan",
+                          );
+                        }
+                      }}
+                    >
+                      <ShieldOff className="mr-1 size-4" /> Nonaktifkan
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {/* PIC tanpa link aktif (mis. baru ditambahkan / sudah dicabut) */}
+              {[
+                ...new Map(
+                  [
+                    ...(project.lead_staff_id ? [[project.lead_staff_id, project.lead_name || "PIC"] as const] : []),
+                    ...project.workstreams
+                      .filter((w) => w.owner_staff_id)
+                      .map((w) => [w.owner_staff_id as string, w.owner_name || "PIC"] as const),
+                  ],
+                ),
+              ]
+                .filter(([id]) => !links.some((l) => l.staff_id === id))
+                .map(([id, name]) => (
+                  <div key={id} className="flex items-center justify-between gap-2 p-3">
+                    <p className="text-sm">
+                      <strong>{name}</strong> <span className="text-muted-foreground">belum punya link aktif</span>
+                    </p>
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => act(() => apiCall(`/api/projects/${projectId}/pic-links`, { method: "POST", body: JSON.stringify({ staff_id: id }) }), "Link dibuat")}>
+                      Buat link
+                    </Button>
+                  </div>
+                ))}
+            </CardContent>
+          </Card>
+        </section>
+      ) : null}
+
+      {/* Riwayat */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">Riwayat otomatis</h2>
+        <Card>
+          <CardContent className="p-0">
+            {project.activity.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground">Belum ada aktivitas.</p>
+            ) : (
+              <>
+                <ol className="divide-y">
+                  {project.activity.slice(0, 8).map((a) => (
+                    <li key={a.id} className="px-4 py-2.5">
+                      <p className="text-[11px] text-muted-foreground">{formatStamp(a.created_at)}</p>
+                      <p className="text-sm leading-snug">{a.message}</p>
+                    </li>
+                  ))}
+                </ol>
+                {project.activity.length > 8 ? (
+                  <details className="border-t">
+                    <summary className="cursor-pointer px-4 py-2.5 text-sm font-medium text-primary">
+                      Lihat {project.activity.length - 8} aktivitas lainnya
+                    </summary>
+                    <ol className="divide-y border-t">
+                      {project.activity.slice(8).map((a) => (
+                        <li key={a.id} className="px-4 py-2.5">
+                          <p className="text-[11px] text-muted-foreground">{formatStamp(a.created_at)}</p>
+                          <p className="text-sm leading-snug">{a.message}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                ) : null}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <EditProjectDialog
+        open={editProject}
+        project={project}
+        staff={staff}
+        saving={busy}
+        onClose={() => setEditProject(false)}
+        onSave={async (patch) => {
+          const done = await act(() => apiCall(`/api/projects/${projectId}`, { method: "PATCH", body: JSON.stringify(patch) }), "Project diperbarui");
+          if (done !== undefined) setEditProject(false);
+        }}
+      />
+
+      <WorkstreamDialog
+        open={wsDialog.open}
+        workstream={wsDialog.ws}
+        staff={staff}
+        saving={busy}
+        onClose={() => setWsDialog({ open: false, ws: null })}
+        onSave={async (v) => {
+          const url = wsDialog.ws ? `/api/projects/workstreams/${wsDialog.ws.id}` : `/api/projects/${projectId}/workstreams`;
+          const done = await act(() => apiCall(url, { method: wsDialog.ws ? "PATCH" : "POST", body: JSON.stringify(v) }), "Bagian kerja disimpan");
+          if (done !== undefined) setWsDialog({ open: false, ws: null });
+        }}
+      />
+
+      <MilestoneDialog
+        open={msDialog.open}
+        milestone={msDialog.ms}
+        saving={busy}
+        onClose={() => setMsDialog({ open: false, wsId: "", ms: null })}
+        onSave={async (v) => {
+          const done = await act(
+            () =>
+              msDialog.ms
+                ? apiCall(`/api/projects/milestones/${msDialog.ms.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ title: v.title, description: v.description, weight: v.weight, deadline: v.deadline }),
+                  })
+                : apiCall(`/api/projects/workstreams/${msDialog.wsId}/milestones`, { method: "POST", body: JSON.stringify(v) }),
+            "Milestone disimpan",
+          );
+          if (done !== undefined) setMsDialog({ open: false, wsId: "", ms: null });
+        }}
+      />
+
+      <ReviewDialog
+        milestone={reviewTarget?.m ?? null}
+        context={reviewTarget ? `${project.name} · ${reviewTarget.ws.name}` : ""}
+        saving={busy}
+        onClose={() => setReviewId(null)}
+        onDecide={async (decision, note) => {
+          if (!reviewTarget) return;
+          const done = await act(
+            () =>
+              apiCall(`/api/projects/milestones/${reviewTarget.m.id}/review`, {
+                method: "POST",
+                body: JSON.stringify({ decision, note }),
+              }),
+            decision === "APPROVED" ? "Milestone disetujui" : "Revisi dikirim ke PIC",
+          );
+          if (done !== undefined) setReviewId(null);
+        }}
+      />
+
+      <PicWorkloadDialog data={workload} onClose={() => setWorkload(null)} />
     </AdminPage>
   );
 }

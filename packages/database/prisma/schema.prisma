@@ -718,6 +718,8 @@ model Project {
   deadline    DateTime? @db.Date
   nextAction  String?  @map("next_action")
   blocker     String?
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  healthOverride String? @map("health_override") @db.VarChar(30)
   createdBy   String?  @map("created_by") @db.VarChar(200)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -838,8 +840,41 @@ model ProjectMilestoneReview {
   reviewedByName     String?   @map("reviewed_by_name") @db.VarChar(200)
   reviewedAt         DateTime? @map("reviewed_at") @db.Timestamptz(6)
   reviewNote         String?   @map("review_note")
+  snapshot           Json?
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([milestoneId, submittedAt(sort: Desc)], map: "idx_prj_milestone_reviews_milestone")
   @@map("prj_milestone_reviews")
+}
+
+model ProjectActivity {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectId   String   @map("project_id") @db.Uuid
+  workstreamId String? @map("workstream_id") @db.Uuid
+  milestoneId String?  @map("milestone_id") @db.Uuid
+  action      String   @db.VarChar(60)
+  actorType   String   @default("SYSTEM") @map("actor_type") @db.VarChar(20)
+  actorId     String?  @map("actor_id") @db.VarChar(100)
+  actorName   String?  @map("actor_name") @db.VarChar(200)
+  message     String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([projectId, createdAt(sort: Desc)], map: "idx_prj_activity_project")
+  @@map("prj_activity")
+}
+
+model ProjectBlocker {
+  id                String    @id @default(uuid()) @db.Uuid
+  projectId         String    @map("project_id") @db.Uuid
+  workstreamId      String?   @map("workstream_id") @db.Uuid
+  milestoneId       String?   @map("milestone_id") @db.Uuid
+  reportedByStaffId String?   @map("reported_by_staff_id") @db.VarChar(50)
+  reportedByName    String    @map("reported_by_name") @db.VarChar(200)
+  text              String
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt        DateTime? @map("resolved_at") @db.Timestamptz(6)
+  resolvedByName    String?   @map("resolved_by_name") @db.VarChar(200)
+
+  @@index([projectId, resolvedAt], map: "idx_prj_blockers_project")
+  @@map("prj_blockers")
 }
