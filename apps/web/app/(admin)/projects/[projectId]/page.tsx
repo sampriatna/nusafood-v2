@@ -310,7 +310,7 @@ export default function ProjectDetailPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Project Lead / POC utama</Label>
+              <Label>PIC Utama Project</Label>
               <Select
                 value={projectDraft.lead_staff_id || "NONE"}
                 onValueChange={(value) =>
@@ -321,7 +321,7 @@ export default function ProjectDetailPage() {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Pilih POC" />
+                  <SelectValue placeholder="Pilih PIC" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="NONE">Belum ditentukan</SelectItem>
@@ -446,7 +446,7 @@ export default function ProjectDetailPage() {
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Owner bagian</Label>
+                  <Label>PIC Workstream</Label>
                   <Select
                     value={draft.owner_staff_id || "NONE"}
                     onValueChange={(value) =>
@@ -663,7 +663,7 @@ export default function ProjectDetailPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Owner bagian</Label>
+            <Label>PIC Workstream</Label>
             <Select
               value={newWorkstream.owner_staff_id || "NONE"}
               onValueChange={(value) =>
