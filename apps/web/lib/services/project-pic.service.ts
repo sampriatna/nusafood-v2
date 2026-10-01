@@ -346,8 +346,18 @@ export async function updateProjectPicStep(
     const step = await tx.projectMilestoneStep.findUnique({ where: { id: stepId } });
     if (!step) err("Langkah ini sudah dihapus. Muat ulang halaman.", "STEP_NOT_FOUND", 404);
 
-    const toggled = input.is_checked !== undefined && Boolean(input.is_checked) !== step.isChecked;
-    const checked = input.is_checked === undefined ? step.isChecked : Boolean(input.is_checked);
+    const incomingEvidence = input.evidence_url === undefined ? step.evidenceUrl : input.evidence_url?.trim() || null;
+    // Mengunggah bukti pada langkah wajib-bukti otomatis menandai langkah selesai.
+    const autoCheck =
+      step.requiresEvidence && !step.isChecked && input.is_checked === undefined &&
+      Boolean(input.evidence_url?.trim());
+    const wantChecked = autoCheck ? true : input.is_checked === undefined ? step.isChecked : Boolean(input.is_checked);
+    // Langkah wajib-bukti tidak boleh dicentang tanpa foto/link bukti.
+    if (wantChecked && !step.isChecked && step.requiresEvidence && !incomingEvidence) {
+      err("Upload foto bukti dulu sebelum mencentang langkah ini.", "EVIDENCE_REQUIRED", 422);
+    }
+    const toggled = wantChecked !== step.isChecked;
+    const checked = wantChecked;
     const evidenceChanged =
       input.evidence_url !== undefined && (input.evidence_url || null) !== step.evidenceUrl;
     const noteChanged = input.note !== undefined && (input.note?.trim() || null) !== (step.note || null);
