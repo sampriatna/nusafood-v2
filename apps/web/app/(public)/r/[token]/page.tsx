@@ -5,6 +5,7 @@ import {
   getStaffReportByToken,
 } from "@/lib/services/daily-activity.service";
 import { loadSopContextForStaff } from "@/lib/services/sop-context.service";
+import { projectBadgesForTasks } from "@/lib/services/project-structure.service";
 import type { ReportTemplate } from "@/lib/daily-activity-types";
 import { DailyActivityClient } from "./daily-activity-client";
 import { PushNotificationSetup } from "./push-notification-setup";
@@ -67,6 +68,11 @@ export default async function DailyActivityPage({ params }: Props) {
       }),
     ]);
 
+    // Badge kecil project bila task terkait project; gagal = tanpa badge.
+    const projectBadges = await projectBadgesForTasks(incomingTasks.map((t) => t.taskId)).catch(
+      () => new Map<string, string>(),
+    );
+
     return (
       <>
         <PushNotificationSetup token={token} />
@@ -102,6 +108,11 @@ export default async function DailyActivityPage({ params }: Props) {
                       {task.areaName ? <span>· {task.areaName}</span> : null}
                       <span>· {task.priority}</span>
                       <span>· deadline {deadlineLabel(task.deadline)}</span>
+                      {projectBadges.get(task.taskId) ? (
+                        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800">
+                          Project: {projectBadges.get(task.taskId)}
+                        </span>
+                      ) : null}
                     </div>
                     <h2 className="mt-1.5 font-bold leading-snug text-foreground">
                       {task.taskTitle.replace(/^\[Kendala SOP\]\s*/i, "")}
