@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   Clock,
   Eye,
@@ -39,6 +40,7 @@ import {
   LEADER_FOLLOW_UP_OPTIONS,
   LEADER_SHIFTS,
 } from "@nusafood/types";
+import { StatTile } from "@/components/stat-tile";
 import { cn } from "@/lib/utils";
 
 function todayWib() {
@@ -484,16 +486,15 @@ export default function LeaderMonitoringPage() {
     <div className="min-h-screen bg-background">
       <MobileHeader title="Leader Monitoring" showBack backHref="/dashboard" />
 
-      <div className="p-4 space-y-4 max-w-lg mx-auto pb-10">
-        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-2">
-          <p className="font-bold flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 shrink-0" />
-            Monitoring Operasional Harian
-          </p>
+      <div className="mx-auto max-w-2xl space-y-4 p-4 pb-10">
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Cek fisik lapangan oleh leader. Laporan staff belum tentu benar.
+        </p>
+        <div className="flex gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-950">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
           <p>
-            Staff submit bukan berarti pekerjaan otomatis benar. Leader wajib cek fisik.
-            Jika foto lama, blur, beda area, atau lapangan tidak sesuai — tandai tidak
-            valid / revisi.
+            Jika foto lama, blur, beda area, atau kondisi lapangan tidak sesuai, tandai
+            <b> tidak valid</b> atau <b>revisi</b>.
           </p>
         </div>
 
@@ -509,10 +510,10 @@ export default function LeaderMonitoringPage() {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="h-11"
+            className="h-10 flex-1"
           />
           <select
-            className="h-11 rounded-md border px-2 text-sm bg-white"
+            className="h-10 rounded-md border bg-background px-2 text-sm"
             value={outlet}
             onChange={(e) => setOutlet(e.target.value)}
           >
@@ -524,21 +525,13 @@ export default function LeaderMonitoringPage() {
           </select>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <SummaryCard label="Checklist hari ini" value={summary?.total_today ?? "—"} />
-          <SummaryCard label="Area aman" value={summary?.area_aman ?? "—"} tone="green" />
-          <SummaryCard
-            label="Area bermasalah"
-            value={summary?.area_bermasalah ?? "—"}
-            tone="amber"
-          />
-          <SummaryCard
-            label="Staff perlu perbaikan"
-            value={summary?.staff_perlu_perbaikan ?? "—"}
-            tone="red"
-          />
-          <SummaryCard label="Issue open" value={summary?.issue_open ?? "—"} tone="amber" />
-          <SummaryCard label="Issue selesai" value={summary?.issue_selesai ?? "—"} tone="green" />
+        <div className="grid grid-cols-3 gap-2">
+          <StatTile label="Checklist hari ini" value={summary?.total_today} />
+          <StatTile label="Area aman" value={summary?.area_aman} tone="green" />
+          <StatTile label="Area bermasalah" value={summary?.area_bermasalah} tone="amber" />
+          <StatTile label="Staff perlu perbaikan" value={summary?.staff_perlu_perbaikan} tone="red" />
+          <StatTile label="Issue open" value={summary?.issue_open} tone="amber" />
+          <StatTile label="Issue selesai" value={summary?.issue_selesai} tone="green" />
         </div>
 
         {loadError && !loading ? (
@@ -551,8 +544,8 @@ export default function LeaderMonitoringPage() {
         ) : null}
 
         <section className="space-y-2.5">
-          <h2 className="font-semibold text-slate-800 flex items-center gap-2 text-sm">
-            <ClipboardCheck className="h-4 w-4" />
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <ClipboardCheck className="size-4 text-primary" />
             Isi checklist kontrol
           </h2>
           {loading && !templates.length ? (
@@ -567,26 +560,24 @@ export default function LeaderMonitoringPage() {
                 key={t.id}
                 type="button"
                 onClick={() => openForm(t)}
-                className="w-full text-left rounded-2xl border-2 border-slate-200 bg-white p-4 active:scale-[0.98] transition-transform shadow-sm"
+                className="flex w-full items-center gap-3 rounded-xl border bg-card p-3.5 text-left shadow-sm transition-colors hover:border-primary/50 active:scale-[0.99]"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-bold text-lg text-slate-900">{t.menu_label}</h3>
-                    <p className="text-sm text-slate-600 mt-1 line-clamp-2">{t.description}</p>
-                    <p className="text-xs text-slate-500 mt-2">
-                      {t.checklist.length} titik · Foto{" "}
-                      {t.photo_mode === "required"
-                        ? "wajib"
-                        : t.photo_mode === "required_if_issue"
-                          ? "jika masalah"
-                          : "opsional"}
-                    </p>
-                  </div>
-                  <Eye className="h-5 w-5 text-slate-400 shrink-0 mt-1" />
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold leading-tight text-foreground">{t.menu_label}</h3>
+                  <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{t.description}</p>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    {t.checklist.length} titik · Foto{" "}
+                    {t.photo_mode === "required"
+                      ? "wajib"
+                      : t.photo_mode === "required_if_issue"
+                        ? "jika masalah"
+                        : "opsional"}
+                  </p>
                 </div>
-                <div className="mt-3 h-12 rounded-xl bg-slate-800 text-white font-bold flex items-center justify-center">
-                  Mulai cek →
-                </div>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">
+                  <Eye className="size-4" />
+                  Mulai cek
+                </span>
               </button>
             ))
           )}
@@ -594,20 +585,22 @@ export default function LeaderMonitoringPage() {
 
         {(data?.staff_need_fix?.length || 0) > 0 && (
           <section className="space-y-2.5">
-            <h2 className="font-semibold text-red-800 text-sm">
+            <h2 className="text-sm font-semibold text-red-800">
               Laporan staff perlu perbaikan
             </h2>
             {data!.staff_need_fix.map((s) => (
               <div
                 key={s.id}
-                className="rounded-xl border-2 border-red-200 bg-red-50 p-3 space-y-2"
+                className="space-y-1 rounded-xl border border-red-200 bg-red-50 p-3"
               >
-                <p className="font-semibold text-slate-900">
-                  {s.staff_name} · {s.report_title}
-                </p>
-                <p className="text-xs text-red-800 uppercase font-bold">
-                  {s.leader_validation}
-                </p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 text-sm font-semibold text-foreground">
+                    {s.staff_name} · {s.report_title}
+                  </p>
+                  <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold uppercase text-red-800">
+                    {s.leader_validation}
+                  </span>
+                </div>
                 {s.leader_validation_note && (
                   <p className="text-sm text-slate-700">{s.leader_validation_note}</p>
                 )}
@@ -620,17 +613,20 @@ export default function LeaderMonitoringPage() {
             also link to daily reports */}
         <Link
           href="/dashboard/daily-reports"
-          className="block rounded-xl border border-slate-200 bg-white p-4 text-sm"
+          className="flex items-center gap-3 rounded-xl border bg-card p-3.5 text-sm transition-colors hover:border-primary/50"
         >
-          <p className="font-semibold text-slate-900">Dashboard submit staff</p>
-          <p className="text-slate-600 mt-1">
-            Lihat siapa sudah/belum submit, lalu validasi dari sini atau Spot Check.
-          </p>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-foreground">Dashboard submit staff</p>
+            <p className="mt-0.5 text-muted-foreground">
+              Lihat siapa sudah/belum submit, lalu validasi dari sini atau Spot Check.
+            </p>
+          </div>
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
         </Link>
 
         {(data?.submissions?.length || 0) > 0 && (
           <section className="space-y-2.5">
-            <h2 className="font-semibold text-slate-800 text-sm">Hasil cek hari ini</h2>
+            <h2 className="text-sm font-semibold text-foreground">Hasil cek hari ini</h2>
             {data!.submissions.map((sub) => (
               <div
                 key={sub.id}
@@ -643,9 +639,9 @@ export default function LeaderMonitoringPage() {
                       : "bg-red-50 border-red-200"
                 )}
               >
-                <div className="flex justify-between gap-2">
-                  <p className="font-semibold text-slate-900">{sub.title || sub.kind}</p>
-                  <span className="text-xs font-bold uppercase shrink-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-foreground">{sub.title || sub.kind}</p>
+                  <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase">
                     {sub.status.replace("_", " ")}
                   </span>
                 </div>
@@ -677,31 +673,6 @@ export default function LeaderMonitoringPage() {
 
         {/* Hidden helper removed */}
       </div>
-    </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string | number;
-  tone?: "green" | "amber" | "red";
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border p-3",
-        tone === "green" && "bg-emerald-50 border-emerald-200",
-        tone === "amber" && "bg-amber-50 border-amber-200",
-        tone === "red" && "bg-red-50 border-red-200",
-        !tone && "bg-slate-50 border-slate-200"
-      )}
-    >
-      <p className="text-xs text-slate-600 mb-1">{label}</p>
-      <p className="text-2xl font-bold tabular-nums">{value}</p>
     </div>
   );
 }

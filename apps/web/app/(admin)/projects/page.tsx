@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronRight, ClipboardCheck, FolderKanban, Plus, Search } from "lucide-react";
 import { AdminPage } from "@/components/admin-page";
+import { StatTile } from "@/components/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -146,14 +147,17 @@ export default function ProjectsPage() {
   }
 
   return (
-    <AdminPage title="Project" backHref="/dashboard" maxWidth="3xl">
-      <div className="flex items-center justify-between gap-3">
-        <div className="grid flex-1 grid-cols-4 gap-2 text-center">
-          <Stat label="Aktif" value={counts.active} />
-          <Stat label="Perlu Perhatian" value={counts.attention} tone={counts.attention ? "amber" : undefined} />
-          <Stat label="Blocked" value={counts.blocked} tone={counts.blocked ? "red" : undefined} />
-          <Stat label="Menunggu Validasi" value={counts.waiting} tone={counts.waiting ? "sky" : undefined} />
-        </div>
+    <AdminPage
+      title="Project"
+      description="Pantau progress project, milestone yang menunggu validasi, dan kendala per PIC."
+      backHref="/dashboard"
+      maxWidth="3xl"
+    >
+      <div className="grid grid-cols-4 gap-2">
+        <StatTile label="Aktif" value={loading ? undefined : counts.active} />
+        <StatTile label="Perlu perhatian" value={loading ? undefined : counts.attention} tone={counts.attention ? "amber" : "neutral"} />
+        <StatTile label="Blocked" value={loading ? undefined : counts.blocked} tone={counts.blocked ? "red" : "neutral"} />
+        <StatTile label="Menunggu validasi" value={loading ? undefined : counts.waiting} tone={counts.waiting ? "sky" : "neutral"} />
       </div>
       <Button className="w-full sm:w-auto" onClick={() => setShowNew(true)}>
         <Plus className="mr-2 size-4" />
@@ -161,7 +165,7 @@ export default function ProjectsPage() {
       </Button>
 
       {pending.length ? (
-        <section className="space-y-2 rounded-xl border-2 border-sky-300 bg-sky-50 p-3">
+        <section className="space-y-2 rounded-xl border border-sky-200 bg-sky-50/70 p-3">
           <h2 className="flex items-center gap-2 text-sm font-bold text-sky-900">
             <ClipboardCheck className="size-4" />
             Menunggu Validasi ({pending.length})
@@ -170,17 +174,19 @@ export default function ProjectsPage() {
             <Link
               key={item.milestone_id}
               href={`/projects/${item.project_id}?review=${item.milestone_id}`}
-              className="block rounded-lg border border-sky-200 bg-white p-3 active:scale-[0.99]"
+              className="flex items-center gap-3 rounded-lg border border-sky-100 bg-white p-3 active:scale-[0.99]"
             >
-              <p className="text-xs text-muted-foreground">
-                {item.project_name} · {item.workstream_name}
-              </p>
-              <p className="font-semibold leading-snug">{item.milestone_title}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Diajukan {item.pic_name} · {formatStamp(item.submitted_at)} · langkah {item.steps_done}/
-                {item.steps_total} · {item.evidence_count} bukti
-              </p>
-              <span className="mt-2 inline-flex items-center text-sm font-semibold text-sky-800">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">
+                  {item.project_name} · {item.workstream_name}
+                </p>
+                <p className="font-semibold leading-snug">{item.milestone_title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Diajukan {item.pic_name} · {formatStamp(item.submitted_at)} · langkah {item.steps_done}/
+                  {item.steps_total} · {item.evidence_count} bukti
+                </p>
+              </div>
+              <span className="inline-flex shrink-0 items-center text-sm font-semibold text-sky-800">
                 Review <ChevronRight className="size-4" />
               </span>
             </Link>
@@ -204,7 +210,7 @@ export default function ProjectsPage() {
         ))}
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-[1fr_200px]">
+      <div className="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_200px]">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -215,7 +221,7 @@ export default function ProjectsPage() {
           />
         </div>
         <Select value={picFilter} onValueChange={setPicFilter}>
-          <SelectTrigger>
+          <SelectTrigger className="w-[130px] sm:w-full">
             <SelectValue placeholder="Semua PIC" />
           </SelectTrigger>
           <SelectContent>
@@ -230,11 +236,11 @@ export default function ProjectsPage() {
       </div>
 
       {loading ? (
-        <Card>
+        <Card className="gap-0 py-0">
           <CardContent className="p-8 text-center text-sm text-muted-foreground">Memuat project…</CardContent>
         </Card>
       ) : visible.length === 0 ? (
-        <Card>
+        <Card className="gap-0 py-0">
           <CardContent className="py-12 text-center">
             <FolderKanban className="mx-auto mb-3 size-9 text-muted-foreground" />
             <p className="font-medium">{projects.length ? "Tidak ada project di tab ini" : "Belum ada project"}</p>
@@ -333,27 +339,10 @@ export default function ProjectsPage() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: "amber" | "red" | "sky" }) {
-  const toneClass =
-    tone === "amber"
-      ? "border-amber-300 bg-amber-50 text-amber-900"
-      : tone === "red"
-        ? "border-red-300 bg-red-50 text-red-900"
-        : tone === "sky"
-          ? "border-sky-300 bg-sky-50 text-sky-900"
-          : "bg-card";
-  return (
-    <div className={cn("rounded-lg border px-1 py-2", toneClass)}>
-      <p className="text-xl font-bold leading-none">{value}</p>
-      <p className="mt-1 text-[10px] leading-tight text-muted-foreground">{label}</p>
-    </div>
-  );
-}
-
 function ProjectCard({ project: p }: { project: ProjectSummaryDto }) {
   return (
     <Link href={`/projects/${p.id}`} className="block">
-      <Card className="h-full transition hover:border-primary/40">
+      <Card className="h-full gap-0 py-0 transition hover:border-primary/40">
         <CardContent className="space-y-3 p-4">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">

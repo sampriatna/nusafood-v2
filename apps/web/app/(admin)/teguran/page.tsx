@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ChevronRight,
   Bell,
+  Clock,
   FileWarning,
   Filter,
   Loader2,
@@ -20,7 +21,7 @@ import type {
   DisciplinaryLetterType,
 } from "@nusafood/types";
 import { AdminPage } from "@/components/admin-page";
-import { Badge } from "@/components/ui/badge";
+import { StatTile } from "@/components/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,16 @@ import { formatTanggal, outletLabel, presentViolation, romanLevel } from "@/lib/
 type ApiResponse<T> =
   | { success: true; data: T; error: null }
   | { success: false; data: null; error: string };
+
+const STATUS_TONE: Record<DisciplinaryLetterStatus, string> = {
+  DRAFT: "bg-slate-100 text-slate-700",
+  WAITING_APPROVAL: "bg-amber-100 text-amber-900",
+  APPROVED: "bg-sky-100 text-sky-800",
+  SENT: "bg-sky-100 text-sky-800",
+  ACKNOWLEDGED: "bg-violet-100 text-violet-800",
+  RESOLVED: "bg-emerald-100 text-emerald-800",
+  CANCELLED: "bg-slate-100 text-slate-500",
+};
 
 function statusLabel(status: DisciplinaryLetterStatus): string {
   const map: Record<DisciplinaryLetterStatus, string> = {
@@ -105,75 +116,81 @@ export default function TeguranCenterPage() {
         label: "Total bulan ini",
         value: summary?.total_this_month,
         icon: Bell,
+        tone: "neutral" as const,
       },
       {
         label: "ST aktif",
         value: summary?.st_active,
         icon: FileWarning,
+        tone: "amber" as const,
       },
       {
         label: "SP aktif",
         value: summary?.sp_active,
         icon: AlertTriangle,
+        tone: "red" as const,
       },
       {
         label: "Menunggu approval",
         value: summary?.waiting_approval,
-        icon: Loader2,
+        icon: Clock,
+        tone: "sky" as const,
       },
       {
         label: "Karyawan berulang",
         value: summary?.repeat_employees,
         icon: Users,
+        tone: "neutral" as const,
       },
     ],
     [summary],
   );
 
   return (
-    <AdminPage title="Teguran" maxWidth="3xl">
+    <AdminPage
+      title="Teguran"
+      description="Surat disiplin operasional: ST untuk pembinaan, SP untuk sanksi formal HR."
+      maxWidth="3xl"
+    >
       <div className="flex items-center justify-between gap-2">
-        <div>
-          <h2 className="font-semibold">Disiplin operasional</h2>
-          <p className="text-sm text-muted-foreground">
-            ST untuk pembinaan, SP untuk sanksi formal HR.
-          </p>
-        </div>
+        <h2 className="text-sm font-medium text-muted-foreground">
+          {loading ? "Memuat…" : `${letters.length} surat`}
+        </h2>
         <div className="flex gap-2">
           <Button
-            variant="outline"
+            variant={showFilters ? "secondary" : "outline"}
             size="icon"
+            aria-label="Filter"
             onClick={() => setShowFilters((v) => !v)}
           >
             <Filter className="size-4" />
           </Button>
-          <Button variant="outline" size="icon" onClick={() => void load()}>
+          <Button variant="outline" size="icon" aria-label="Muat ulang" onClick={() => void load()}>
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
-          <Link href="/teguran/new">
-            <Button size="sm">
+          <Button asChild>
+            <Link href="/teguran/new">
               <Plus className="mr-1 size-4" />
               Buat
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </div>
 
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
         {cards.map((c) => (
-          <div
+          <StatTile
             key={c.label}
-            className="flex shrink-0 items-center gap-2 rounded-lg border bg-card px-3 py-2"
-          >
-            <c.icon className="size-4 text-muted-foreground" />
-            <span className="text-lg font-bold leading-none">{loading ? "-" : c.value ?? 0}</span>
-            <span className="text-xs text-muted-foreground">{c.label}</span>
-          </div>
+            icon={c.icon}
+            label={c.label}
+            value={loading ? undefined : c.value ?? 0}
+            tone={c.value ? c.tone : "neutral"}
+          />
         ))}
       </div>
 
       {showFilters ? (
-        <Card>
+        <Card className="gap-0 py-0">
           <CardContent className="grid gap-3 p-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Outlet</Label>
@@ -251,19 +268,16 @@ export default function TeguranCenterPage() {
       ) : null}
 
       <section className="space-y-2">
-        <h3 className="text-sm font-medium text-muted-foreground">
-          {letters.length} surat
-        </h3>
         {loading ? (
-          <Card>
+          <Card className="gap-0 py-0">
             <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
               Memuat...
             </CardContent>
           </Card>
         ) : letters.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center text-muted-foreground">
+          <Card className="gap-0 py-0">
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
               Belum ada surat. Tekan “Buat” untuk membuat surat dari tugas yang terlambat.
             </CardContent>
           </Card>
@@ -283,7 +297,7 @@ function LetterCard({ letter }: { letter: DisciplinaryLetter }) {
   const docLabel = `${letter.type === "TEGURAN" ? "Surat Teguran" : "Surat Peringatan"} ${romanLevel(letter.level)}`;
   return (
     <Link href={`/teguran/${letter.id}`} className="block">
-      <Card className="transition-colors hover:bg-muted/40">
+      <Card className="gap-0 py-0 transition-colors hover:border-primary/40">
         <CardContent className="space-y-1.5 p-4">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -292,11 +306,13 @@ function LetterCard({ letter }: { letter: DisciplinaryLetter }) {
               </p>
               <p className="truncate font-semibold">{letter.employee_name_snapshot}</p>
             </div>
-            <Badge variant="secondary" className="shrink-0">
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE[letter.status]}`}
+            >
               {statusLabel(letter.status)}
-            </Badge>
+            </span>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {outletLabel(letter.outlet_name_snapshot)} · {formatTanggal(letter.incident_date)}
           </p>
           <p className="line-clamp-2 text-sm">{presentViolation(letter.violation_detail)}</p>
