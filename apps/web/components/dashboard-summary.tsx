@@ -81,12 +81,12 @@ export function DashboardSummaryCards({
 }: DashboardSummaryCardsProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
         {cards.map((card) => (
-          <Card key={card.key} className={cn("border p-3", card.className)}>
+          <Card key={card.key} className={cn("gap-0 border p-2.5", card.className)}>
             <div className="animate-pulse">
-              <div className="mb-2 h-4 w-16 rounded bg-slate-200" />
-              <div className="h-8 w-12 rounded bg-slate-200" />
+              <div className="mb-2 h-3 w-12 rounded bg-slate-200" />
+              <div className="h-6 w-8 rounded bg-slate-200" />
             </div>
           </Card>
         ))}
@@ -95,13 +95,13 @@ export function DashboardSummaryCards({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
       {cards.map((card) => (
         <div
           key={card.key}
           onClick={() => onStatusClick?.(card.key)}
           className={cn(
-            "cursor-pointer rounded-lg transition-all hover:shadow-md hover:border-slate-400",
+            "cursor-pointer rounded-xl transition-all hover:shadow-md",
             activeKey === card.key && "ring-2 ring-primary ring-offset-2",
           )}
           role="button"
@@ -112,15 +112,15 @@ export function DashboardSummaryCards({
             }
           }}
         >
-          <Card className={cn("border p-3", card.className)}>
-            <div className="mb-1 flex items-center gap-2">
-              <span className={card.textClass}>{card.icon}</span>
-              <span className={cn("text-xs font-medium", card.textClass)}>
-                {card.label}
-              </span>
+          <Card className={cn("h-full gap-0 border p-2.5", card.className)}>
+            <div className="flex items-center justify-between gap-1">
+              <p className={cn("text-xl font-bold leading-none tabular-nums", card.textClass)}>
+                {summary[card.key]}
+              </p>
+              <span className={cn("[&>svg]:size-4 opacity-80", card.textClass)}>{card.icon}</span>
             </div>
-            <p className={cn("text-2xl font-bold", card.textClass)}>
-              {summary[card.key]}
+            <p className={cn("mt-1.5 text-[11px] font-medium leading-tight", card.textClass)}>
+              {card.label}
             </p>
           </Card>
         </div>
@@ -189,12 +189,12 @@ export function ChecklistSummaryCards({
 }: ChecklistSummaryCardsProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
         {checklistCards.map((card) => (
-          <Card key={card.key} className={cn("border p-3", card.className)}>
+          <Card key={card.key} className={cn("gap-0 border p-2.5", card.className)}>
             <div className="animate-pulse">
-              <div className="mb-2 h-4 w-16 rounded bg-slate-200" />
-              <div className="h-8 w-12 rounded bg-slate-200" />
+              <div className="mb-2 h-3 w-12 rounded bg-slate-200" />
+              <div className="h-6 w-8 rounded bg-slate-200" />
             </div>
           </Card>
         ))}
@@ -203,13 +203,13 @@ export function ChecklistSummaryCards({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
       {checklistCards.map((card) => (
         <div
           key={card.key}
           onClick={() => onStatusClick?.(card.key)}
           className={cn(
-            "cursor-pointer rounded-lg transition-all hover:shadow-md hover:border-slate-400",
+            "cursor-pointer rounded-xl transition-all hover:shadow-md",
             activeKey === card.key && "ring-2 ring-primary ring-offset-2",
           )}
           role="button"
@@ -220,15 +220,15 @@ export function ChecklistSummaryCards({
             }
           }}
         >
-          <Card className={cn("border p-3", card.className)}>
-            <div className="mb-1 flex items-center gap-2">
-              <span className={card.textClass}>{card.icon}</span>
-              <span className={cn("text-xs font-medium", card.textClass)}>
-                {card.label}
-              </span>
+          <Card className={cn("h-full gap-0 border p-2.5", card.className)}>
+            <div className="flex items-center justify-between gap-1">
+              <p className={cn("text-xl font-bold leading-none tabular-nums", card.textClass)}>
+                {summary[card.key]}
+              </p>
+              <span className={cn("[&>svg]:size-4 opacity-80", card.textClass)}>{card.icon}</span>
             </div>
-            <p className={cn("text-2xl font-bold", card.textClass)}>
-              {summary[card.key]}
+            <p className={cn("mt-1.5 text-[11px] font-medium leading-tight", card.textClass)}>
+              {card.label}
             </p>
           </Card>
         </div>

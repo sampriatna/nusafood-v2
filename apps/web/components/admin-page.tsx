@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   title: string;
+  /** Satu kalimat penjelas isi halaman, tampil di bawah header. */
+  description?: string;
   backHref?: string;
   maxWidth?: "xl" | "2xl" | "3xl";
   className?: string;
@@ -17,6 +19,7 @@ const widthClass = {
 
 export function AdminPage({
   title,
+  description,
   backHref = "/dashboard",
   maxWidth = "2xl",
   className,
@@ -32,6 +35,9 @@ export function AdminPage({
           className,
         )}
       >
+        {description ? (
+          <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+        ) : null}
         {children}
       </div>
     </div>

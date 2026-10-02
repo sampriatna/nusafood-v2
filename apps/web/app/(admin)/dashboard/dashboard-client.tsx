@@ -577,7 +577,7 @@ export function DashboardClient() {
     <div className="min-h-screen bg-background">
       <MobileHeader title="Dashboard" showSettings />
 
-      <div className="mx-auto max-w-5xl space-y-4 p-4 pb-24">
+      <div className="mx-auto max-w-5xl space-y-5 p-4 pb-28">
         {loadError && tasks.length > 0 && (
           <Card className="border-red-200 bg-red-50">
             <CardContent className="flex items-start gap-3 p-4">
@@ -599,46 +599,47 @@ export function DashboardClient() {
 
         <PendingSendPanel onGenerated={() => void loadData()} />
 
-        <div className="grid grid-cols-2 gap-2">
-          {QUICK_LINKS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={item.href === "/dashboard/performance" ? "col-span-2" : undefined}
-            >
-              <Card className="h-full cursor-pointer gap-0 py-0 transition-colors hover:border-primary/50">
-                <CardContent className="space-y-2 p-3">
-                  <div className="w-fit rounded-lg bg-primary/10 p-1.5">
-                    <item.icon className="size-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium leading-tight text-foreground">
-                      {item.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.href === "/projects" && projectStats
-                        ? [
-                            `${projectStats.active} aktif`,
-                            projectStats.waiting ? `${projectStats.waiting} menunggu validasi` : null,
-                            projectStats.blocked ? `${projectStats.blocked} blocked` : null,
-                            projectStats.overdue ? `${projectStats.overdue} terlambat` : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")
-                        : item.subtitle}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <section className="space-y-2">
+          <h2 className="px-0.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Menu
+          </h2>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {QUICK_LINKS.map((item) => (
+              <Link key={item.href} href={item.href} className="group">
+                <Card className="h-full gap-0 py-0 transition-colors group-hover:border-primary/50">
+                  <CardContent className="flex items-start gap-2.5 p-3">
+                    <div className="shrink-0 rounded-lg bg-primary/10 p-2">
+                      <item.icon className="size-4 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-tight text-foreground">
+                        {item.title}
+                      </p>
+                      <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted-foreground">
+                        {item.href === "/projects" && projectStats
+                          ? [
+                              `${projectStats.active} aktif`,
+                              projectStats.waiting ? `${projectStats.waiting} menunggu validasi` : null,
+                              projectStats.blocked ? `${projectStats.blocked} blocked` : null,
+                              projectStats.overdue ? `${projectStats.overdue} terlambat` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")
+                          : item.subtitle}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
 
         <Tabs
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as "tasks" | "checklists")}
         >
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid h-10 w-full grid-cols-2">
             <TabsTrigger value="tasks" className="flex items-center gap-2">
               <ClipboardList className="size-4" />
               Tugas ({manualTasks.length})
@@ -698,7 +699,7 @@ export function DashboardClient() {
 
             <div ref={listRef} className="space-y-3 scroll-mt-24">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-foreground">
+                <h2 className="text-base font-semibold text-foreground">
                   Daftar Tugas
                   {filteredTasks.length > 0 && (
                     <span className="ml-2 text-sm font-normal text-muted-foreground">
@@ -810,7 +811,7 @@ export function DashboardClient() {
 
             <div ref={listRef} className="space-y-3 scroll-mt-24">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-foreground">
+                <h2 className="text-base font-semibold text-foreground">
                   Daftar Checklist
                   {hasActiveFilters && (
                     <span className="ml-2 text-sm font-normal text-muted-foreground">

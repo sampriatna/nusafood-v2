@@ -11,6 +11,7 @@ import {
   MinusCircle,
   XCircle,
 } from "lucide-react";
+import { StatTile } from "@/components/stat-tile";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { formatDateId, formatTimeId } from "@/lib/format-datetime";
@@ -152,8 +153,8 @@ export function PerformanceClient({ canPickOutlet }: { canPickOutlet: boolean })
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="col-span-2">
+      <div className="space-y-2">
+        <Card className="gap-0 py-0">
           <CardContent className="space-y-3 p-4">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
@@ -177,10 +178,12 @@ export function PerformanceClient({ canPickOutlet }: { canPickOutlet: boolean })
             </div>
           </CardContent>
         </Card>
-        <Stat label="Total tugas" value={overall?.total} loading={loading} />
-        <Stat label="Tepat waktu" value={overall?.on_time} loading={loading} />
-        <Stat label="Terlambat" value={overall?.late_done} loading={loading} />
-        <Stat label="Belum lapor, lewat deadline" value={overall?.overdue} loading={loading} />
+        <div className="grid grid-cols-4 gap-2">
+          <StatTile label="Total tugas" value={loading ? undefined : overall?.total ?? 0} />
+          <StatTile label="Tepat waktu" value={loading ? undefined : overall?.on_time ?? 0} tone="green" />
+          <StatTile label="Terlambat" value={loading ? undefined : overall?.late_done ?? 0} tone="amber" />
+          <StatTile label="Belum lapor" value={loading ? undefined : overall?.overdue ?? 0} tone="red" />
+        </div>
       </div>
 
       <Legend />
@@ -206,7 +209,7 @@ export function PerformanceClient({ canPickOutlet }: { canPickOutlet: boolean })
         )}
       </section>
 
-      <details className="rounded-lg border bg-card px-4 py-3 text-sm">
+      <details className="rounded-xl border bg-card px-4 py-3 text-sm">
         <summary className="cursor-pointer font-medium">Cara menghitung skor</summary>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
           <li>Dihitung dari tugas yang <b>deadline-nya</b> jatuh di periode yang dipilih.</li>
@@ -248,17 +251,6 @@ function HeroScore({ label, score, hint }: { label: string; score?: number | nul
       </p>
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
-  );
-}
-
-function Stat({ label, value, loading }: { label: string; value?: number; loading: boolean }) {
-  return (
-    <Card>
-      <CardContent className="p-3">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-2xl font-bold">{loading ? "–" : value ?? 0}</p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -344,8 +336,8 @@ function BucketRow({ bucket, showLetters }: { bucket: Bucket; showLetters: boole
   ].filter(Boolean);
 
   return (
-    <Card>
-      <CardContent className="space-y-2 p-3">
+    <Card className="gap-0 py-0">
+      <CardContent className="space-y-2 p-3.5">
         <button
           type="button"
           className="flex w-full items-start justify-between gap-3 text-left"

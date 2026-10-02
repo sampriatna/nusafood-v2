@@ -18,6 +18,7 @@ export default async function RecurringTasksSettingsPage() {
   return (
     <AdminPage
       title="Tugas Berulang"
+      description="Template tugas yang dibuat otomatis sesuai jadwal, lengkap dengan checklist-nya."
       backHref="/settings"
       maxWidth="3xl"
     >

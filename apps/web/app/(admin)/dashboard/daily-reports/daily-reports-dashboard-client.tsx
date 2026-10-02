@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { ComponentType } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -14,6 +13,7 @@ import {
   UserX,
   Users,
 } from "lucide-react";
+import { StatTile } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -173,9 +173,12 @@ export function DailyReportsDashboardClient() {
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <h2 className="font-semibold">Kegiatan staff {date === todayLocal() ? "hari ini" : formatDateLabel(date)}</h2>
-          <p className="text-sm text-muted-foreground">
-            Siapa sudah / belum mengisi kegiatan SOP harian.
-          </p>
+          {!isLoading && summary ? (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Users className="size-3.5" />
+              {summary.staff_submitted ?? 0} staff lengkap · {summary.staff_not_submitted ?? 0} belum lengkap
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 gap-2">
           <Button
@@ -201,7 +204,7 @@ export function DailyReportsDashboardClient() {
       </div>
 
       {showFilters ? (
-        <Card>
+        <Card className="gap-0 py-0">
           <CardContent className="grid gap-3 p-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Tanggal</Label>
@@ -230,44 +233,14 @@ export function DailyReportsDashboardClient() {
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3">
-        <SummaryCard
-          icon={ClipboardList}
-          label="Sudah lapor"
-          value={summary?.total_today}
-          loading={isLoading}
-          className="border-slate-200 bg-slate-50"
-        />
-        <SummaryCard
-          icon={UserX}
-          label="Belum lapor (wajib)"
-          value={summary?.not_submitted}
-          loading={isLoading}
-          className="border-red-200 bg-red-50 text-red-800"
-        />
-        <SummaryCard
-          icon={CheckCircle2}
-          label="Selesai lengkap"
-          value={summary?.complete_ok}
-          loading={isLoading}
-          className="border-emerald-200 bg-emerald-50 text-emerald-800"
-        />
-        <SummaryCard
-          icon={AlertTriangle}
-          label="Ada kendala"
-          value={summary?.complete_with_issue}
-          loading={isLoading}
-          className="border-amber-200 bg-amber-50 text-amber-800"
-        />
+      <div className="grid grid-cols-4 gap-2">
+        <StatTile icon={ClipboardList} label="Sudah lapor" value={isLoading ? undefined : summary?.total_today ?? 0} />
+        <StatTile icon={UserX} label="Belum lapor" value={isLoading ? undefined : summary?.not_submitted ?? 0} tone="red" />
+        <StatTile icon={CheckCircle2} label="Lengkap" value={isLoading ? undefined : summary?.complete_ok ?? 0} tone="green" />
+        <StatTile icon={AlertTriangle} label="Ada kendala" value={isLoading ? undefined : summary?.complete_with_issue ?? 0} tone="amber" />
       </div>
-      {!isLoading && summary ? (
-        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Users className="size-4" />
-          {summary.staff_submitted ?? 0} staff lengkap · {summary.staff_not_submitted ?? 0} staff belum lengkap
-        </p>
-      ) : null}
 
-      <p className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+      <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
         Laporan staff belum tentu sesuai kondisi lapangan — cek fisik lewat{" "}
         <Link href="/dashboard/leader-monitoring" className="font-medium text-primary underline">
           Leader Monitoring
@@ -295,15 +268,15 @@ export function DailyReportsDashboardClient() {
         </div>
 
         {isLoading ? (
-          <Card>
+          <Card className="gap-0 py-0">
             <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
               Memuat dashboard...
             </CardContent>
           </Card>
         ) : visibleRows.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center text-muted-foreground">
+          <Card className="gap-0 py-0">
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
               Tidak ada data untuk filter ini
             </CardContent>
           </Card>
@@ -375,32 +348,6 @@ function formatDateLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" });
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  loading,
-  className,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value?: number;
-  loading: boolean;
-  className?: string;
-}) {
-  return (
-    <Card className={className}>
-      <CardContent className="p-3">
-        <div className="mb-1 flex items-center gap-2 text-xs">
-          <Icon className="size-4" />
-          {label}
-        </div>
-        <p className="text-2xl font-bold">{loading ? "-" : value ?? 0}</p>
-      </CardContent>
-    </Card>
-  );
 }
 
 function RowDesktop({
@@ -499,6 +446,7 @@ function RowMobile({
   return (
     <Card
       className={cn(
+        "gap-0 py-0",
         row.label === "belum_submit" && "border-red-200 bg-red-50/40",
         row.label === "selesai_kendala" && "border-amber-200 bg-amber-50/40",
         row.label === "selesai_lengkap" &&
@@ -506,11 +454,11 @@ function RowMobile({
         row.label === "perlu_perbaikan" && "border-orange-300 bg-orange-50/50",
       )}
     >
-      <CardContent className="space-y-2 p-4">
+      <CardContent className="space-y-2 p-3.5">
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="font-semibold">{row.staff_name}</p>
-            <p className="text-sm text-muted-foreground">
+          <div className="min-w-0">
+            <p className="font-semibold leading-tight">{row.staff_name}</p>
+            <p className="text-xs text-muted-foreground">
               {outletShortName(row.outlet)} · {row.position}
             </p>
           </div>
@@ -523,12 +471,9 @@ function RowMobile({
             {meta.text}
           </span>
         </div>
-        <p className="text-sm">
-          <span className="text-muted-foreground">Kegiatan: </span>
-          {row.report_title}
-        </p>
+        <p className="text-sm font-medium">{row.report_title}</p>
         {row.submitted ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Checklist {row.checklist_checked}/{row.checklist_total} ({row.checklist_percent}%) · jam{" "}
             {formatTime(row.submitted_at)} · {conditionLabel(row.status_condition)}
           </p>

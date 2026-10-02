@@ -38,6 +38,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import {
   POSITION_GROUP_LABELS,
   REPORT_POSITION_GROUPS,
@@ -340,32 +341,26 @@ export function RecurringManager({
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold">Tugas Berulang</h2>
-          <p className="text-sm text-muted-foreground">
-            {templates.length} template · {activeCount} aktif
-          </p>
-        </div>
-        <Button type="button" onClick={openCreateDialog}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-foreground">
+          {templates.length} template · {activeCount} aktif
+        </p>
+        <Button type="button" size="sm" onClick={openCreateDialog}>
           <Plus className="mr-2 size-4" />
           Buat Template
         </Button>
       </div>
 
-      <Card className="border-blue-200 bg-blue-50/80 p-3 dark:border-blue-900 dark:bg-blue-950/30">
-        <div className="flex items-start gap-2 text-sm text-blue-900 dark:text-blue-100">
-          <AlertCircle className="mt-0.5 size-4 shrink-0" />
-          <p>
-            Setiap template punya checklist item. Klik{" "}
-            <strong>Checklist</strong> pada kartu untuk expand dan edit item
-            langsung di sini — seperti di v1.
-          </p>
-        </div>
-      </Card>
+      <div className="flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+        <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+        <p>
+          Tekan <strong className="text-foreground">Checklist</strong> pada kartu untuk melihat
+          dan mengubah item checklist-nya langsung di sini.
+        </p>
+      </div>
 
       {templates.length === 0 ? (
-        <Card>
+        <Card className="gap-0 py-0">
           <CardContent className="py-12 text-center">
             <RefreshCw className="mx-auto mb-4 size-12 text-muted-foreground" />
             <h3 className="mb-1 font-medium">Belum ada template</h3>
@@ -385,33 +380,33 @@ export function RecurringManager({
             return (
               <Card
                 key={template.template_id}
-                className={!template.active_status ? "opacity-60" : undefined}
+                className={cn("gap-0 overflow-hidden py-0", !template.active_status && "opacity-60")}
               >
                 <CardContent className="p-0">
                   <div className="space-y-3 p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
+                      <div className="min-w-0 space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <h3 className="font-semibold leading-tight">
                             {template.template_name}
                           </h3>
                           {!template.active_status ? (
                             <Badge variant="secondary">Nonaktif</Badge>
                           ) : null}
-                          <Badge variant="outline">
+                          <span className="text-[11px] text-muted-foreground">
                             v{template.template_version}
-                          </Badge>
+                          </span>
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {template.task_title}
                         </p>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5 text-xs text-muted-foreground">
                           <span className="inline-flex items-center gap-1">
                             <MapPin className="size-3.5" />
                             {template.outlet} · {template.area || "—"}
                           </span>
-                          <span className="inline-flex items-center gap-1">
-                            <User className="size-3.5" />
+                          <span className="inline-flex items-start gap-1">
+                            <User className="mt-px size-3.5 shrink-0" />
                             {template.pic_position
                               ? `${getPositionGroupLabel(template.pic_position)} (sesuai jadwal) · cadangan ${template.pic_name}`
                               : template.pic_name}
