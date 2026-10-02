@@ -65,40 +65,42 @@ export function TaskCard({
           href={`/tasks/${task.task_id}`}
           className="block min-w-0 flex-1 hover:bg-muted/50"
         >
-          <div className="p-4">
+          <div className="px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center gap-2">
+                <div className="mb-1.5 flex flex-wrap items-center gap-2">
                   <span className="font-mono text-xs text-muted-foreground">
                     {task.task_id}
                   </span>
                   <StatusBadge status={task.status} />
                 </div>
-                <h3 className="truncate text-base font-semibold text-foreground">
+                <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-foreground">
                   {task.task_title}
                 </h3>
               </div>
-              <ChevronRight className="mt-1 size-5 shrink-0 text-muted-foreground" />
+              <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             </div>
 
-            <div className="mt-3 space-y-1.5">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MapPin className="size-4 shrink-0" />
-                <span className="truncate">
-                  {outletShortName(task.outlet)}{task.area ? ` · ${task.area}` : ""}
+            <div className="mt-2 space-y-1 text-[13px]">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <MapPin className="size-3.5 shrink-0" />
+                  <span className="truncate">
+                    {outletShortName(task.outlet)}{task.area ? ` · ${task.area}` : ""}
+                  </span>
                 </span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="size-4 shrink-0" />
-                <span className="truncate">{task.pic_name}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <User className="size-3.5 shrink-0" />
+                  <span className="truncate">{task.pic_name}</span>
+                </span>
               </div>
               <div
                 className={cn(
-                  "flex items-center gap-2 text-sm",
+                  "flex items-center gap-1.5",
                   isOverdue ? "font-medium text-red-600" : "text-muted-foreground",
                 )}
               >
-                <Clock className="size-4 shrink-0" />
+                <Clock className="size-3.5 shrink-0" />
                 <span>
                   {formatDateId(deadlineDate)}{" "}
                   {formatTimeId(deadlineDate)} WIB
@@ -112,7 +114,7 @@ export function TaskCard({
         {canDelete && onDelete && isTaskDeletable(task) ? (
           <>
             <div className="w-px bg-border" />
-            <div className="flex w-14 shrink-0 items-center justify-center">
+            <div className="flex w-12 shrink-0 items-center justify-center">
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button

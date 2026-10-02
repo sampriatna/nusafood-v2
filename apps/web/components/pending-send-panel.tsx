@@ -4,7 +4,7 @@ import { outletShortName } from "@/lib/outlet-codes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Task } from "@nusafood/types";
-import { Send, Users } from "lucide-react";
+import { ChevronDown, Clock, MapPin, Send, User, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTimeId } from "@/lib/format-datetime";
@@ -24,6 +24,7 @@ type Props = {
   onGenerated?: () => void;
 };
 
+const PREVIEW_COUNT = 5;
 const AUTO_GENERATE_KEY = "nf3:auto-generate-at";
 const AUTO_GENERATE_EVERY_MS = 3 * 60 * 1000;
 
@@ -45,6 +46,7 @@ function shouldAutoGenerate(): boolean {
 export function PendingSendPanel({ onGenerated }: Props) {
   const [tasks, setTasks] = useState<PendingTask[]>([]);
   const [reassigning, setReassigning] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const onGeneratedRef = useRef(onGenerated);
   onGeneratedRef.current = onGenerated;
 
@@ -130,40 +132,64 @@ export function PendingSendPanel({ onGenerated }: Props) {
 
   if (!tasks.length) return null;
 
+  const visible = showAll ? tasks : tasks.slice(0, PREVIEW_COUNT);
+  const hidden = tasks.length - visible.length;
+
   return (
-    <Card className="gap-0 border-primary/40 py-0">
-      <CardContent className="space-y-3 p-3">
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            Siap Dikirim ({tasks.length})
+    <Card className="gap-0 overflow-hidden border-primary/30 py-0">
+      <div className="flex items-start justify-between gap-3 border-b bg-primary/5 px-4 py-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Send className="size-4 text-primary" />
+            Siap Dikirim
           </p>
-          <p className="text-xs text-muted-foreground">
-            Tugas yang belum dikirim ke PIC dan deadline-nya belum lewat. Tap
-            Kirim WA, lalu tekan kirim di WhatsApp.
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            Belum dikirim ke PIC dan deadline belum lewat. Tap Kirim WA, lalu
+            tekan kirim di WhatsApp.
           </p>
         </div>
+        <span className="shrink-0 rounded-full bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground">
+          {tasks.length}
+        </span>
+      </div>
+      <CardContent className="px-4 py-0">
         <ul className="divide-y">
-          {tasks.map((task) => (
-            <li key={task.task_id} className="space-y-2 py-2.5 first:pt-0 last:pb-0">
-              <Link href={`/tasks/${task.task_id}`} className="block min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {task.task_title}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {task.pic_name} · {outletShortName(String(task.outlet))} · deadline{" "}
-                  {formatDateTimeId(task.deadline)}
-                </p>
-              </Link>
-              {task.pic_position ? (
-                <PicPicker
-                  task={task}
-                  busy={reassigning === task.task_id}
-                  onChange={(staffId) => void reassign(task, staffId)}
-                />
-              ) : null}
-              <div className="flex gap-2">
+          {visible.map((task) => (
+            <li
+              key={task.task_id}
+              className="space-y-2.5 py-3 sm:flex sm:items-center sm:gap-4 sm:space-y-0"
+            >
+              <div className="min-w-0 space-y-2.5 sm:flex-1">
+                <Link href={`/tasks/${task.task_id}`} className="block min-w-0">
+                  <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
+                    {task.task_title}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    <span className="flex min-w-0 items-center gap-1">
+                      <User className="size-3.5 shrink-0" />
+                      <span className="truncate">{task.pic_name}</span>
+                    </span>
+                    <span className="flex min-w-0 items-center gap-1">
+                      <MapPin className="size-3.5 shrink-0" />
+                      <span className="truncate">{outletShortName(String(task.outlet))}</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="size-3.5 shrink-0" />
+                      {formatDateTimeId(task.deadline)}
+                    </span>
+                  </div>
+                </Link>
+                {task.pic_position ? (
+                  <PicPicker
+                    task={task}
+                    busy={reassigning === task.task_id}
+                    onChange={(staffId) => void reassign(task, staffId)}
+                  />
+                ) : null}
+              </div>
+              <div className="flex gap-2 sm:w-64 sm:shrink-0">
                 {task.wa_link ? (
-                  <Button asChild size="sm" className="flex-1">
+                  <Button asChild size="sm" className="h-9 flex-1">
                     <a
                       href={task.wa_link}
                       target="_blank"
@@ -179,7 +205,7 @@ export function PendingSendPanel({ onGenerated }: Props) {
                     Nomor WA PIC tidak valid
                   </p>
                 )}
-                <Button asChild size="sm" variant="outline">
+                <Button asChild size="sm" variant="outline" className="h-9">
                   <a
                     href={task.wa_share_link}
                     target="_blank"
@@ -195,6 +221,16 @@ export function PendingSendPanel({ onGenerated }: Props) {
           ))}
         </ul>
       </CardContent>
+      {tasks.length > PREVIEW_COUNT ? (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="flex w-full items-center justify-center gap-1 border-t py-2.5 text-sm font-medium text-primary hover:bg-muted/50"
+        >
+          {showAll ? "Tampilkan lebih sedikit" : `Tampilkan ${hidden} lainnya`}
+          <ChevronDown className={`size-4 transition-transform ${showAll ? "rotate-180" : ""}`} />
+        </button>
+      ) : null}
     </Card>
   );
 }
@@ -222,7 +258,7 @@ function PicPicker({
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
         <span className="shrink-0">PIC ({label}):</span>
         <select
-          className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-base text-foreground"
+          className="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-base text-foreground"
           value={task.staff_id ?? ""}
           disabled={busy}
           onChange={(e) => onChange(e.target.value)}
